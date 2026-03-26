@@ -59,4 +59,12 @@ Reliability matters more than internal cleverness.
 
 ## Status
 
-There is no implementation yet. The current state of the project is the initial definition of the problem, constraints, and development plan.
+There is no implementation yet. The current state of the project is the initial
+definition of the problem, constraints, public API direction, and development
+plan.
+
+See:
+
+- `ADR.md` for accepted architectural constraints
+- `API.md` for the current public API design draft
+- `PLANS.md` for the first implementation slices derived from that API

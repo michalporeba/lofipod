@@ -8,8 +8,9 @@ Before making substantive changes, read:
 
 1. `README.md`
 2. `ADR.md`
-3. `PLANS.md`
-4. `WIP.md`
+3. `API.md`
+4. `PLANS.md`
+5. `WIP.md`
 
 ## Working rules
 
@@ -17,10 +18,11 @@ Before making substantive changes, read:
 - Do not introduce React assumptions into the engine core.
 - Treat `ADR.md` as the place for accepted architectural decisions and
   constraints.
+- Treat `API.md` as the working draft for the developer-facing public API.
 - If the architecture changes materially, update `ADR.md` rather than leaving
   the change implicit.
-- Use `PLANS.md` to structure implementation into small, independently testable
-  features.
+- Use `PLANS.md` to structure implementation into small, independently testable,
+  API-first features.
 - Keep `WIP.md` factual and current during active work.
 
 ## Testing expectations
@@ -45,4 +47,5 @@ Before making substantive changes, read:
 ## Notes
 
 - `WIP.md` is for agent memory, not long-term truth.
-- `README.md`, `ADR.md`, and `PLANS.md` should stay concise and human-readable.
+- `README.md`, `ADR.md`, `API.md`, and `PLANS.md` should stay concise and
+  human-readable.

@@ -1,137 +1,141 @@
 # PLANS
 
-This document lists the first small features for `lofipod`. Each feature should
-be independently testable through the public API, even if features are built in
-sequence.
+This document lists the first small implementation features for `lofipod`.
+Features should be built sequentially, but each one should stand on its own as
+an independently testable public-API slice.
 
-## Provisional API direction
-
-The current assumption is:
-
-- a framework-agnostic core package
-- likely public concepts such as:
-  - defining an entity model
-  - creating an engine
-  - saving entity changes
-  - reading materialized entities and lists
-  - connecting local storage and Pod sync adapters
-  - observing sync state
-- React hooks, if added later, should wrap the core rather than define it
-
-This is intentionally provisional and should be refined before implementation
-goes too far.
+The feature order should validate both the design details in `API.md` and the
+developer experience of building against the API.
 
 ## Feature roadmap
 
-### 1. Entity model and message vocabulary
+### 1. Namespace and entity registration API
 
-Define the minimal supported entity shape and the kinds of messages that can be
-appended to the log.
-
-This should prove:
-
-- shallow entity support
-- scalar, opaque, and unordered primitive-set property kinds
-- a stable internal vocabulary for changes
-
-### 2. Local transaction log
-
-Build the append-only local message store with a public API for appending and
-reading messages.
+Define the smallest public API for `defineNamespace(...)` and
+`defineEntity<T>(...)`.
 
 This should prove:
 
-- stable message persistence semantics
-- deterministic replay inputs
-- behaviour-focused tests over the public log API
+- a developer can register an entity with a TypeScript type, Pod base path, and
+  RDF codec
+- the API is small and understandable without a field-schema DSL
+- entity definitions are sufficient input for later engine behaviour
 
-### 3. Materialized read model
+### 2. Engine creation and configuration API
 
-Build a projector/materializer that derives current entity state from the log.
-
-This should prove:
-
-- normal reads do not depend on replaying the full log every time
-- entity reads and list reads can be served from materialized state
-- rebuild and recovery are deterministic
-
-### 4. Save and diff calculation
-
-Implement the logic that compares an edited entity with current state and emits
-new messages.
+Define `createEngine(...)` with entity registration, Pod root configuration,
+local storage, and sync adapter configuration.
 
 This should prove:
 
-- minimal message generation
-- scalar updates
-- opaque whole-value replacements
-- unordered primitive-set add/remove behaviour
+- the engine configuration is explicit but not heavy
+- app root and per-entity base paths fit together cleanly
+- CRUD and sync capabilities can hang off one stable engine object
 
-### 5. Browser storage adapter
+### 3. Local save and get for one entity type
 
-Persist the log and materialized state in IndexedDB.
+Implement `engine.save(...)` and `engine.get(...)` for a single entity type
+using local persistence only.
+
+This should prove:
+
+- the primary local-first CRUD loop feels natural
+- identity-on-entity works well in practice
+- serialized JSON plus library metadata is enough for the first local model
+
+### 4. Local listing API
+
+Implement `engine.list(entityName, options?)` with a deliberately narrow API.
+
+This should prove:
+
+- newest-first listing is sufficient for the first workflow
+- a basic `limit` option is enough to validate list ergonomics
+- the public API can support useful local reads without a query DSL
+
+### 5. Browser persistence adapter
+
+Persist the local state model in IndexedDB behind the configured storage layer.
 
 This should prove:
 
 - browser reload recovery
-- separation between core engine and storage adapter
-- compatibility with test doubles for most automated tests
+- separation between engine behaviour and storage implementation
+- compatibility with fakes for most automated tests
 
-### 6. Pod serialization model
+### 6. Per-entity RDF codec contract
 
-Define how local entities and messages map to RDF-compatible Pod resources.
-
-This should prove:
-
-- meta or manifest structure
-- bucket index structure
-- immutable revision shape
-- compatibility with shallow entities
-
-### 7. Pod pull bootstrap
-
-Hydrate a fresh client from Pod metadata and bucket indexes, loading newest data
-first.
+Implement the RDF mapping contract around `rdf.toRdf(...)` and
+`rdf.fromRdf(...)`.
 
 This should prove:
 
-- partial loading
-- newest-first user experience
-- no need to read the full dataset on startup
+- the higher-level RDF context is expressive enough for realistic entities
+- domain ontology stays application-owned
+- RDF mapping remains explicit without a field-schema DSL
 
-### 8. Pod push projection
+### 7. Pod bootstrap for reads
 
-Project local messages into Pod structures and keep mutable indexes up to date.
-
-This should prove:
-
-- automatic Pod write projection
-- append-only revision creation
-- index maintenance as part of sync
-
-### 9. Background sync engine
-
-Add sync orchestration for startup, save, focus, reconnect, and polling.
+Hydrate a new client from Pod metadata and indexes using configured entity base
+paths and codecs.
 
 This should prove:
 
-- no sync button required for normal use
-- deterministic sync scheduling through the public API
-- safe repeated sync attempts
+- the Pod path configuration is sufficient
+- newest-first bootstrap matches the intended user experience
+- the API design can support remote-first hydration without leaking storage
+  internals
 
-### 10. Branch detection and current selection
+### 8. Pod projection on save
 
-Preserve concurrent branches and choose one current revision for normal reads.
+Project local saves to Pod revisions and indexes through the configured entity
+codec and Pod layout.
 
 This should prove:
 
-- branch preservation
-- current-revision selection rules
-- conflict state exposure without full manual resolution UI
+- local CRUD remains the primary API even when remote projection is enabled
+- append-only revision creation stays internal to the library
+- application code does not need to manage RDF storage resources directly
 
-### 11. Integration harness
+### 9. Connection and sync status API
 
-Add integration tests against Inrupt's Community Solid Server in local Docker.
+Implement `engine.connection.state()`, `engine.sync.state()`, and
+`engine.sync.now()`.
+
+This should prove:
+
+- sync is inspectable without becoming central to ordinary CRUD
+- the API can distinguish unconfigured, offline, and available remote states
+- explicit sync triggers can exist without implying manual sync is the normal
+  flow
+
+### 10. Background sync orchestration
+
+Add background sync on save, startup, focus, reconnect, and polling.
+
+This should prove:
+
+- normal use does not require a sync button
+- repeated sync attempts are safe
+- sync behaviour can remain mostly invisible unless the developer asks for
+  status
+
+### 11. Branch and conflict surface
+
+Expose the first public conflict or branch state needed for concurrent Pod
+writes.
+
+This should prove:
+
+- branch preservation remains compatible with the simple CRUD API
+- the public API can surface conflict information without requiring manual
+  merge-first workflows
+- unresolved branch semantics become concrete enough for real implementation
+
+### 12. Integration harness
+
+Add focused integration tests against Inrupt's Community Solid Server in local
+Docker.
 
 This should prove:
 
@@ -139,14 +143,16 @@ This should prove:
 - end-to-end sync through the public API
 - separation between fast mocked tests and slower integration coverage
 
-### 12. Optional React bindings
+### 13. Optional framework bindings
 
-Add a thin React wrapper layer around the framework-agnostic core.
+Add a thin wrapper layer around the framework-agnostic core, with React as the
+first candidate.
 
 This should prove:
 
-- the core remains independent of React
-- React ergonomics can be added without redefining the architecture
+- the core remains independent of framework assumptions
+- bindings can consume the engine API rather than redefine it
+- the public API is suitable for use across multiple UI frameworks
 
 ## Testing guidance
 
