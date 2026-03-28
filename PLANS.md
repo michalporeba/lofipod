@@ -4,144 +4,150 @@ This document lists the first small implementation features for `lofipod`.
 Features should be built sequentially, but each one should stand on its own as
 an independently testable public-API slice.
 
-The feature order should validate both the design details in `API.md` and the
-developer experience of building against the API.
+The plan is centered on developer activities and high test coverage. Most tests
+should exercise the public API and verify persistence behaviour. Solid Pod
+integration should be mocked for most tests and covered by a smaller focused
+integration suite later.
 
 ## Feature roadmap
 
-### 1. Namespace and entity registration API
+### 1. Define one entity and its RDF projection
 
-Define the smallest public API for `defineNamespace(...)` and
-`defineEntity<T>(...)`.
-
-This should prove:
-
-- a developer can register an entity with a TypeScript type, Pod base path, and
-  RDF codec
-- the API is small and understandable without a field-schema DSL
-- entity definitions are sufficient input for later engine behaviour
-
-### 2. Engine creation and configuration API
-
-Define `createEngine(...)` with entity registration, Pod root configuration,
-local storage, and sync adapter configuration.
+Let a developer define one entity type, its identity rule, Pod location,
+`toRdf(...)`, and `project(...)`.
 
 This should prove:
 
-- the engine configuration is explicit but not heavy
-- app root and per-entity base paths fit together cleanly
-- CRUD and sync capabilities can hang off one stable engine object
+- `defineVocabulary(...)`
+- `defineEntity<T>(...)`
+- pure `toRdf(...)`
+- pure `project(...)`
+- embedded one-to-one child nodes such as `child("time")`
 
-### 3. Local save and get for one entity type
+### 2. Save and load one entity locally in memory
 
-Implement `engine.save(...)` and `engine.get(...)` for a single entity type
-using local persistence only.
-
-This should prove:
-
-- the primary local-first CRUD loop feels natural
-- identity-on-entity works well in practice
-- serialized JSON plus library metadata is enough for the first local model
-
-### 4. Local listing API
-
-Implement `engine.list(entityName, options?)` with a deliberately narrow API.
+Let a developer create an engine, save one entity, and read it back.
 
 This should prove:
 
-- newest-first listing is sufficient for the first workflow
-- a basic `limit` option is enough to validate list ergonomics
-- the public API can support useful local reads without a query DSL
+- `createEngine(...)`
+- `engine.save(...)`
+- `engine.get(...)`
+- canonical graph generation from entity object
+- projection back to the application object
 
-### 5. Browser persistence adapter
+### 3. Persist the local canonical graph, read model, and transaction log atomically
 
-Persist the local state model in IndexedDB behind the configured storage layer.
-
-This should prove:
-
-- browser reload recovery
-- separation between engine behaviour and storage implementation
-- compatibility with fakes for most automated tests
-
-### 6. Per-entity RDF codec contract
-
-Implement the RDF mapping contract around `rdf.toRdf(...)` and
-`rdf.fromRdf(...)`.
+Let a developer save an entity and rely on the local state surviving restart
+without partial writes.
 
 This should prove:
 
-- the higher-level RDF context is expressive enough for realistic entities
-- domain ontology stays application-owned
-- RDF mapping remains explicit without a field-schema DSL
+- local transaction boundaries
+- local graph store
+- local read model store
+- local graph-delta log with assertions and retractions
+- recovery from persisted local state
 
-### 7. Pod bootstrap for reads
+### 4. Update an entity and verify graph deltas
 
-Hydrate a new client from Pod metadata and indexes using configured entity base
-paths and codecs.
-
-This should prove:
-
-- the Pod path configuration is sufficient
-- newest-first bootstrap matches the intended user experience
-- the API design can support remote-first hydration without leaking storage
-  internals
-
-### 8. Pod projection on save
-
-Project local saves to Pod revisions and indexes through the configured entity
-codec and Pod layout.
+Let a developer update an entity and rely on only the graph differences being
+recorded internally.
 
 This should prove:
 
-- local CRUD remains the primary API even when remote projection is enabled
-- append-only revision creation stays internal to the library
-- application code does not need to manage RDF storage resources directly
+- diff between previous and new canonical entity graph
+- assertions and retractions grouped by entity-scoped change
+- stable child node handling for embedded structures
+- per-triple deletion behaviour
 
-### 9. Connection and sync status API
+### 5. List entities from the local read model
 
-Implement `engine.connection.state()`, `engine.sync.state()`, and
-`engine.sync.now()`.
-
-This should prove:
-
-- sync is inspectable without becoming central to ordinary CRUD
-- the API can distinguish unconfigured, offline, and available remote states
-- explicit sync triggers can exist without implying manual sync is the normal
-  flow
-
-### 10. Background sync orchestration
-
-Add background sync on save, startup, focus, reconnect, and polling.
+Let a developer save several entities and list them through the public API.
 
 This should prove:
 
-- normal use does not require a sync button
-- repeated sync attempts are safe
-- sync behaviour can remain mostly invisible unless the developer asks for
-  status
+- `engine.list(...)`
+- local read model as the source of application-facing queries
+- default ordering and `limit`
 
-### 11. Branch and conflict surface
+### 6. Rehydrate from stored graph state
 
-Expose the first public conflict or branch state needed for concurrent Pod
-writes.
-
-This should prove:
-
-- branch preservation remains compatible with the simple CRUD API
-- the public API can surface conflict information without requiring manual
-  merge-first workflows
-- unresolved branch semantics become concrete enough for real implementation
-
-### 12. Integration harness
-
-Add focused integration tests against Inrupt's Community Solid Server in local
-Docker.
+Let a developer restart the app and rebuild entities from stored canonical
+graph state.
 
 This should prove:
 
-- real Pod compatibility
-- end-to-end sync through the public API
-- separation between fast mocked tests and slower integration coverage
+- `project(...)` is sufficient for recovery
+- the read model can be rebuilt from graph state
+- projected objects do not depend on original in-memory instances
+
+### 7. Add IndexedDB storage adapter
+
+Let a developer use the same public API with browser persistence.
+
+This should prove:
+
+- IndexedDB storage support
+- the same storage contract as in-memory and fake adapters
+- restart persistence in a browser-like environment
+
+### 8. Expose local sync status and pending changes
+
+Let a developer inspect whether there are unsynced local changes.
+
+This should prove:
+
+- `engine.sync.state()`
+- distinction between no sync configured and pending local changes
+- local log as the basis for sync state
+
+### 9. Project local changes to canonical Pod entity files through a mocked Pod adapter
+
+Let a developer enable sync and have local saves update canonical Pod entity
+resources through a mocked Pod adapter.
+
+This should prove:
+
+- mocked Solid/Pod adapter contract
+- compilation of graph deltas into N3 Patch
+- per-entity Pod file updates
+- idempotent retry behaviour for entity-file sync
+
+### 10. Append replication log entries to the mocked Pod log
+
+Let a developer sync changes and have the app-private remote replication log
+advance.
+
+This should prove:
+
+- bucketed app-private log writing
+- sequential sync projection
+- change envelope plus assertions and retractions
+- retry-safe remote log append behaviour
+
+### 11. Pull remote changes from the mocked Pod log and update local state
+
+Let a developer open the app on another device and receive remote changes
+through sequential log replay.
+
+This should prove:
+
+- sequential remote log replay
+- applying assertions and retractions to local graph state
+- projection into the local read model from remote-originated changes
+- tolerance for duplicate remote log entries
+
+### 12. Add focused integration tests against a real Solid server
+
+Let a developer use the library against an actual Solid Pod for a small number
+of end-to-end checks.
+
+This should prove:
+
+- real N3 Patch compatibility
+- real file layout compatibility
+- real authentication and resource update flow
 
 ### 13. Optional framework bindings
 
@@ -158,5 +164,9 @@ This should prove:
 
 - Prefer public-API tests over implementation-coupled tests.
 - Use TDD where practical.
-- Use mocks or fakes for most tests.
-- Keep Docker-backed integration tests focused and few.
+- Use mocks or fakes for most tests, especially for Pod sync behaviour.
+- Add shared storage contract tests that run against in-memory, fake, and
+  IndexedDB-backed storage implementations.
+- Keep Docker-backed Solid integration tests focused and few.
+- Prioritise tests that verify persistence correctness, restart recovery, graph
+  delta behaviour, and public API semantics.
