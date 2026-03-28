@@ -89,4 +89,50 @@ describe("createIndexedDbStorage", () => {
       },
     ]);
   });
+
+  it("returns defensive copies from IndexedDB reads", async () => {
+    const { entity } = createEventFixture();
+    const databaseName = createDatabaseName();
+    const storage = createIndexedDbStorage({
+      databaseName,
+    });
+    const engine = createEngine({
+      entities: [entity],
+      storage,
+    });
+
+    await engine.save("event", {
+      id: "ev-123",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+
+    const stored = await storage.readEntity("event", "ev-123");
+
+    if (!stored) {
+      throw new Error("missing stored record");
+    }
+
+    stored.graph[0]![0] = "https://example.com/id/event/mutated";
+    stored.projection = {
+      id: "ev-123",
+      title: "Mutated",
+      time: {
+        year: 1900,
+      },
+    };
+
+    await expect(storage.readEntity("event", "ev-123")).resolves.toMatchObject({
+      rootUri: "https://example.com/id/event/ev-123",
+      projection: {
+        id: "ev-123",
+        title: "Hello",
+        time: {
+          year: 2024,
+        },
+      },
+    });
+  });
 });

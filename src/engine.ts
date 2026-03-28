@@ -1,131 +1,31 @@
 import { createMemoryStorage } from "./storage/memory.js";
+import {
+  createStoredRecord,
+  createToRdfHelpers,
+  diffTriples,
+  fallbackRootUri,
+  projectionsMatch,
+  projectStoredRecord,
+} from "./graph.js";
+import {
+  createEntityPatchRequest,
+  createLogAppendRequest,
+  hasPendingSync,
+  normalizeLogBasePath,
+  readSyncState,
+} from "./sync.js";
 import type {
   Engine,
   EngineConfig,
   EntityDefinition,
-  LocalChange,
-  PodEntityPatchRequest,
-  PodLogAppendRequest,
-  ProjectionHelpers,
   StoredEntityRecord,
   SyncState,
-  ToRdfHelpers,
-  Triple,
 } from "./types.js";
-
-function fallbackRootUri(entityName: string, id: string): string {
-  return `lofipod://entity/${entityName}/${id}`;
-}
-
-function createChildUri(rootUri: string, path: string): string {
-  return `${rootUri}#${path}`;
-}
 
 function createChangeId(entityName: string, id: string): string {
   return `${entityName}:${id}:${Date.now()}:${Math.random()
     .toString(36)
     .slice(2)}`;
-}
-
-function tripleKey([subject, predicate, object]: Triple): string {
-  return JSON.stringify([subject, predicate, object]);
-}
-
-function diffTriples(previous: Triple[], next: Triple[]) {
-  const previousKeys = new Set(previous.map(tripleKey));
-  const nextKeys = new Set(next.map(tripleKey));
-
-  return {
-    assertions: next.filter((triple) => !previousKeys.has(tripleKey(triple))),
-    retractions: previous.filter((triple) => !nextKeys.has(tripleKey(triple))),
-  };
-}
-
-function createToRdfHelpers<T>(
-  entity: T,
-  definition: EntityDefinition<T>,
-  rootUri: string,
-): ToRdfHelpers<T> {
-  return {
-    uri() {
-      return rootUri;
-    },
-    child(path) {
-      return createChildUri(rootUri, path);
-    },
-  };
-}
-
-function createProjectionHelpers(rootUri: string): ProjectionHelpers {
-  return {
-    uri() {
-      return rootUri;
-    },
-    child(path) {
-      return createChildUri(rootUri, path);
-    },
-  };
-}
-
-function createStoredRecord<T>(
-  definition: EntityDefinition<T>,
-  entity: T,
-  graph: Triple[],
-  changeId: string,
-  updatedOrder: number,
-): StoredEntityRecord<T> {
-  const rootUri =
-    definition.uri?.(entity) ??
-    fallbackRootUri(definition.name, definition.id(entity));
-  const projection = definition.project(
-    graph,
-    createProjectionHelpers(rootUri),
-  );
-
-  return {
-    rootUri,
-    graph,
-    projection,
-    lastChangeId: changeId,
-    updatedOrder,
-  };
-}
-
-function projectStoredRecord<T>(
-  definition: EntityDefinition<T>,
-  record: StoredEntityRecord<unknown>,
-): T {
-  return definition.project(
-    record.graph,
-    createProjectionHelpers(record.rootUri),
-  );
-}
-
-function projectionsMatch(current: unknown, next: unknown): boolean {
-  return JSON.stringify(current) === JSON.stringify(next);
-}
-
-async function readSyncState(
-  storage: NonNullable<EngineConfig["storage"]>,
-  syncConfig: EngineConfig["sync"],
-): Promise<SyncState> {
-  const pendingChanges = (await storage.listChanges()).filter(
-    (change) => !change.entityProjected || !change.logProjected,
-  ).length;
-
-  if (!syncConfig) {
-    return {
-      status: "unconfigured",
-      configured: false,
-      pendingChanges,
-    };
-  }
-
-  return {
-    status: pendingChanges > 0 ? "pending" : "idle",
-    configured: true,
-    pendingChanges,
-  };
 }
 
 async function repairStoredProjection<T>(
@@ -156,76 +56,6 @@ async function repairStoredProjection<T>(
   return projected;
 }
 
-function termToN3(term: Triple[number]): string {
-  if (typeof term === "number" || typeof term === "boolean") {
-    return String(term);
-  }
-
-  if (
-    term.startsWith("http://") ||
-    term.startsWith("https://") ||
-    term.startsWith("urn:") ||
-    term.startsWith("lofipod://")
-  ) {
-    return `<${term}>`;
-  }
-
-  return JSON.stringify(term);
-}
-
-function triplesToN3(triples: Triple[]): string {
-  return triples
-    .map(
-      ([subject, predicate, object]) =>
-        `  ${termToN3(subject)} ${termToN3(predicate)} ${termToN3(object)} .`,
-    )
-    .join("\n");
-}
-
-function createEntityPatchRequest(
-  definition: EntityDefinition<unknown>,
-  record: StoredEntityRecord<unknown>,
-  change: LocalChange,
-): PodEntityPatchRequest {
-  const path = `${definition.pod.basePath}${change.entityId}.ttl`;
-  const sections: string[] = [];
-
-  if (change.retractions.length > 0) {
-    sections.push(`Delete {\n${triplesToN3(change.retractions)}\n}`);
-  }
-
-  if (change.assertions.length > 0) {
-    sections.push(`Insert {\n${triplesToN3(change.assertions)}\n}`);
-  }
-
-  sections.push("Where {}");
-
-  return {
-    entityName: change.entityName,
-    entityId: change.entityId,
-    path,
-    rootUri: record.rootUri,
-    changeId: change.changeId,
-    parentChangeId: change.parentChangeId,
-    patch: sections.join("\n"),
-  };
-}
-
-function createLogAppendRequest(
-  change: LocalChange,
-  logBasePath: string,
-): PodLogAppendRequest {
-  return {
-    entityName: change.entityName,
-    entityId: change.entityId,
-    changeId: change.changeId,
-    parentChangeId: change.parentChangeId,
-    path: `${logBasePath}${change.entityName}/${change.changeId}.ttl`,
-    assertions: change.assertions,
-    retractions: change.retractions,
-  };
-}
-
 export function createEngine(config: EngineConfig): Engine {
   const entities = new Map(
     config.entities.map((entity) => [entity.name, entity]),
@@ -249,7 +79,7 @@ export function createEngine(config: EngineConfig): Engine {
       throw new Error("Pod logBasePath is required for remote log projection.");
     }
 
-    return logBasePath.endsWith("/") ? logBasePath : `${logBasePath}/`;
+    return normalizeLogBasePath(logBasePath);
   };
 
   return {
@@ -262,10 +92,7 @@ export function createEngine(config: EngineConfig): Engine {
         definition.name,
         entityId,
       );
-      const graph = definition.toRdf(
-        entity,
-        createToRdfHelpers(entity, definition, rootUri),
-      );
+      const graph = definition.toRdf(entity, createToRdfHelpers(rootUri));
       const { assertions, retractions } = diffTriples(
         previousRecord?.graph ?? [],
         graph,
@@ -353,7 +180,7 @@ export function createEngine(config: EngineConfig): Engine {
         }
 
         const pendingChanges = (await storage.listChanges()).filter(
-          (change) => !change.entityProjected || !change.logProjected,
+          hasPendingSync,
         );
 
         for (const change of pendingChanges) {

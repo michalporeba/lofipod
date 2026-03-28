@@ -382,6 +382,43 @@ describe("local persistence", () => {
     await expect(secondEngine.get("event", "ev-123")).resolves.toEqual(input);
   });
 
+  it("returns defensive copies from memory storage reads", async () => {
+    const { entity } = createEventFixture();
+    const storage = createMemoryStorage();
+    const engine = createEngine({
+      entities: [entity],
+      storage,
+    });
+
+    await engine.save("event", {
+      id: "ev-123",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+
+    const stored = await storage.readEntity("event", "ev-123");
+
+    if (!stored) {
+      throw new Error("missing record");
+    }
+
+    stored.graph[0]![0] = "https://example.com/id/event/mutated";
+    (stored.projection as Event).title = "Mutated";
+
+    await expect(storage.readEntity("event", "ev-123")).resolves.toMatchObject({
+      rootUri: "https://example.com/id/event/ev-123",
+      projection: {
+        id: "ev-123",
+        title: "Hello",
+        time: {
+          year: 2024,
+        },
+      },
+    });
+  });
+
   it("rehydrates an entity from stored graph state even if the stored projection is stale", async () => {
     const { entity } = createEventFixture();
     const storage = createMemoryStorage();
