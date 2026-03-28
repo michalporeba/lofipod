@@ -3,16 +3,20 @@ import { describe, expect, it } from "vitest";
 import {
   createEngine,
   createMemoryStorage,
-  defineEntity,
   defineVocabulary,
-  type EntityDefinition,
+  packageVersion,
+  rdf,
   type LocalChange,
   type LocalStorageAdapter,
   type LocalStorageTransaction,
-  packageVersion,
-  rdf,
   type Triple,
 } from "../src/index.js";
+import {
+  createEventFixture,
+  createEventWithDetailsFixture,
+  type Event,
+  type EventWithDetails,
+} from "./support/eventFixture.js";
 
 describe("public API scaffold", () => {
   it("exposes the initial package version", () => {
@@ -60,134 +64,15 @@ describe("defineVocabulary", () => {
 
 describe("defineEntity", () => {
   it("keeps entity configuration together with pure RDF projection logic", () => {
-    const ex = defineVocabulary({
-      base: "https://example.com/",
-      terms: {
-        Event: "ns#Event",
-        title: "ns#title",
-        time: "ns#time",
-        year: "ns#year",
-      },
-      uri({ base, entityName, id }) {
-        return `${base}id/${entityName}/${id}`;
-      },
-    });
-
-    type Event = {
-      id: string;
-      title: string;
-      time: {
-        year: number;
-      };
-    };
-
-    const entity = defineEntity<Event>({
-      name: "event",
-      pod: {
-        basePath: "events/",
-      },
-      rdfType: ex.Event,
-      id: (event) => event.id,
-      toRdf(event, { uri, child }) {
-        const subject = uri(event);
-        const time = child("time");
-
-        return [
-          [subject, rdf.type, ex.Event],
-          [subject, ex.title, event.title],
-          [subject, ex.time, time],
-          [time, ex.year, event.time.year],
-        ] satisfies Triple[];
-      },
-      project(graph, { uri, child }) {
-        const subject = uri();
-        const time = child("time");
-
-        const objectOf = (target: string, predicate: string) =>
-          graph.find(
-            ([subjectTerm, predicateTerm]) =>
-              subjectTerm === target && predicateTerm === predicate,
-          )?.[2];
-
-        return {
-          id: subject.split("/").at(-1) ?? "",
-          title: String(objectOf(subject, ex.title) ?? ""),
-          time: {
-            year: Number(objectOf(time, ex.year) ?? 0),
-          },
-        };
-      },
-    });
+    const { entity } = createEventFixture();
 
     expect(entity.name).toBe("event");
     expect(entity.pod.basePath).toBe("events/");
-    expect(entity.rdfType).toBe(ex.Event);
+    expect(entity.rdfType).toBe("https://example.com/ns#Event");
   });
 
   it("supports path-based child nodes for embedded one-to-one structures", () => {
-    const ex = defineVocabulary({
-      base: "https://example.com/",
-      terms: {
-        Event: "ns#Event",
-        title: "ns#title",
-        time: "ns#time",
-        year: "ns#year",
-      },
-      uri({ base, entityName, id }) {
-        return `${base}id/${entityName}/${id}`;
-      },
-    });
-
-    type Event = {
-      id: string;
-      title: string;
-      time: {
-        year: number;
-      };
-    };
-
-    const entity = defineEntity<Event>({
-      name: "event",
-      pod: {
-        basePath: "events/",
-      },
-      rdfType: ex.Event,
-      id: (event) => event.id,
-      toRdf(event, { uri, child }) {
-        const subject = uri(event);
-        const time = child("time");
-
-        return [
-          [subject, rdf.type, ex.Event],
-          [subject, ex.title, event.title],
-          [subject, ex.time, time],
-          [time, ex.year, event.time.year],
-        ] satisfies Triple[];
-      },
-      project(graph, { uri, child }) {
-        const subject = uri();
-        const time = child("time");
-
-        return {
-          id: subject.split("/").at(-1) ?? "",
-          title: String(
-            graph.find(
-              ([subjectTerm, predicateTerm]) =>
-                subjectTerm === subject && predicateTerm === ex.title,
-            )?.[2] ?? "",
-          ),
-          time: {
-            year: Number(
-              graph.find(
-                ([subjectTerm, predicateTerm]) =>
-                  subjectTerm === time && predicateTerm === ex.year,
-              )?.[2] ?? 0,
-            ),
-          },
-        };
-      },
-    });
-
+    const { entity } = createEventFixture();
     const event = {
       id: "ev-123",
       title: "Hello",
@@ -196,30 +81,37 @@ describe("defineEntity", () => {
       },
     };
 
-    const helpers = {
-      uri(currentEvent: Event) {
-        return ex.uri({
-          entityName: entity.name,
-          id: entity.id(currentEvent),
-        });
+    const graph = entity.toRdf(event, {
+      uri(currentEvent) {
+        return entity.uri?.(currentEvent) ?? "";
       },
       child(path: string) {
         return `child:${path}`;
       },
-    };
-
-    const graph = entity.toRdf(event, helpers);
+    });
 
     expect(graph).toEqual<Triple[]>([
-      [ex.uri({ entityName: "event", id: "ev-123" }), rdf.type, ex.Event],
-      [ex.uri({ entityName: "event", id: "ev-123" }), ex.title, "Hello"],
-      [ex.uri({ entityName: "event", id: "ev-123" }), ex.time, "child:time"],
-      ["child:time", ex.year, 2024],
+      [
+        "https://example.com/id/event/ev-123",
+        rdf.type,
+        "https://example.com/ns#Event",
+      ],
+      [
+        "https://example.com/id/event/ev-123",
+        "https://example.com/ns#title",
+        "Hello",
+      ],
+      [
+        "https://example.com/id/event/ev-123",
+        "https://example.com/ns#time",
+        "child:time",
+      ],
+      ["child:time", "https://example.com/ns#year", 2024],
     ]);
 
     const projected = entity.project(graph, {
       uri() {
-        return ex.uri({ entityName: "event", id: "ev-123" });
+        return "https://example.com/id/event/ev-123";
       },
       child(path: string) {
         return `child:${path}`;
@@ -231,61 +123,6 @@ describe("defineEntity", () => {
 });
 
 describe("createEngine", () => {
-  const createEventFixture = (): { entity: EntityDefinition<Event> } => {
-    const ex = defineVocabulary({
-      base: "https://example.com/",
-      terms: {
-        Event: "ns#Event",
-        title: "ns#title",
-        time: "ns#time",
-        year: "ns#year",
-      },
-      uri({ base, entityName, id }) {
-        return `${base}id/${entityName}/${id}`;
-      },
-    });
-
-    const entity = defineEntity<Event>({
-      name: "event",
-      pod: {
-        basePath: "events/",
-      },
-      rdfType: ex.Event,
-      id: (event) => event.id,
-      toRdf(event, { uri, child }) {
-        const subject = uri(event);
-        const time = child("time");
-
-        return [
-          [subject, rdf.type, ex.Event],
-          [subject, ex.title, event.title],
-          [subject, ex.time, time],
-          [time, ex.year, event.time.year],
-        ] satisfies Triple[];
-      },
-      project(graph, { uri, child }) {
-        const subject = uri();
-        const time = child("time");
-
-        const objectOf = (target: string, predicate: string) =>
-          graph.find(
-            ([subjectTerm, predicateTerm]) =>
-              subjectTerm === target && predicateTerm === predicate,
-          )?.[2];
-
-        return {
-          id: subject.split("/").at(-1) ?? "",
-          title: String(objectOf(subject, ex.title) ?? ""),
-          time: {
-            year: Number(objectOf(time, ex.year) ?? 0),
-          },
-        };
-      },
-    });
-
-    return { entity };
-  };
-
   it("saves one entity and reads it back through the public API", async () => {
     const { entity } = createEventFixture();
     const engine = createEngine({
@@ -346,70 +183,7 @@ describe("createEngine", () => {
   });
 });
 
-type Event = {
-  id: string;
-  title: string;
-  time: {
-    year: number;
-  };
-};
-
 describe("local persistence", () => {
-  const createEventFixture = (): { entity: EntityDefinition<Event> } => {
-    const ex = defineVocabulary({
-      base: "https://example.com/",
-      terms: {
-        Event: "ns#Event",
-        title: "ns#title",
-        time: "ns#time",
-        year: "ns#year",
-      },
-      uri({ base, entityName, id }) {
-        return `${base}id/${entityName}/${id}`;
-      },
-    });
-
-    const entity = defineEntity<Event>({
-      name: "event",
-      pod: {
-        basePath: "events/",
-      },
-      rdfType: ex.Event,
-      id: (event) => event.id,
-      toRdf(event, { uri, child }) {
-        const subject = uri(event);
-        const time = child("time");
-
-        return [
-          [subject, rdf.type, ex.Event],
-          [subject, ex.title, event.title],
-          [subject, ex.time, time],
-          [time, ex.year, event.time.year],
-        ] satisfies Triple[];
-      },
-      project(graph, { uri, child }) {
-        const subject = uri();
-        const time = child("time");
-
-        const objectOf = (target: string, predicate: string) =>
-          graph.find(
-            ([subjectTerm, predicateTerm]) =>
-              subjectTerm === target && predicateTerm === predicate,
-          )?.[2];
-
-        return {
-          id: subject.split("/").at(-1) ?? "",
-          title: String(objectOf(subject, ex.title) ?? ""),
-          time: {
-            year: Number(objectOf(time, ex.year) ?? 0),
-          },
-        };
-      },
-    });
-
-    return { entity };
-  };
-
   it("persists the canonical graph, projection, and local change log", async () => {
     const { entity } = createEventFixture();
     const storage = createMemoryStorage();
@@ -434,6 +208,7 @@ describe("local persistence", () => {
     expect(stored?.projection).toEqual(input);
     expect(stored?.graph).toHaveLength(4);
     expect(stored?.lastChangeId).toBeTypeOf("string");
+    expect(stored?.rootUri).toBe("https://example.com/id/event/ev-123");
     expect(changes).toHaveLength(1);
     expect(changes[0]?.assertions).toHaveLength(4);
     expect(changes[0]?.retractions).toHaveLength(0);
@@ -473,6 +248,7 @@ describe("local persistence", () => {
       records: new Map<
         string,
         {
+          rootUri: string;
           graph: Triple[];
           projection: unknown;
           lastChangeId: string | null;
@@ -480,6 +256,7 @@ describe("local persistence", () => {
         }
       >(),
       changes: [] as LocalChange[],
+      updatedOrder: 0,
     };
 
     const cloneState = () => ({
@@ -487,6 +264,7 @@ describe("local persistence", () => {
         Array.from(state.records.entries(), ([key, value]) => [
           key,
           {
+            rootUri: value.rootUri,
             graph: [...value.graph],
             projection: value.projection,
             lastChangeId: value.lastChangeId,
@@ -499,11 +277,15 @@ describe("local persistence", () => {
         assertions: [...change.assertions],
         retractions: [...change.retractions],
       })),
+      updatedOrder: state.updatedOrder,
     });
 
     const failingStorage: LocalStorageAdapter = {
       async readEntity(entityName, entityId) {
         return state.records.get(`${entityName}:${entityId}`) ?? null;
+      },
+      async listEntities() {
+        return [];
       },
       async listChanges(entityName, entityId) {
         return state.changes.filter(
@@ -511,9 +293,6 @@ describe("local persistence", () => {
             (entityName ? change.entityName === entityName : true) &&
             (entityId ? change.entityId === entityId : true),
         );
-      },
-      async listEntities() {
-        return [];
       },
       async transact<T>(
         work: (transaction: LocalStorageTransaction) => Promise<T> | T,
@@ -528,6 +307,10 @@ describe("local persistence", () => {
           },
           appendChange() {
             throw new Error("append failed");
+          },
+          nextUpdatedOrder() {
+            draft.updatedOrder += 1;
+            return draft.updatedOrder;
           },
         };
 
@@ -560,75 +343,8 @@ describe("local persistence", () => {
 });
 
 describe("graph deltas", () => {
-  const createEventFixture = (): {
-    entity: EntityDefinition<EventWithDetails>;
-  } => {
-    const ex = defineVocabulary({
-      base: "https://example.com/",
-      terms: {
-        Event: "ns#Event",
-        title: "ns#title",
-        description: "ns#description",
-        time: "ns#time",
-        year: "ns#year",
-      },
-      uri({ base, entityName, id }) {
-        return `${base}id/${entityName}/${id}`;
-      },
-    });
-
-    const entity = defineEntity<EventWithDetails>({
-      name: "event",
-      pod: {
-        basePath: "events/",
-      },
-      rdfType: ex.Event,
-      id: (event) => event.id,
-      toRdf(event, { uri, child }) {
-        const subject = uri(event);
-        const time = child("time");
-
-        return [
-          [subject, rdf.type, ex.Event],
-          [subject, ex.title, event.title],
-          ...(event.description
-            ? ([
-                [subject, ex.description, event.description],
-              ] satisfies Triple[])
-            : []),
-          [subject, ex.time, time],
-          [time, ex.year, event.time.year],
-        ];
-      },
-      project(graph, { uri, child }) {
-        const subject = uri();
-        const time = child("time");
-
-        const objectOf = (target: string, predicate: string) =>
-          graph.find(
-            ([subjectTerm, predicateTerm]) =>
-              subjectTerm === target && predicateTerm === predicate,
-          )?.[2];
-
-        return {
-          id: subject.split("/").at(-1) ?? "",
-          title: String(objectOf(subject, ex.title) ?? ""),
-          description:
-            typeof objectOf(subject, ex.description) === "string"
-              ? String(objectOf(subject, ex.description))
-              : undefined,
-          time: {
-            year: Number(objectOf(time, ex.year) ?? 0),
-          },
-        };
-      },
-    });
-
-    return { entity };
-  };
-
   it("records one retraction and one assertion when a literal value changes", async () => {
-    const { entity } = createEventFixture();
+    const { entity } = createEventWithDetailsFixture();
     const storage = createMemoryStorage();
     const engine = createEngine({
       entities: [entity],
@@ -656,14 +372,14 @@ describe("graph deltas", () => {
 
     expect(latest?.assertions).toEqual([
       [
-        "lofipod://entity/event/ev-123",
+        "https://example.com/id/event/ev-123",
         "https://example.com/ns#title",
         "Updated",
       ],
     ]);
     expect(latest?.retractions).toEqual([
       [
-        "lofipod://entity/event/ev-123",
+        "https://example.com/id/event/ev-123",
         "https://example.com/ns#title",
         "First",
       ],
@@ -671,7 +387,7 @@ describe("graph deltas", () => {
   });
 
   it("records embedded structure updates using the stable child node", async () => {
-    const { entity } = createEventFixture();
+    const { entity } = createEventWithDetailsFixture();
     const storage = createMemoryStorage();
     const engine = createEngine({
       entities: [entity],
@@ -699,14 +415,14 @@ describe("graph deltas", () => {
 
     expect(latest?.assertions).toEqual([
       [
-        "lofipod://entity/event/ev-123#time",
+        "https://example.com/id/event/ev-123#time",
         "https://example.com/ns#year",
         2025,
       ],
     ]);
     expect(latest?.retractions).toEqual([
       [
-        "lofipod://entity/event/ev-123#time",
+        "https://example.com/id/event/ev-123#time",
         "https://example.com/ns#year",
         2024,
       ],
@@ -714,7 +430,7 @@ describe("graph deltas", () => {
   });
 
   it("retracts deleted properties per triple", async () => {
-    const { entity } = createEventFixture();
+    const { entity } = createEventWithDetailsFixture();
     const storage = createMemoryStorage();
     const engine = createEngine({
       entities: [entity],
@@ -744,7 +460,7 @@ describe("graph deltas", () => {
     expect(latest?.assertions).toEqual([]);
     expect(latest?.retractions).toEqual([
       [
-        "lofipod://entity/event/ev-123",
+        "https://example.com/id/event/ev-123",
         "https://example.com/ns#description",
         "Soon",
       ],
@@ -752,7 +468,7 @@ describe("graph deltas", () => {
   });
 
   it("does not append a new change when the canonical graph is unchanged", async () => {
-    const { entity } = createEventFixture();
+    const { entity } = createEventWithDetailsFixture();
     const storage = createMemoryStorage();
     const engine = createEngine({
       entities: [entity],
@@ -776,71 +492,7 @@ describe("graph deltas", () => {
   });
 });
 
-type EventWithDetails = {
-  id: string;
-  title: string;
-  description?: string;
-  time: {
-    year: number;
-  };
-};
-
 describe("list", () => {
-  const createEventFixture = (): { entity: EntityDefinition<Event> } => {
-    const ex = defineVocabulary({
-      base: "https://example.com/",
-      terms: {
-        Event: "ns#Event",
-        title: "ns#title",
-        time: "ns#time",
-        year: "ns#year",
-      },
-      uri({ base, entityName, id }) {
-        return `${base}id/${entityName}/${id}`;
-      },
-    });
-
-    const entity = defineEntity<Event>({
-      name: "event",
-      pod: {
-        basePath: "events/",
-      },
-      rdfType: ex.Event,
-      id: (event) => event.id,
-      toRdf(event, { uri, child }) {
-        const subject = uri(event);
-        const time = child("time");
-
-        return [
-          [subject, rdf.type, ex.Event],
-          [subject, ex.title, event.title],
-          [subject, ex.time, time],
-          [time, ex.year, event.time.year],
-        ] satisfies Triple[];
-      },
-      project(graph, { uri, child }) {
-        const subject = uri();
-        const time = child("time");
-
-        const objectOf = (target: string, predicate: string) =>
-          graph.find(
-            ([subjectTerm, predicateTerm]) =>
-              subjectTerm === target && predicateTerm === predicate,
-          )?.[2];
-
-        return {
-          id: subject.split("/").at(-1) ?? "",
-          title: String(objectOf(subject, ex.title) ?? ""),
-          time: {
-            year: Number(objectOf(time, ex.year) ?? 0),
-          },
-        };
-      },
-    });
-
-    return { entity };
-  };
-
   it("lists saved entities from newest to oldest", async () => {
     const { entity } = createEventFixture();
     const engine = createEngine({
