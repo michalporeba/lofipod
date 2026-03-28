@@ -5,6 +5,7 @@ import type {
   EntityDefinition,
   LocalChange,
   PodEntityPatchRequest,
+  PodLogAppendRequest,
   ProjectionHelpers,
   StoredEntityRecord,
   SyncState,
@@ -109,7 +110,7 @@ async function readSyncState(
   syncConfig: EngineConfig["sync"],
 ): Promise<SyncState> {
   const pendingChanges = (await storage.listChanges()).filter(
-    (change) => !change.entityProjected,
+    (change) => !change.entityProjected || !change.logProjected,
   ).length;
 
   if (!syncConfig) {
@@ -210,6 +211,18 @@ function createEntityPatchRequest(
   };
 }
 
+function createLogAppendRequest(change: LocalChange): PodLogAppendRequest {
+  return {
+    entityName: change.entityName,
+    entityId: change.entityId,
+    changeId: change.changeId,
+    parentChangeId: change.parentChangeId,
+    path: `apps/lofipod/log/${change.entityName}/${change.changeId}.ttl`,
+    assertions: change.assertions,
+    retractions: change.retractions,
+  };
+}
+
 export function createEngine(config: EngineConfig): Engine {
   const entities = new Map(
     config.entities.map((entity) => [entity.name, entity]),
@@ -270,6 +283,7 @@ export function createEngine(config: EngineConfig): Engine {
           assertions,
           retractions,
           entityProjected: false,
+          logProjected: false,
         });
 
         return nextRecord;
@@ -326,7 +340,7 @@ export function createEngine(config: EngineConfig): Engine {
         }
 
         const pendingChanges = (await storage.listChanges()).filter(
-          (change) => !change.entityProjected,
+          (change) => !change.entityProjected || !change.logProjected,
         );
 
         for (const change of pendingChanges) {
@@ -340,13 +354,25 @@ export function createEngine(config: EngineConfig): Engine {
             continue;
           }
 
-          await config.sync.adapter.applyEntityPatch(
-            createEntityPatchRequest(definition, record, change),
-          );
+          if (!change.entityProjected) {
+            await config.sync.adapter.applyEntityPatch(
+              createEntityPatchRequest(definition, record, change),
+            );
 
-          await storage.transact((transaction) => {
-            transaction.markChangeEntityProjected(change.changeId);
-          });
+            await storage.transact((transaction) => {
+              transaction.markChangeEntityProjected(change.changeId);
+            });
+          }
+
+          if (!change.logProjected) {
+            await config.sync.adapter.appendLogEntry(
+              createLogAppendRequest(change),
+            );
+
+            await storage.transact((transaction) => {
+              transaction.markChangeLogProjected(change.changeId);
+            });
+          }
         }
       },
     },

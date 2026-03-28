@@ -32,6 +32,7 @@ export type LocalChange = {
   assertions: Triple[];
   retractions: Triple[];
   entityProjected: boolean;
+  logProjected: boolean;
 };
 
 export type StoredEntityRecord<T = unknown> = {
@@ -59,6 +60,7 @@ export type LocalStorageTransaction = {
   ): void;
   appendChange(change: LocalChange): void;
   markChangeEntityProjected(changeId: string): void;
+  markChangeLogProjected(changeId: string): void;
   nextUpdatedOrder(): number;
 };
 
@@ -72,8 +74,19 @@ export type PodEntityPatchRequest = {
   patch: string;
 };
 
+export type PodLogAppendRequest = {
+  entityName: string;
+  entityId: string;
+  changeId: string;
+  parentChangeId: string | null;
+  path: string;
+  assertions: Triple[];
+  retractions: Triple[];
+};
+
 export type PodSyncAdapter = {
   applyEntityPatch(request: PodEntityPatchRequest): Promise<void>;
+  appendLogEntry(request: PodLogAppendRequest): Promise<void>;
 };
 
 export type LocalStorageAdapter = {

@@ -220,6 +220,16 @@ export function createIndexedDbStorage(
               : change,
           );
         },
+        markChangeLogProjected(changeId) {
+          draft.changes = draft.changes.map((change) =>
+            change.changeId === changeId
+              ? {
+                  ...change,
+                  logProjected: true,
+                }
+              : change,
+          );
+        },
         nextUpdatedOrder() {
           draft.updatedOrder += 1;
           return draft.updatedOrder;

@@ -550,6 +550,9 @@ describe("local persistence", () => {
           markChangeEntityProjected() {
             // no-op in the failing transaction stub
           },
+          markChangeLogProjected() {
+            // no-op in the failing transaction stub
+          },
           nextUpdatedOrder() {
             draft.updatedOrder += 1;
             return draft.updatedOrder;
@@ -1003,6 +1006,9 @@ describe("sync state", () => {
           async applyEntityPatch() {
             // no-op
           },
+          async appendLogEntry() {
+            // no-op
+          },
         },
       },
     });
@@ -1034,6 +1040,9 @@ describe("sync state", () => {
           async applyEntityPatch() {
             // no-op
           },
+          async appendLogEntry() {
+            // no-op
+          },
         },
       },
     });
@@ -1052,6 +1061,9 @@ describe("sync state", () => {
       sync: {
         adapter: {
           async applyEntityPatch() {
+            // no-op
+          },
+          async appendLogEntry() {
             // no-op
           },
         },
@@ -1074,6 +1086,9 @@ describe("sync state", () => {
           async applyEntityPatch() {
             // no-op
           },
+          async appendLogEntry() {
+            // no-op
+          },
         },
       },
     });
@@ -1094,6 +1109,9 @@ describe("sync state", () => {
         adapter: {
           async applyEntityPatch(request) {
             applied.push(request.path);
+          },
+          async appendLogEntry() {
+            // no-op
           },
         },
       },
@@ -1137,6 +1155,9 @@ describe("mocked entity sync", () => {
               rootUri: request.rootUri,
             });
           },
+          async appendLogEntry() {
+            // no-op
+          },
         },
       },
     });
@@ -1176,6 +1197,9 @@ describe("mocked entity sync", () => {
               throw new Error("temporary failure");
             }
           },
+          async appendLogEntry() {
+            // no-op
+          },
         },
       },
     });
@@ -1214,6 +1238,9 @@ describe("mocked entity sync", () => {
           async applyEntityPatch(request) {
             patches.push(request.patch);
           },
+          async appendLogEntry() {
+            // no-op
+          },
         },
       },
     });
@@ -1245,5 +1272,98 @@ describe("mocked entity sync", () => {
     expect(patches[1]).toContain(
       "<https://example.com/id/event/ev-123#time> <https://example.com/ns#year> 2025 .",
     );
+  });
+
+  it("appends a replication log entry after entity file projection", async () => {
+    const { entity } = createEventFixture();
+    const calls: string[] = [];
+    const logRequests: Array<{
+      path: string;
+      assertions: Triple[];
+      retractions: Triple[];
+    }> = [];
+    const engine = createEngine({
+      entities: [entity],
+      sync: {
+        adapter: {
+          async applyEntityPatch() {
+            calls.push("entity");
+          },
+          async appendLogEntry(request) {
+            calls.push("log");
+            logRequests.push({
+              path: request.path,
+              assertions: request.assertions,
+              retractions: request.retractions,
+            });
+          },
+        },
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-123",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+
+    await engine.sync.now();
+
+    expect(calls).toEqual(["entity", "log"]);
+    expect(logRequests).toHaveLength(1);
+    expect(logRequests[0]?.path).toContain("apps/lofipod/log/event/");
+    expect(logRequests[0]?.assertions).toHaveLength(4);
+    expect(logRequests[0]?.retractions).toHaveLength(0);
+  });
+
+  it("retries remote log append independently after entity projection succeeded", async () => {
+    const { entity } = createEventFixture();
+    let patchAttempts = 0;
+    let logAttempts = 0;
+    const engine = createEngine({
+      entities: [entity],
+      sync: {
+        adapter: {
+          async applyEntityPatch() {
+            patchAttempts += 1;
+          },
+          async appendLogEntry() {
+            logAttempts += 1;
+
+            if (logAttempts === 1) {
+              throw new Error("log failure");
+            }
+          },
+        },
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-123",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+
+    await expect(engine.sync.now()).rejects.toThrow("log failure");
+    expect(patchAttempts).toBe(1);
+    expect(logAttempts).toBe(1);
+    await expect(engine.sync.state()).resolves.toEqual({
+      status: "pending",
+      configured: true,
+      pendingChanges: 1,
+    });
+
+    await expect(engine.sync.now()).resolves.toBeUndefined();
+    expect(patchAttempts).toBe(1);
+    expect(logAttempts).toBe(2);
+    await expect(engine.sync.state()).resolves.toEqual({
+      status: "idle",
+      configured: true,
+      pendingChanges: 0,
+    });
   });
 });
