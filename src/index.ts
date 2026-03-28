@@ -73,3 +73,77 @@ export function defineEntity<T>(
 ): EntityDefinition<T> {
   return definition;
 }
+
+export type EngineConfig = {
+  entities: EntityDefinition<unknown>[];
+};
+
+export type Engine = {
+  save<T>(entityName: string, entity: T): Promise<T>;
+  get<T>(entityName: string, id: string): Promise<T | null>;
+};
+
+function createRootUri(entityName: string, id: string): string {
+  return `lofipod://entity/${entityName}/${id}`;
+}
+
+function createChildUri(rootUri: string, path: string): string {
+  return `${rootUri}#${path}`;
+}
+
+export function createEngine(config: EngineConfig): Engine {
+  const entities = new Map(
+    config.entities.map((entity) => [entity.name, entity]),
+  );
+  const graphs = new Map<string, Triple[]>();
+
+  const requireEntity = (entityName: string): EntityDefinition<unknown> => {
+    const entity = entities.get(entityName);
+
+    if (!entity) {
+      throw new Error(`Unknown entity type: ${entityName}`);
+    }
+
+    return entity;
+  };
+
+  return {
+    async save<T>(entityName: string, entity: T): Promise<T> {
+      const definition = requireEntity(entityName) as EntityDefinition<T>;
+      const id = definition.id(entity);
+      const rootUri = createRootUri(definition.name, id);
+      const graph = definition.toRdf(entity, {
+        uri() {
+          return rootUri;
+        },
+        child(path) {
+          return createChildUri(rootUri, path);
+        },
+      });
+
+      graphs.set(`${definition.name}:${id}`, graph);
+
+      return entity;
+    },
+
+    async get<T>(entityName: string, id: string): Promise<T | null> {
+      const definition = requireEntity(entityName) as EntityDefinition<T>;
+      const graph = graphs.get(`${definition.name}:${id}`);
+
+      if (!graph) {
+        return null;
+      }
+
+      const rootUri = createRootUri(definition.name, id);
+
+      return definition.project(graph, {
+        uri() {
+          return rootUri;
+        },
+        child(path) {
+          return createChildUri(rootUri, path);
+        },
+      });
+    },
+  };
+}

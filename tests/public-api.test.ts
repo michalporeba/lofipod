@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  createEngine,
   defineEntity,
   defineVocabulary,
   packageVersion,
@@ -221,5 +222,129 @@ describe("defineEntity", () => {
     });
 
     expect(projected).toEqual(event);
+  });
+});
+
+describe("createEngine", () => {
+  const createEventFixture = () => {
+    const ex = defineVocabulary({
+      base: "https://example.com/",
+      terms: {
+        Event: "ns#Event",
+        title: "ns#title",
+        time: "ns#time",
+        year: "ns#year",
+      },
+      uri({ base, entityName, id }) {
+        return `${base}id/${entityName}/${id}`;
+      },
+    });
+
+    type Event = {
+      id: string;
+      title: string;
+      time: {
+        year: number;
+      };
+    };
+
+    const entity = defineEntity<Event>({
+      name: "event",
+      pod: {
+        basePath: "events/",
+      },
+      rdfType: ex.Event,
+      id: (event) => event.id,
+      toRdf(event, { uri, child }) {
+        const subject = uri(event);
+        const time = child("time");
+
+        return [
+          [subject, rdf.type, ex.Event],
+          [subject, ex.title, event.title],
+          [subject, ex.time, time],
+          [time, ex.year, event.time.year],
+        ] satisfies Triple[];
+      },
+      project(graph, { uri, child }) {
+        const subject = uri();
+        const time = child("time");
+
+        const objectOf = (target: string, predicate: string) =>
+          graph.find(
+            ([subjectTerm, predicateTerm]) =>
+              subjectTerm === target && predicateTerm === predicate,
+          )?.[2];
+
+        return {
+          id: subject.split("/").at(-1) ?? "",
+          title: String(objectOf(subject, ex.title) ?? ""),
+          time: {
+            year: Number(objectOf(time, ex.year) ?? 0),
+          },
+        };
+      },
+    });
+
+    return { entity };
+  };
+
+  it("saves one entity and reads it back through the public API", async () => {
+    const { entity } = createEventFixture();
+    const engine = createEngine({
+      entities: [entity],
+    });
+
+    const input = {
+      id: "ev-123",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    };
+
+    await engine.save("event", input);
+
+    await expect(engine.get("event", "ev-123")).resolves.toEqual(input);
+  });
+
+  it("overwrites an entity by replacing its canonical graph", async () => {
+    const { entity } = createEventFixture();
+    const engine = createEngine({
+      entities: [entity],
+    });
+
+    await engine.save("event", {
+      id: "ev-123",
+      title: "First",
+      time: {
+        year: 2024,
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-123",
+      title: "Updated",
+      time: {
+        year: 2025,
+      },
+    });
+
+    await expect(engine.get("event", "ev-123")).resolves.toEqual({
+      id: "ev-123",
+      title: "Updated",
+      time: {
+        year: 2025,
+      },
+    });
+  });
+
+  it("returns null when an entity is not present", async () => {
+    const { entity } = createEventFixture();
+    const engine = createEngine({
+      entities: [entity],
+    });
+
+    await expect(engine.get("event", "missing")).resolves.toBeNull();
   });
 });
