@@ -472,7 +472,12 @@ describe("local persistence", () => {
     const state = {
       records: new Map<
         string,
-        { graph: Triple[]; projection: unknown; lastChangeId: string | null }
+        {
+          graph: Triple[];
+          projection: unknown;
+          lastChangeId: string | null;
+          updatedOrder: number;
+        }
       >(),
       changes: [] as LocalChange[],
     };
@@ -485,6 +490,7 @@ describe("local persistence", () => {
             graph: [...value.graph],
             projection: value.projection,
             lastChangeId: value.lastChangeId,
+            updatedOrder: value.updatedOrder,
           },
         ]),
       ),
@@ -505,6 +511,9 @@ describe("local persistence", () => {
             (entityName ? change.entityName === entityName : true) &&
             (entityId ? change.entityId === entityId : true),
         );
+      },
+      async listEntities() {
+        return [];
       },
       async transact<T>(
         work: (transaction: LocalStorageTransaction) => Promise<T> | T,
@@ -775,3 +784,156 @@ type EventWithDetails = {
     year: number;
   };
 };
+
+describe("list", () => {
+  const createEventFixture = (): { entity: EntityDefinition<Event> } => {
+    const ex = defineVocabulary({
+      base: "https://example.com/",
+      terms: {
+        Event: "ns#Event",
+        title: "ns#title",
+        time: "ns#time",
+        year: "ns#year",
+      },
+      uri({ base, entityName, id }) {
+        return `${base}id/${entityName}/${id}`;
+      },
+    });
+
+    const entity = defineEntity<Event>({
+      name: "event",
+      pod: {
+        basePath: "events/",
+      },
+      rdfType: ex.Event,
+      id: (event) => event.id,
+      toRdf(event, { uri, child }) {
+        const subject = uri(event);
+        const time = child("time");
+
+        return [
+          [subject, rdf.type, ex.Event],
+          [subject, ex.title, event.title],
+          [subject, ex.time, time],
+          [time, ex.year, event.time.year],
+        ] satisfies Triple[];
+      },
+      project(graph, { uri, child }) {
+        const subject = uri();
+        const time = child("time");
+
+        const objectOf = (target: string, predicate: string) =>
+          graph.find(
+            ([subjectTerm, predicateTerm]) =>
+              subjectTerm === target && predicateTerm === predicate,
+          )?.[2];
+
+        return {
+          id: subject.split("/").at(-1) ?? "",
+          title: String(objectOf(subject, ex.title) ?? ""),
+          time: {
+            year: Number(objectOf(time, ex.year) ?? 0),
+          },
+        };
+      },
+    });
+
+    return { entity };
+  };
+
+  it("lists saved entities from newest to oldest", async () => {
+    const { entity } = createEventFixture();
+    const engine = createEngine({
+      entities: [entity],
+      storage: createMemoryStorage(),
+    });
+
+    await engine.save("event", {
+      id: "ev-1",
+      title: "First",
+      time: { year: 2024 },
+    });
+    await engine.save("event", {
+      id: "ev-2",
+      title: "Second",
+      time: { year: 2025 },
+    });
+
+    await expect(engine.list("event")).resolves.toEqual([
+      {
+        id: "ev-2",
+        title: "Second",
+        time: { year: 2025 },
+      },
+      {
+        id: "ev-1",
+        title: "First",
+        time: { year: 2024 },
+      },
+    ]);
+  });
+
+  it("supports a basic limit option", async () => {
+    const { entity } = createEventFixture();
+    const engine = createEngine({
+      entities: [entity],
+      storage: createMemoryStorage(),
+    });
+
+    await engine.save("event", {
+      id: "ev-1",
+      title: "First",
+      time: { year: 2024 },
+    });
+    await engine.save("event", {
+      id: "ev-2",
+      title: "Second",
+      time: { year: 2025 },
+    });
+
+    await expect(engine.list("event", { limit: 1 })).resolves.toEqual([
+      {
+        id: "ev-2",
+        title: "Second",
+        time: { year: 2025 },
+      },
+    ]);
+  });
+
+  it("moves an updated entity to the front of the list", async () => {
+    const { entity } = createEventFixture();
+    const engine = createEngine({
+      entities: [entity],
+      storage: createMemoryStorage(),
+    });
+
+    await engine.save("event", {
+      id: "ev-1",
+      title: "First",
+      time: { year: 2024 },
+    });
+    await engine.save("event", {
+      id: "ev-2",
+      title: "Second",
+      time: { year: 2025 },
+    });
+    await engine.save("event", {
+      id: "ev-1",
+      title: "First updated",
+      time: { year: 2026 },
+    });
+
+    await expect(engine.list("event")).resolves.toEqual([
+      {
+        id: "ev-1",
+        title: "First updated",
+        time: { year: 2026 },
+      },
+      {
+        id: "ev-2",
+        title: "Second",
+        time: { year: 2025 },
+      },
+    ]);
+  });
+});

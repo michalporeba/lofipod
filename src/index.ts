@@ -87,6 +87,7 @@ export type StoredEntityRecord<T = unknown> = {
   graph: Triple[];
   projection: T;
   lastChangeId: string | null;
+  updatedOrder: number;
 };
 
 export type LocalStorageTransaction = {
@@ -107,6 +108,9 @@ export type LocalStorageAdapter = {
     entityName: string,
     entityId: string,
   ): Promise<StoredEntityRecord<unknown> | null>;
+  listEntities(
+    entityName: string,
+  ): Promise<Array<{ entityId: string; record: StoredEntityRecord<unknown> }>>;
   listChanges(entityName?: string, entityId?: string): Promise<LocalChange[]>;
   transact<T>(
     work: (transaction: LocalStorageTransaction) => Promise<T> | T,
@@ -121,6 +125,7 @@ export type EngineConfig = {
 export type Engine = {
   save<T>(entityName: string, entity: T): Promise<T>;
   get<T>(entityName: string, id: string): Promise<T | null>;
+  list<T>(entityName: string, options?: { limit?: number }): Promise<T[]>;
 };
 
 function createRootUri(entityName: string, id: string): string {
@@ -163,6 +168,7 @@ export function createMemoryStorage(): LocalStorageAdapter {
     graph: [...record.graph],
     projection: record.projection,
     lastChangeId: record.lastChangeId,
+    updatedOrder: record.updatedOrder,
   });
 
   return {
@@ -184,6 +190,18 @@ export function createMemoryStorage(): LocalStorageAdapter {
           assertions: [...change.assertions],
           retractions: [...change.retractions],
         }));
+    },
+
+    async listEntities(entityName) {
+      return Array.from(state.records.entries())
+        .filter(([key]) => key.startsWith(`${entityName}:`))
+        .map(([key, record]) => ({
+          entityId: key.slice(entityName.length + 1),
+          record: cloneRecord(record),
+        }))
+        .sort(
+          (left, right) => right.record.updatedOrder - left.record.updatedOrder,
+        );
     },
 
     async transact<T>(
@@ -277,12 +295,14 @@ export function createEngine(config: EngineConfig): Engine {
       }
 
       const changeId = createChangeId(definition.name, id);
+      const updatedOrder = (await storage.listChanges()).length + 1;
 
       await storage.transact((transaction) => {
         transaction.writeEntity(definition.name, id, {
           graph,
           projection,
           lastChangeId: changeId,
+          updatedOrder,
         });
         transaction.appendChange({
           entityName: definition.name,
@@ -306,6 +326,21 @@ export function createEngine(config: EngineConfig): Engine {
       }
 
       return record.projection as T;
+    },
+
+    async list<T>(
+      entityName: string,
+      options?: { limit?: number },
+    ): Promise<T[]> {
+      requireEntity(entityName);
+
+      const records = await storage.listEntities(entityName);
+      const limited =
+        typeof options?.limit === "number"
+          ? records.slice(0, options.limit)
+          : records;
+
+      return limited.map(({ record }) => record.projection as T);
     },
   };
 }
