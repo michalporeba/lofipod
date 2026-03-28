@@ -17,6 +17,8 @@ import {
   type Event,
   type EventWithDetails,
 } from "./support/eventFixture.js";
+import { createNoteFixture, type Note } from "./support/noteFixture.js";
+import { createTaggableNoteFixture } from "./support/taggableNoteFixture.js";
 
 describe("public API scaffold", () => {
   it("exposes the initial package version", () => {
@@ -120,6 +122,109 @@ describe("defineEntity", () => {
 
     expect(projected).toEqual(event);
   });
+
+  it("supports flat scalar entities without embedded child nodes", () => {
+    const { entity } = createNoteFixture();
+    const note = {
+      id: "note-1",
+      title: "Hello",
+      body: "World",
+    };
+
+    const graph = entity.toRdf(note, {
+      uri(currentNote) {
+        return entity.uri?.(currentNote) ?? "";
+      },
+      child(path: string) {
+        return `unused:${path}`;
+      },
+    });
+
+    expect(graph).toEqual<Triple[]>([
+      [
+        "https://example.com/id/note/note-1",
+        rdf.type,
+        "https://example.com/ns#Note",
+      ],
+      [
+        "https://example.com/id/note/note-1",
+        "https://example.com/ns#title",
+        "Hello",
+      ],
+      [
+        "https://example.com/id/note/note-1",
+        "https://example.com/ns#body",
+        "World",
+      ],
+    ]);
+
+    expect(
+      entity.project(graph, {
+        uri() {
+          return "https://example.com/id/note/note-1";
+        },
+        child(path: string) {
+          return `unused:${path}`;
+        },
+      }),
+    ).toEqual(note);
+  });
+
+  it("supports unordered collection properties", () => {
+    const { entity } = createTaggableNoteFixture();
+    const note = {
+      id: "note-1",
+      title: "Hello",
+      tags: ["zeta", "alpha"],
+    };
+
+    const graph = entity.toRdf(note, {
+      uri(currentNote) {
+        return entity.uri?.(currentNote) ?? "";
+      },
+      child(path: string) {
+        return `unused:${path}`;
+      },
+    });
+
+    expect(graph).toEqual<Triple[]>([
+      [
+        "https://example.com/id/taggable-note/note-1",
+        rdf.type,
+        "https://example.com/ns#Note",
+      ],
+      [
+        "https://example.com/id/taggable-note/note-1",
+        "https://example.com/ns#title",
+        "Hello",
+      ],
+      [
+        "https://example.com/id/taggable-note/note-1",
+        "https://example.com/ns#tag",
+        "alpha",
+      ],
+      [
+        "https://example.com/id/taggable-note/note-1",
+        "https://example.com/ns#tag",
+        "zeta",
+      ],
+    ]);
+
+    expect(
+      entity.project(graph, {
+        uri() {
+          return "https://example.com/id/taggable-note/note-1";
+        },
+        child(path: string) {
+          return `unused:${path}`;
+        },
+      }),
+    ).toEqual({
+      id: "note-1",
+      title: "Hello",
+      tags: ["alpha", "zeta"],
+    });
+  });
 });
 
 describe("createEngine", () => {
@@ -180,6 +285,42 @@ describe("createEngine", () => {
     });
 
     await expect(engine.get("event", "missing")).resolves.toBeNull();
+  });
+
+  it("saves and reads back a flat scalar entity", async () => {
+    const { entity } = createNoteFixture();
+    const engine = createEngine({
+      entities: [entity],
+    });
+
+    const input: Note = {
+      id: "note-1",
+      title: "Hello",
+      body: "World",
+    };
+
+    await engine.save("note", input);
+
+    await expect(engine.get("note", "note-1")).resolves.toEqual(input);
+  });
+
+  it("saves and reads back an entity with an unordered collection", async () => {
+    const { entity } = createTaggableNoteFixture();
+    const engine = createEngine({
+      entities: [entity],
+    });
+
+    await engine.save("taggable-note", {
+      id: "note-1",
+      title: "Hello",
+      tags: ["zeta", "alpha"],
+    });
+
+    await expect(engine.get("taggable-note", "note-1")).resolves.toEqual({
+      id: "note-1",
+      title: "Hello",
+      tags: ["alpha", "zeta"],
+    });
   });
 });
 
@@ -587,6 +728,99 @@ describe("graph deltas", () => {
     await expect(storage.listChanges("event", "ev-123")).resolves.toHaveLength(
       1,
     );
+  });
+
+  it("records scalar changes for flat entities", async () => {
+    const { entity } = createNoteFixture();
+    const storage = createMemoryStorage();
+    const engine = createEngine({
+      entities: [entity],
+      storage,
+    });
+
+    await engine.save("note", {
+      id: "note-1",
+      title: "Hello",
+      body: "World",
+    });
+
+    await engine.save("note", {
+      id: "note-1",
+      title: "Hello",
+      body: "Updated",
+    });
+
+    const changes = await storage.listChanges("note", "note-1");
+
+    expect(changes.at(-1)).toMatchObject({
+      assertions: [
+        [
+          "https://example.com/id/note/note-1",
+          "https://example.com/ns#body",
+          "Updated",
+        ],
+      ],
+      retractions: [
+        [
+          "https://example.com/id/note/note-1",
+          "https://example.com/ns#body",
+          "World",
+        ],
+      ],
+    });
+  });
+
+  it("treats unordered collections as set-like values", async () => {
+    const { entity } = createTaggableNoteFixture();
+    const storage = createMemoryStorage();
+    const engine = createEngine({
+      entities: [entity],
+      storage,
+    });
+
+    await engine.save("taggable-note", {
+      id: "note-1",
+      title: "Hello",
+      tags: ["alpha"],
+    });
+
+    await engine.save("taggable-note", {
+      id: "note-1",
+      title: "Hello",
+      tags: ["alpha", "beta"],
+    });
+
+    const addChange = (await storage.listChanges("taggable-note", "note-1")).at(
+      -1,
+    );
+
+    expect(addChange?.assertions).toEqual([
+      [
+        "https://example.com/id/taggable-note/note-1",
+        "https://example.com/ns#tag",
+        "beta",
+      ],
+    ]);
+    expect(addChange?.retractions).toEqual([]);
+
+    await engine.save("taggable-note", {
+      id: "note-1",
+      title: "Hello",
+      tags: ["beta"],
+    });
+
+    const removeChange = (
+      await storage.listChanges("taggable-note", "note-1")
+    ).at(-1);
+
+    expect(removeChange?.assertions).toEqual([]);
+    expect(removeChange?.retractions).toEqual([
+      [
+        "https://example.com/id/taggable-note/note-1",
+        "https://example.com/ns#tag",
+        "alpha",
+      ],
+    ]);
   });
 });
 
