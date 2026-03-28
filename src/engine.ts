@@ -101,6 +101,34 @@ function projectionsMatch(current: unknown, next: unknown): boolean {
   return JSON.stringify(current) === JSON.stringify(next);
 }
 
+async function repairStoredProjection<T>(
+  storage: EngineConfig["storage"] extends infer _
+    ? NonNullable<EngineConfig["storage"]>
+    : never,
+  definition: EntityDefinition<T>,
+  entityId: string,
+  record: StoredEntityRecord<unknown>,
+): Promise<T> {
+  const projected = projectStoredRecord(definition, record);
+
+  if (!projectionsMatch(record.projection, projected)) {
+    await storage.transact((transaction) => {
+      const latest = transaction.readEntity(definition.name, entityId);
+
+      if (!latest) {
+        return;
+      }
+
+      transaction.writeEntity(definition.name, entityId, {
+        ...latest,
+        projection: projected,
+      });
+    });
+  }
+
+  return projected;
+}
+
 export function createEngine(config: EngineConfig): Engine {
   const entities = new Map(
     config.entities.map((entity) => [entity.name, entity]),
@@ -176,24 +204,7 @@ export function createEngine(config: EngineConfig): Engine {
         return null;
       }
 
-      const projected = projectStoredRecord(definition, record);
-
-      if (!projectionsMatch(record.projection, projected)) {
-        await storage.transact((transaction) => {
-          const latest = transaction.readEntity(definition.name, id);
-
-          if (!latest) {
-            return;
-          }
-
-          transaction.writeEntity(definition.name, id, {
-            ...latest,
-            projection: projected,
-          });
-        });
-      }
-
-      return projected;
+      return repairStoredProjection(storage, definition, id, record);
     },
 
     async list<T>(
@@ -210,27 +221,12 @@ export function createEngine(config: EngineConfig): Engine {
 
       const projected = await Promise.all(
         limited.map(async ({ entityId, record }) => {
-          const value = projectStoredRecord(
+          return repairStoredProjection(
+            storage,
             requireEntity(entityName) as EntityDefinition<T>,
+            entityId,
             record,
           );
-
-          if (!projectionsMatch(record.projection, value)) {
-            await storage.transact((transaction) => {
-              const latest = transaction.readEntity(entityName, entityId);
-
-              if (!latest) {
-                return;
-              }
-
-              transaction.writeEntity(entityName, entityId, {
-                ...latest,
-                projection: value,
-              });
-            });
-          }
-
-          return value;
         }),
       );
 

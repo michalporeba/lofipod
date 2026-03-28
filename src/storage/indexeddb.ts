@@ -5,6 +5,7 @@ import type {
   LocalStorageTransaction,
   StoredEntityRecord,
 } from "../types.js";
+import { cloneLocalChange, cloneStoredRecord } from "./shared.js";
 
 type IndexedDbStorageOptions = {
   databaseName: string;
@@ -82,26 +83,6 @@ function openDatabase(databaseName: string): Promise<IDBDatabase> {
   });
 }
 
-function cloneRecord(
-  row: StoredEntityRecord<unknown>,
-): StoredEntityRecord<unknown> {
-  return {
-    rootUri: row.rootUri,
-    graph: [...row.graph],
-    projection: row.projection,
-    lastChangeId: row.lastChangeId,
-    updatedOrder: row.updatedOrder,
-  };
-}
-
-function cloneChange(change: LocalChange): LocalChange {
-  return {
-    ...change,
-    assertions: [...change.assertions],
-    retractions: [...change.retractions],
-  };
-}
-
 async function readDraftState(database: IDBDatabase): Promise<DraftState> {
   const transaction = database.transaction(
     [ENTITY_STORE, CHANGE_STORE, META_STORE],
@@ -172,7 +153,7 @@ export function createIndexedDbStorage(
       const draft = await readDraftState(database);
       const record = draft.records.get(`${entityName}:${entityId}`);
 
-      return record ? cloneRecord(record) : null;
+      return record ? cloneStoredRecord(record) : null;
     },
 
     async listEntities(entityName) {
@@ -184,7 +165,7 @@ export function createIndexedDbStorage(
         .map(
           ([key, row]): ListedEntityRecord => ({
             entityId: key.slice(entityName.length + 1),
-            record: cloneRecord(row),
+            record: cloneStoredRecord(row),
           }),
         )
         .sort(
@@ -202,7 +183,7 @@ export function createIndexedDbStorage(
             (entityName ? change.entityName === entityName : true) &&
             (entityId ? change.entityId === entityId : true),
         )
-        .map(cloneChange);
+        .map(cloneLocalChange);
     },
 
     async transact<T>(
@@ -214,7 +195,7 @@ export function createIndexedDbStorage(
       const scopedTransaction: LocalStorageTransaction = {
         readEntity(entityName, entityId) {
           const row = draft.records.get(`${entityName}:${entityId}`);
-          return row ? cloneRecord(row) : null;
+          return row ? cloneStoredRecord(row) : null;
         },
         writeEntity(entityName, entityId, record) {
           draft.records.set(`${entityName}:${entityId}`, {

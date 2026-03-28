@@ -1,10 +1,14 @@
 import type {
-  ListedEntityRecord,
   LocalChange,
   LocalStorageAdapter,
   LocalStorageTransaction,
   StoredEntityRecord,
 } from "../types.js";
+import {
+  cloneLocalChange,
+  cloneStoredRecord,
+  createListedEntityRecord,
+} from "./shared.js";
 
 type MemoryStorageState = {
   records: Map<string, StoredEntityRecord<unknown>>;
@@ -12,47 +16,16 @@ type MemoryStorageState = {
   updatedOrder: number;
 };
 
-function cloneRecord(
-  record: StoredEntityRecord<unknown>,
-): StoredEntityRecord<unknown> {
-  return {
-    rootUri: record.rootUri,
-    graph: [...record.graph],
-    projection: record.projection,
-    lastChangeId: record.lastChangeId,
-    updatedOrder: record.updatedOrder,
-  };
-}
-
-function cloneChange(change: LocalChange): LocalChange {
-  return {
-    ...change,
-    assertions: [...change.assertions],
-    retractions: [...change.retractions],
-  };
-}
-
 function cloneState(state: MemoryStorageState): MemoryStorageState {
   return {
     records: new Map(
       Array.from(state.records.entries(), ([key, value]) => [
         key,
-        cloneRecord(value),
+        cloneStoredRecord(value),
       ]),
     ),
-    changes: state.changes.map(cloneChange),
+    changes: state.changes.map(cloneLocalChange),
     updatedOrder: state.updatedOrder,
-  };
-}
-
-function createListedEntityRecord(
-  entityName: string,
-  key: string,
-  record: StoredEntityRecord<unknown>,
-): ListedEntityRecord {
-  return {
-    entityId: key.slice(entityName.length + 1),
-    record: cloneRecord(record),
   };
 }
 
@@ -67,7 +40,7 @@ export function createMemoryStorage(): LocalStorageAdapter {
     async readEntity(entityName, entityId) {
       const record = state.records.get(`${entityName}:${entityId}`);
 
-      return record ? cloneRecord(record) : null;
+      return record ? cloneStoredRecord(record) : null;
     },
 
     async listEntities(entityName) {
@@ -88,7 +61,7 @@ export function createMemoryStorage(): LocalStorageAdapter {
             (entityName ? change.entityName === entityName : true) &&
             (entityId ? change.entityId === entityId : true),
         )
-        .map(cloneChange);
+        .map(cloneLocalChange);
     },
 
     async transact<T>(
@@ -101,10 +74,13 @@ export function createMemoryStorage(): LocalStorageAdapter {
           return draft.records.get(`${entityName}:${entityId}`) ?? null;
         },
         writeEntity(entityName, entityId, record) {
-          draft.records.set(`${entityName}:${entityId}`, cloneRecord(record));
+          draft.records.set(
+            `${entityName}:${entityId}`,
+            cloneStoredRecord(record),
+          );
         },
         appendChange(change) {
-          draft.changes.push(cloneChange(change));
+          draft.changes.push(cloneLocalChange(change));
         },
         nextUpdatedOrder() {
           draft.updatedOrder += 1;
