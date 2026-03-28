@@ -52,44 +52,47 @@ The current architecture direction is:
 
 Saving an entity should work roughly like this:
 
-1. load current materialized entity
-2. compare edited entity to current entity
-3. generate new messages
-4. append them to the local log
-5. update the materialized local read model
-6. queue Pod sync / projection
+1. load current local entity graph
+2. compare edited entity graph to current entity graph
+3. generate graph delta assertions and retractions
+4. append them to the local transaction log
+5. update the local entity graph state
+6. update the materialized local read model
+7. queue Pod sync / projection
 
-This implies a message vocabulary still needs to be designed.
+This implies the exact log representation still needs to be designed, but the
+current direction is an entity-scoped graph delta log rather than an object
+message vocabulary.
 
 ## Pod-side model
 
-The current Pod direction is based on:
+The current Pod direction is now:
 
-- mutable metadata and indexes for efficient loading
-- immutable revisions for canonical history
+- canonical current-state RDF entity resources
+- a bucketed app-private replication log
+- minimal metadata for log discovery
 
-Current event-oriented layout idea:
+Current layout idea:
 
-- `events/meta.ttl`
-  - current open bucket id
-  - current year
-  - current bucket sequence
+- `./<entity>/<id>.ttl`
+  - canonical current RDF state for one main entity
+  - intended to be reusable by other applications
+  - should be sufficient to reconstruct application state
+  - updated with idempotent patch-style writes such as N3 Patch
 
-- `events/<yyyy-NNNN>/`
-  - bucket directory
+- `./apps/<app_name>/log/`
+  - app-private replication infrastructure
 
-- `events/<yyyy-NNNN>/index.ttl`
-  - mutable summaries
-  - latest version references
-  - enough information for list display
-
-- `events/<yyyy-NNNN>/<timestamp-iso>-<version-uuid>.ttl`
-  - immutable revision resource
+- `./apps/<app_name>/log/<bucket>/...`
+  - append-oriented log buckets for sequential sync and replay
 
 Important decisions from the discussion:
 
-- indexes are mutable and are allowed to be so
-- canonical history is append-only
+- the Pod should not carry application-facing query indexes
+- Pod indexing should be minimal and only support replication efficiency
+- canonical entity files are the reusable data model
+- the replication log is infrastructure and can be recreated later if needed
+- embedded mutable nodes need stable IDs for patching
 - branches should be preserved if two clients write from the same parent
 - one branch may be chosen current automatically for normal reads
 
@@ -97,19 +100,51 @@ Important decisions from the discussion:
 
 The intended flow is currently:
 
-- local change -> append message -> materialize locally -> project to Pod
-- fresh client -> read meta/manifest -> fetch newest bucket indexes first
-- list pages load summaries first
-- full entities are fetched only when needed or in background
+- local save -> atomically write local graph delta log, local entity graph
+  state, and local read model
+- background sync -> patch canonical entity file in the Pod
+- background sync -> append the same logical change to the Pod replication log
+- fresh client -> read replication log sequentially
+- fresh client -> fetch canonical entity files as needed to materialize local
+  state
 - reconnect or refresh should not require a manual sync action
 - notifications may help later, but polling/startup/focus/reconnect should be
   sufficient as the baseline
 
+Current simplification:
+
+- no smart prioritisation of entities during initial sync
+- no Pod-side list indexes for application use
+- all application-facing lists should come from the local read model
+
+## Change log model
+
+The change log is now thought of as:
+
+- not a record of entity objects
+- a record of graph deltas grouped by entity-scoped transaction
+
+Each change should apply to one entity graph and contain:
+
+- `entityId`
+- `changeId`
+- optional `parentChangeId`
+- assertions
+- retractions
+
+Further notes:
+
+- assertions and retractions should use triple semantics
+- graph scope comes from the enclosing entity identity rather than repeating a
+  quad graph term on every statement
+- triple deletion should be per triple, not per node
+- local persistence can use more implementation-specific formats if useful, but
+  the model should stay graph-delta based
+
 ## Current open design questions
 
-- exact message vocabulary
-- whether Pod revisions are always full snapshots or can be shallow patches
-- exact RDF shape of meta/manifest/index resources
+- exact RDF shape of the replication log entries
+- exact RDF shape of the minimal log discovery metadata
 - how to represent branch metadata
 - whether unordered primitive sets should be projected as repeated triples
 - how the public API should look in detail

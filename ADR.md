@@ -42,21 +42,32 @@ and known boundaries for the project.
 - The engine should maintain a materialized local read model.
 - Normal reads should use the materialized read model, not replay the raw log
   on every access.
-- Saves should compare against the current materialized object and emit new
-  messages into the transaction log.
+- Saves should compare against the current local entity graph and emit graph
+  delta assertions and retractions into the transaction log.
 
 ### SOLID Pod backing
 
 - SOLID Pods are the durable backing store and sync target.
-- Pod storage should use mutable metadata and index resources for efficient
-  reads.
-- Canonical entity history in the Pod should be append-only immutable revisions.
+- Canonical current state should be stored as one RDF resource per main entity,
+  under a per-entity directory such as `./<entity>/<id>.ttl`.
+- Entity resources are the canonical reusable Pod data and should be sufficient
+  to reconstruct application state.
+- Pod writes to canonical entity resources should use idempotent patch-style
+  updates such as N3 Patch.
+- Embedded mutable structures inside an entity resource require stable IDs.
+- Pod-side indexing should be minimal and should exist only to support
+  replication efficiency rather than application-facing queries.
+- The application should not depend on Pod-side indexes for normal list or read
+  behaviour.
+- The initial Pod shape should also include an app-private, bucketed replication
+  log under a path such as `./apps/<app_name>/log/`.
+- The replication log is sync infrastructure, not the canonical data model.
 - The initial Pod shape should use:
-  - top-level meta or manifest
-  - bucketed mutable indexes
-  - immutable revision resources
-- Bucket and index design exists partly for efficient partial loading, not only
-  semantic modeling.
+  - canonical entity resources
+  - a bucketed app-private replication log
+  - minimal mutable metadata for log discovery
+- Bucket and log design exists to support sequential replication rather than
+  Pod-side application querying.
 
 ### Synchronisation
 
@@ -66,7 +77,36 @@ and known boundaries for the project.
 - Solid notifications are an enhancement path, not a baseline dependency.
 - Concurrent branches should be preserved rather than discarded.
 - One branch may be chosen as current automatically for normal reads.
+- Initial replication should be sequential rather than priority-driven.
+- A local save should be committed transactionally to the local change log, the
+  local entity graph state, and the local read model before remote sync.
+- Remote sync should project local changes to canonical entity resources first
+  and then append the same logical changes to the Pod replication log.
 - Realtime collaborative editing is out of scope.
+
+### Local-first query model
+
+- The client-local store is the primary query and UX database.
+- All application-facing queries and lists should be served from the local read
+  model.
+- The Pod should be treated as a durable replication medium and interoperable
+  current-state store, not as the primary operational query engine.
+
+### Change log model
+
+- The replication model should use entity-scoped graph deltas rather than
+  object-level events.
+- The log is not a record of entity objects.
+- The log is a record of graph deltas grouped by entity-scoped transaction.
+- Each change should apply to exactly one entity graph.
+- Each change should contain:
+  - `entityId`
+  - `changeId`
+  - optional `parentChangeId`
+  - assertions
+  - retractions
+- Assertions and retractions should use RDF triple semantics.
+- Triple deletion should be recorded per triple, not per node.
 
 ### Reliability and testing
 
@@ -89,9 +129,8 @@ and known boundaries for the project.
 
 ## Open questions
 
-- What exact message vocabulary should the transaction log use?
-- Should Pod revisions store full-entity snapshots only, or shallow property
-  patches?
+- What exact RDF representation should a replication log entry use in the Pod?
+- What minimal metadata is required for bucket discovery and log replay?
 - What should the first public API look like in detail?
 - How should branch/conflict state be exposed to consumers?
 - How far should unordered primitive sets go in the RDF mapping?
