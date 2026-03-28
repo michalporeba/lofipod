@@ -5,6 +5,7 @@ import type {
   EntityDefinition,
   ProjectionHelpers,
   StoredEntityRecord,
+  SyncState,
   ToRdfHelpers,
   Triple,
 } from "./types.js";
@@ -99,6 +100,27 @@ function projectStoredRecord<T>(
 
 function projectionsMatch(current: unknown, next: unknown): boolean {
   return JSON.stringify(current) === JSON.stringify(next);
+}
+
+async function readSyncState(
+  storage: NonNullable<EngineConfig["storage"]>,
+  syncConfig: EngineConfig["sync"],
+): Promise<SyncState> {
+  const pendingChanges = (await storage.listChanges()).length;
+
+  if (!syncConfig) {
+    return {
+      status: "unconfigured",
+      configured: false,
+      pendingChanges,
+    };
+  }
+
+  return {
+    status: pendingChanges > 0 ? "pending" : "idle",
+    configured: true,
+    pendingChanges,
+  };
 }
 
 async function repairStoredProjection<T>(
@@ -231,6 +253,12 @@ export function createEngine(config: EngineConfig): Engine {
       );
 
       return projected;
+    },
+
+    sync: {
+      async state(): Promise<SyncState> {
+        return readSyncState(storage, config.sync);
+      },
     },
   };
 }

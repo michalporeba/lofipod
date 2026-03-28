@@ -75,10 +75,22 @@ export type LocalStorageAdapter = {
 export type EngineConfig = {
   entities: EntityDefinition<unknown>[];
   storage?: LocalStorageAdapter;
+  sync?: {
+    adapter: unknown;
+  };
+};
+
+export type SyncState = {
+  status: "unconfigured" | "idle" | "pending";
+  configured: boolean;
+  pendingChanges: number;
 };
 
 export type Engine = {
   save<T>(entityName: string, entity: T): Promise<T>;
   get<T>(entityName: string, id: string): Promise<T | null>;
   list<T>(entityName: string, options?: { limit?: number }): Promise<T[]>;
+  sync: {
+    state(): Promise<SyncState>;
+  };
 };

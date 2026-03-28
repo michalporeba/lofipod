@@ -976,3 +976,101 @@ describe("list", () => {
     ]);
   });
 });
+
+describe("sync state", () => {
+  it("reports when sync is not configured", async () => {
+    const { entity } = createEventFixture();
+    const engine = createEngine({
+      entities: [entity],
+    });
+
+    await expect(engine.sync.state()).resolves.toEqual({
+      status: "unconfigured",
+      configured: false,
+      pendingChanges: 0,
+    });
+  });
+
+  it("reports pending local changes when sync is configured", async () => {
+    const { entity } = createEventFixture();
+    const engine = createEngine({
+      entities: [entity],
+      sync: {
+        adapter: {
+          kind: "mock",
+        },
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-123",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+
+    await expect(engine.sync.state()).resolves.toEqual({
+      status: "pending",
+      configured: true,
+      pendingChanges: 1,
+    });
+  });
+
+  it("preserves pending change count across restart", async () => {
+    const { entity } = createEventFixture();
+    const storage = createMemoryStorage();
+
+    const firstEngine = createEngine({
+      entities: [entity],
+      storage,
+      sync: {
+        adapter: {
+          kind: "mock",
+        },
+      },
+    });
+
+    await firstEngine.save("event", {
+      id: "ev-123",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+
+    const secondEngine = createEngine({
+      entities: [entity],
+      storage,
+      sync: {
+        adapter: {
+          kind: "mock",
+        },
+      },
+    });
+
+    await expect(secondEngine.sync.state()).resolves.toEqual({
+      status: "pending",
+      configured: true,
+      pendingChanges: 1,
+    });
+  });
+
+  it("reports idle when sync is configured and there are no pending local changes", async () => {
+    const { entity } = createEventFixture();
+    const engine = createEngine({
+      entities: [entity],
+      sync: {
+        adapter: {
+          kind: "mock",
+        },
+      },
+    });
+
+    await expect(engine.sync.state()).resolves.toEqual({
+      status: "idle",
+      configured: true,
+      pendingChanges: 0,
+    });
+  });
+});

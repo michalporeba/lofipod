@@ -15,6 +15,7 @@ export type {
   LocalStorageTransaction,
   ProjectionHelpers,
   StoredEntityRecord,
+  SyncState,
   Term,
   ToRdfHelpers,
   Triple,
