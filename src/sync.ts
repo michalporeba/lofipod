@@ -62,23 +62,36 @@ function triplesToN3(triples: Triple[]): string {
     .join("\n");
 }
 
+const SOLID_TERMS = "http://www.w3.org/ns/solid/terms#";
+const RDF_SYNTAX = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+
 export function createEntityPatchRequest(
   definition: EntityDefinition<unknown>,
   record: StoredEntityRecord<unknown>,
   change: LocalChange,
 ): PodEntityPatchRequest {
   const path = `${definition.pod.basePath}${change.entityId}.ttl`;
-  const sections: string[] = [];
-
-  if (change.retractions.length > 0) {
-    sections.push(`Delete {\n${triplesToN3(change.retractions)}\n}`);
-  }
+  const fields = [
+    `@prefix solid: <${SOLID_TERMS}>.`,
+    `@prefix rdf: <${RDF_SYNTAX}>.`,
+    "",
+    "_:patch",
+    "  a solid:InsertDeletePatch;",
+  ];
 
   if (change.assertions.length > 0) {
-    sections.push(`Insert {\n${triplesToN3(change.assertions)}\n}`);
+    fields.push(`  solid:inserts {\n${triplesToN3(change.assertions)}\n  };`);
   }
 
-  sections.push("Where {}");
+  if (change.retractions.length > 0) {
+    fields.push(`  solid:deletes {\n${triplesToN3(change.retractions)}\n  };`);
+  }
+
+  if (change.retractions.length > 0) {
+    fields.push(`  solid:where {\n${triplesToN3(change.retractions)}\n  }.`);
+  } else {
+    fields.push("  solid:where {}.");
+  }
 
   return {
     entityName: change.entityName,
@@ -87,7 +100,9 @@ export function createEntityPatchRequest(
     rootUri: record.rootUri,
     changeId: change.changeId,
     parentChangeId: change.parentChangeId,
-    patch: sections.join("\n"),
+    patch: fields.join("\n"),
+    assertions: change.assertions,
+    retractions: change.retractions,
   };
 }
 

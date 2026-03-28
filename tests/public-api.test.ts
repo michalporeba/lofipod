@@ -1301,7 +1301,8 @@ describe("mocked entity sync", () => {
       path: "events/ev-123.ttl",
       rootUri: "https://example.com/id/event/ev-123",
     });
-    expect(requests[0]?.patch).toContain("Insert {");
+    expect(requests[0]?.patch).toContain("solid:InsertDeletePatch");
+    expect(requests[0]?.patch).toContain("solid:inserts {");
     expect(requests[0]?.patch).toContain(
       '<https://example.com/id/event/ev-123> <https://example.com/ns#title> "Hello" .',
     );
@@ -1390,11 +1391,11 @@ describe("mocked entity sync", () => {
     await engine.sync.now();
 
     expect(patches).toHaveLength(2);
-    expect(patches[1]).toContain("Delete {");
+    expect(patches[1]).toContain("solid:deletes {");
     expect(patches[1]).toContain(
       "<https://example.com/id/event/ev-123#time> <https://example.com/ns#year> 2024 .",
     );
-    expect(patches[1]).toContain("Insert {");
+    expect(patches[1]).toContain("solid:inserts {");
     expect(patches[1]).toContain(
       "<https://example.com/id/event/ev-123#time> <https://example.com/ns#year> 2025 .",
     );

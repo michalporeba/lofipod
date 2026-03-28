@@ -72,6 +72,8 @@ export type PodEntityPatchRequest = {
   changeId: string;
   parentChangeId: string | null;
   patch: string;
+  assertions: Triple[];
+  retractions: Triple[];
 };
 
 export type PodLogAppendRequest = {

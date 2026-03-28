@@ -1,0 +1,20 @@
+services:
+  solid-open:
+    image: solidproject/community-server:7
+    ports:
+      - "${SOLID_PORT_OPEN:-3400}:3000"
+    environment:
+      CSS_CONFIG: config/file-root.json
+      CSS_ROOT_FILE_PATH: /data-open
+      CSS_BASE_URL: "http://localhost:${SOLID_PORT_OPEN:-3400}/"
+  solid-auth:
+    image: solidproject/community-server:7
+    ports:
+      - "${SOLID_PORT_AUTH:-3500}:3000"
+    command:
+      - "-c"
+      - "@css:config/file.json"
+      - "-f"
+      - "/data-auth"
+      - "-b"
+      - "http://localhost:${SOLID_PORT_AUTH:-3500}/"
