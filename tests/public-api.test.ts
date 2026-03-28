@@ -547,6 +547,9 @@ describe("local persistence", () => {
           appendChange() {
             throw new Error("append failed");
           },
+          markChangeEntityProjected() {
+            // no-op in the failing transaction stub
+          },
           nextUpdatedOrder() {
             draft.updatedOrder += 1;
             return draft.updatedOrder;
@@ -997,7 +1000,9 @@ describe("sync state", () => {
       entities: [entity],
       sync: {
         adapter: {
-          kind: "mock",
+          async applyEntityPatch() {
+            // no-op
+          },
         },
       },
     });
@@ -1026,7 +1031,9 @@ describe("sync state", () => {
       storage,
       sync: {
         adapter: {
-          kind: "mock",
+          async applyEntityPatch() {
+            // no-op
+          },
         },
       },
     });
@@ -1044,7 +1051,9 @@ describe("sync state", () => {
       storage,
       sync: {
         adapter: {
-          kind: "mock",
+          async applyEntityPatch() {
+            // no-op
+          },
         },
       },
     });
@@ -1062,7 +1071,9 @@ describe("sync state", () => {
       entities: [entity],
       sync: {
         adapter: {
-          kind: "mock",
+          async applyEntityPatch() {
+            // no-op
+          },
         },
       },
     });
@@ -1072,5 +1083,167 @@ describe("sync state", () => {
       configured: true,
       pendingChanges: 0,
     });
+  });
+
+  it("becomes idle after pending changes are projected to canonical entity files", async () => {
+    const { entity } = createEventFixture();
+    const applied: string[] = [];
+    const engine = createEngine({
+      entities: [entity],
+      sync: {
+        adapter: {
+          async applyEntityPatch(request) {
+            applied.push(request.path);
+          },
+        },
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-123",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+
+    await engine.sync.now();
+
+    expect(applied).toEqual(["events/ev-123.ttl"]);
+    await expect(engine.sync.state()).resolves.toEqual({
+      status: "idle",
+      configured: true,
+      pendingChanges: 0,
+    });
+  });
+});
+
+describe("mocked entity sync", () => {
+  it("projects local changes into canonical entity file patches", async () => {
+    const { entity } = createEventFixture();
+    const requests: Array<{
+      path: string;
+      patch: string;
+      rootUri: string;
+    }> = [];
+    const engine = createEngine({
+      entities: [entity],
+      sync: {
+        adapter: {
+          async applyEntityPatch(request) {
+            requests.push({
+              path: request.path,
+              patch: request.patch,
+              rootUri: request.rootUri,
+            });
+          },
+        },
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-123",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+
+    await engine.sync.now();
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      path: "events/ev-123.ttl",
+      rootUri: "https://example.com/id/event/ev-123",
+    });
+    expect(requests[0]?.patch).toContain("Insert {");
+    expect(requests[0]?.patch).toContain(
+      '<https://example.com/id/event/ev-123> <https://example.com/ns#title> "Hello" .',
+    );
+  });
+
+  it("retries entity file projection until it succeeds", async () => {
+    const { entity } = createEventFixture();
+    let attempts = 0;
+    const engine = createEngine({
+      entities: [entity],
+      sync: {
+        adapter: {
+          async applyEntityPatch() {
+            attempts += 1;
+
+            if (attempts === 1) {
+              throw new Error("temporary failure");
+            }
+          },
+        },
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-123",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+
+    await expect(engine.sync.now()).rejects.toThrow("temporary failure");
+    await expect(engine.sync.state()).resolves.toEqual({
+      status: "pending",
+      configured: true,
+      pendingChanges: 1,
+    });
+
+    await expect(engine.sync.now()).resolves.toBeUndefined();
+    expect(attempts).toBe(2);
+    await expect(engine.sync.state()).resolves.toEqual({
+      status: "idle",
+      configured: true,
+      pendingChanges: 0,
+    });
+  });
+
+  it("includes embedded child-node updates in later patches", async () => {
+    const { entity } = createEventFixture();
+    const patches: string[] = [];
+    const engine = createEngine({
+      entities: [entity],
+      sync: {
+        adapter: {
+          async applyEntityPatch(request) {
+            patches.push(request.patch);
+          },
+        },
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-123",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+    await engine.sync.now();
+
+    await engine.save("event", {
+      id: "ev-123",
+      title: "Hello",
+      time: {
+        year: 2025,
+      },
+    });
+    await engine.sync.now();
+
+    expect(patches).toHaveLength(2);
+    expect(patches[1]).toContain("Delete {");
+    expect(patches[1]).toContain(
+      "<https://example.com/id/event/ev-123#time> <https://example.com/ns#year> 2024 .",
+    );
+    expect(patches[1]).toContain("Insert {");
+    expect(patches[1]).toContain(
+      "<https://example.com/id/event/ev-123#time> <https://example.com/ns#year> 2025 .",
+    );
   });
 });

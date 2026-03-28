@@ -210,6 +210,16 @@ export function createIndexedDbStorage(
             ...change,
           });
         },
+        markChangeEntityProjected(changeId) {
+          draft.changes = draft.changes.map((change) =>
+            change.changeId === changeId
+              ? {
+                  ...change,
+                  entityProjected: true,
+                }
+              : change,
+          );
+        },
         nextUpdatedOrder() {
           draft.updatedOrder += 1;
           return draft.updatedOrder;

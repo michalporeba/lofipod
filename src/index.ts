@@ -13,6 +13,8 @@ export type {
   LocalChange,
   LocalStorageAdapter,
   LocalStorageTransaction,
+  PodEntityPatchRequest,
+  PodSyncAdapter,
   ProjectionHelpers,
   StoredEntityRecord,
   SyncState,

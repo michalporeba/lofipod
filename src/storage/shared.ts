@@ -21,6 +21,7 @@ export function cloneLocalChange(change: LocalChange): LocalChange {
     ...change,
     assertions: [...change.assertions],
     retractions: [...change.retractions],
+    entityProjected: change.entityProjected,
   };
 }
 

@@ -31,6 +31,7 @@ export type LocalChange = {
   parentChangeId: string | null;
   assertions: Triple[];
   retractions: Triple[];
+  entityProjected: boolean;
 };
 
 export type StoredEntityRecord<T = unknown> = {
@@ -57,7 +58,22 @@ export type LocalStorageTransaction = {
     record: StoredEntityRecord<unknown>,
   ): void;
   appendChange(change: LocalChange): void;
+  markChangeEntityProjected(changeId: string): void;
   nextUpdatedOrder(): number;
+};
+
+export type PodEntityPatchRequest = {
+  entityName: string;
+  entityId: string;
+  path: string;
+  rootUri: string;
+  changeId: string;
+  parentChangeId: string | null;
+  patch: string;
+};
+
+export type PodSyncAdapter = {
+  applyEntityPatch(request: PodEntityPatchRequest): Promise<void>;
 };
 
 export type LocalStorageAdapter = {
@@ -76,7 +92,7 @@ export type EngineConfig = {
   entities: EntityDefinition<unknown>[];
   storage?: LocalStorageAdapter;
   sync?: {
-    adapter: unknown;
+    adapter: PodSyncAdapter;
   };
 };
 
@@ -92,5 +108,6 @@ export type Engine = {
   list<T>(entityName: string, options?: { limit?: number }): Promise<T[]>;
   sync: {
     state(): Promise<SyncState>;
+    now(): Promise<void>;
   };
 };
