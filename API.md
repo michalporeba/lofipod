@@ -134,7 +134,7 @@ operations in the common case.
 ## Example
 
 ```ts
-import { createEngine, defineEntity, defineVocabulary, rdf } from "lofipod"
+import { createEngine, defineEntity, defineVocabulary, rdf } from "lofipod";
 
 const ex = defineVocabulary({
   base: "https://example.com/",
@@ -145,17 +145,17 @@ const ex = defineVocabulary({
     year: "ns#year",
   },
   uri({ base, entityName, id }) {
-    return `${base}id/${entityName}/${id}`
+    return `${base}id/${entityName}/${id}`;
   },
-})
+});
 
 type Event = {
-  id: string
-  title: string
+  id: string;
+  title: string;
   time: {
-    year: number
-  }
-}
+    year: number;
+  };
+};
 
 const eventEntity = defineEntity<Event>({
   name: "event",
@@ -166,20 +166,20 @@ const eventEntity = defineEntity<Event>({
   id: (event) => event.id,
 
   toRdf(event, { uri, child }) {
-    const subject = uri(event)
-    const time = child("time")
+    const subject = uri(event);
+    const time = child("time");
 
     return [
       [subject, rdf.type, ex.Event],
       [subject, ex.title, event.title],
       [subject, ex.time, time],
       [time, ex.year, event.time.year],
-    ]
+    ];
   },
 
   project(graph, { uri, child }) {
-    const subject = uri()
-    const time = child("time")
+    const subject = uri();
+    const time = child("time");
 
     return {
       id: idFromUri(subject),
@@ -187,9 +187,9 @@ const eventEntity = defineEntity<Event>({
       time: {
         year: numberObjectOf(graph, time, ex.year),
       },
-    }
+    };
   },
-})
+});
 
 const engine = await createEngine({
   pod: {
@@ -198,7 +198,7 @@ const engine = await createEngine({
   entities: [eventEntity],
   storage: indexedDbStorage(),
   sync: solidSync({ podUrl, auth }),
-})
+});
 
 await engine.save("event", {
   id: "n1",
@@ -206,14 +206,14 @@ await engine.save("event", {
   time: {
     year: 2024,
   },
-})
+});
 
-const event = await engine.get("event", "n1")
-const events = await engine.list("event", { limit: 20 })
+const event = await engine.get("event", "n1");
+const events = await engine.list("event", { limit: 20 });
 
-const connection = engine.connection.state()
-const syncState = engine.sync.state()
-await engine.sync.now()
+const connection = engine.connection.state();
+const syncState = engine.sync.state();
+await engine.sync.now();
 ```
 
 ## Defaults and open points

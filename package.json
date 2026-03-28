@@ -1,0 +1,60 @@
+{
+  "name": "lofipod",
+  "version": "0.1.0",
+  "description": "Local-first library for building privacy-first applications with RDF data and SOLID Pod sync.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean",
+    "check": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "verify": "npm run format:check && npm run lint && npm run check && npm run test",
+    "prepack": "npm run build"
+  },
+  "keywords": [
+    "local-first",
+    "rdf",
+    "solid",
+    "solid-pod",
+    "privacy"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.23.0",
+    "@vitest/coverage-v8": "^3.2.4",
+    "eslint": "^9.23.0",
+    "eslint-config-prettier": "^10.1.1",
+    "globals": "^16.0.0",
+    "prettier": "^3.5.3",
+    "tsup": "^8.3.5",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.28.0",
+    "vitest": "^3.2.4"
+  }
+}

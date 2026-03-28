@@ -28,17 +28,17 @@ const ex = defineVocabulary({
     year: "ns#year",
   },
   uri({ base, entityName, id }) {
-    return `${base}id/${entityName}/${id}`
+    return `${base}id/${entityName}/${id}`;
   },
-})
+});
 
 type Event = {
-  id: string
-  title: string
+  id: string;
+  title: string;
   time: {
-    year: number
-  }
-}
+    year: number;
+  };
+};
 
 const EventEntity = defineEntity<Event>({
   name: "event",
@@ -49,20 +49,20 @@ const EventEntity = defineEntity<Event>({
   id: (event) => event.id,
 
   toRdf(event, { uri, child }) {
-    const subject = uri(event)
-    const time = child("time")
+    const subject = uri(event);
+    const time = child("time");
 
     return [
       [subject, rdf.type, ex.Event],
       [subject, ex.title, event.title],
       [subject, ex.time, time],
       [time, ex.year, event.time.year],
-    ]
+    ];
   },
 
   project(graph, { uri, child }) {
-    const subject = uri()
-    const time = child("time")
+    const subject = uri();
+    const time = child("time");
 
     return {
       id: idFromUri(subject),
@@ -70,9 +70,9 @@ const EventEntity = defineEntity<Event>({
       time: {
         year: numberObjectOf(graph, time, ex.year),
       },
-    }
+    };
   },
-})
+});
 ```
 
 ## Current function shapes
@@ -94,17 +94,17 @@ Where:
 Expanded sketch:
 
 ```ts
-type Triple = [subject: Term, predicate: Term, object: Term]
+type Triple = [subject: Term, predicate: Term, object: Term];
 
 type ToRdfHelpers<T> = {
-  uri(entity: T): Term
-  child(path: string): Term
-}
+  uri(entity: T): Term;
+  child(path: string): Term;
+};
 
 type ProjectionHelpers = {
-  uri(): Term
-  child(path: string): Term
-}
+  uri(): Term;
+  child(path: string): Term;
+};
 ```
 
 ## Notes
