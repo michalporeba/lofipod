@@ -87,6 +87,20 @@ function createStoredRecord<T>(
   };
 }
 
+function projectStoredRecord<T>(
+  definition: EntityDefinition<T>,
+  record: StoredEntityRecord<unknown>,
+): T {
+  return definition.project(
+    record.graph,
+    createProjectionHelpers(record.rootUri),
+  );
+}
+
+function projectionsMatch(current: unknown, next: unknown): boolean {
+  return JSON.stringify(current) === JSON.stringify(next);
+}
+
 export function createEngine(config: EngineConfig): Engine {
   const entities = new Map(
     config.entities.map((entity) => [entity.name, entity]),
@@ -162,7 +176,24 @@ export function createEngine(config: EngineConfig): Engine {
         return null;
       }
 
-      return record.projection as T;
+      const projected = projectStoredRecord(definition, record);
+
+      if (!projectionsMatch(record.projection, projected)) {
+        await storage.transact((transaction) => {
+          const latest = transaction.readEntity(definition.name, id);
+
+          if (!latest) {
+            return;
+          }
+
+          transaction.writeEntity(definition.name, id, {
+            ...latest,
+            projection: projected,
+          });
+        });
+      }
+
+      return projected;
     },
 
     async list<T>(
@@ -177,7 +208,33 @@ export function createEngine(config: EngineConfig): Engine {
           ? records.slice(0, options.limit)
           : records;
 
-      return limited.map(({ record }) => record.projection as T);
+      const projected = await Promise.all(
+        limited.map(async ({ entityId, record }) => {
+          const value = projectStoredRecord(
+            requireEntity(entityName) as EntityDefinition<T>,
+            record,
+          );
+
+          if (!projectionsMatch(record.projection, value)) {
+            await storage.transact((transaction) => {
+              const latest = transaction.readEntity(entityName, entityId);
+
+              if (!latest) {
+                return;
+              }
+
+              transaction.writeEntity(entityName, entityId, {
+                ...latest,
+                projection: value,
+              });
+            });
+          }
+
+          return value;
+        }),
+      );
+
+      return projected;
     },
   };
 }

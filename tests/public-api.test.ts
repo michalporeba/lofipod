@@ -241,6 +241,104 @@ describe("local persistence", () => {
     await expect(secondEngine.get("event", "ev-123")).resolves.toEqual(input);
   });
 
+  it("rehydrates an entity from stored graph state even if the stored projection is stale", async () => {
+    const { entity } = createEventFixture();
+    const storage = createMemoryStorage();
+
+    const firstEngine = createEngine({
+      entities: [entity],
+      storage,
+    });
+
+    await firstEngine.save("event", {
+      id: "ev-123",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+
+    await storage.transact((transaction) => {
+      const record = transaction.readEntity("event", "ev-123");
+
+      if (!record) {
+        throw new Error("missing record");
+      }
+
+      transaction.writeEntity("event", "ev-123", {
+        ...record,
+        projection: {
+          id: "ev-123",
+          title: "STALE",
+          time: {
+            year: 1900,
+          },
+        },
+      });
+    });
+
+    const secondEngine = createEngine({
+      entities: [entity],
+      storage,
+    });
+
+    await expect(secondEngine.get("event", "ev-123")).resolves.toEqual({
+      id: "ev-123",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+  });
+
+  it("repairs the stored projection from graph state during get", async () => {
+    const { entity } = createEventFixture();
+    const storage = createMemoryStorage();
+    const engine = createEngine({
+      entities: [entity],
+      storage,
+    });
+
+    await engine.save("event", {
+      id: "ev-123",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+
+    await storage.transact((transaction) => {
+      const record = transaction.readEntity("event", "ev-123");
+
+      if (!record) {
+        throw new Error("missing record");
+      }
+
+      transaction.writeEntity("event", "ev-123", {
+        ...record,
+        projection: null,
+      });
+    });
+
+    await expect(engine.get("event", "ev-123")).resolves.toEqual({
+      id: "ev-123",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+
+    await expect(storage.readEntity("event", "ev-123")).resolves.toMatchObject({
+      projection: {
+        id: "ev-123",
+        title: "Hello",
+        time: {
+          year: 2024,
+        },
+      },
+    });
+  });
+
   it("rolls back local writes when a storage transaction fails", async () => {
     const { entity } = createEventFixture();
 
@@ -585,6 +683,61 @@ describe("list", () => {
         id: "ev-2",
         title: "Second",
         time: { year: 2025 },
+      },
+    ]);
+  });
+
+  it("uses graph-based rehydration for listed entities after stale projection repair", async () => {
+    const { entity } = createEventFixture();
+    const storage = createMemoryStorage();
+    const engine = createEngine({
+      entities: [entity],
+      storage,
+    });
+
+    await engine.save("event", {
+      id: "ev-1",
+      title: "First",
+      time: { year: 2024 },
+    });
+    await engine.save("event", {
+      id: "ev-2",
+      title: "Second",
+      time: { year: 2025 },
+    });
+
+    await storage.transact((transaction) => {
+      const record = transaction.readEntity("event", "ev-1");
+
+      if (!record) {
+        throw new Error("missing record");
+      }
+
+      transaction.writeEntity("event", "ev-1", {
+        ...record,
+        projection: {
+          id: "ev-1",
+          title: "STALE",
+          time: { year: 1900 },
+        },
+      });
+    });
+
+    const restarted = createEngine({
+      entities: [entity],
+      storage,
+    });
+
+    await expect(restarted.list("event")).resolves.toEqual([
+      {
+        id: "ev-2",
+        title: "Second",
+        time: { year: 2025 },
+      },
+      {
+        id: "ev-1",
+        title: "First",
+        time: { year: 2024 },
       },
     ]);
   });
