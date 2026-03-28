@@ -211,13 +211,16 @@ function createEntityPatchRequest(
   };
 }
 
-function createLogAppendRequest(change: LocalChange): PodLogAppendRequest {
+function createLogAppendRequest(
+  change: LocalChange,
+  logBasePath: string,
+): PodLogAppendRequest {
   return {
     entityName: change.entityName,
     entityId: change.entityId,
     changeId: change.changeId,
     parentChangeId: change.parentChangeId,
-    path: `apps/lofipod/log/${change.entityName}/${change.changeId}.ttl`,
+    path: `${logBasePath}${change.entityName}/${change.changeId}.ttl`,
     assertions: change.assertions,
     retractions: change.retractions,
   };
@@ -237,6 +240,16 @@ export function createEngine(config: EngineConfig): Engine {
     }
 
     return entity;
+  };
+
+  const requireLogBasePath = (): string => {
+    const logBasePath = config.pod?.logBasePath;
+
+    if (!logBasePath) {
+      throw new Error("Pod logBasePath is required for remote log projection.");
+    }
+
+    return logBasePath.endsWith("/") ? logBasePath : `${logBasePath}/`;
   };
 
   return {
@@ -366,7 +379,7 @@ export function createEngine(config: EngineConfig): Engine {
 
           if (!change.logProjected) {
             await config.sync.adapter.appendLogEntry(
-              createLogAppendRequest(change),
+              createLogAppendRequest(change, requireLogBasePath()),
             );
 
             await storage.transact((transaction) => {

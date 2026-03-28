@@ -984,6 +984,10 @@ describe("list", () => {
 });
 
 describe("sync state", () => {
+  const pod = {
+    logBasePath: "apps/my-journal/log/",
+  };
+
   it("reports when sync is not configured", async () => {
     const { entity } = createEventFixture();
     const engine = createEngine({
@@ -1001,6 +1005,7 @@ describe("sync state", () => {
     const { entity } = createEventFixture();
     const engine = createEngine({
       entities: [entity],
+      pod,
       sync: {
         adapter: {
           async applyEntityPatch() {
@@ -1035,6 +1040,7 @@ describe("sync state", () => {
     const firstEngine = createEngine({
       entities: [entity],
       storage,
+      pod,
       sync: {
         adapter: {
           async applyEntityPatch() {
@@ -1058,6 +1064,7 @@ describe("sync state", () => {
     const secondEngine = createEngine({
       entities: [entity],
       storage,
+      pod,
       sync: {
         adapter: {
           async applyEntityPatch() {
@@ -1081,6 +1088,7 @@ describe("sync state", () => {
     const { entity } = createEventFixture();
     const engine = createEngine({
       entities: [entity],
+      pod,
       sync: {
         adapter: {
           async applyEntityPatch() {
@@ -1105,6 +1113,7 @@ describe("sync state", () => {
     const applied: string[] = [];
     const engine = createEngine({
       entities: [entity],
+      pod,
       sync: {
         adapter: {
           async applyEntityPatch(request) {
@@ -1134,9 +1143,42 @@ describe("sync state", () => {
       pendingChanges: 0,
     });
   });
+
+  it("requires pod logBasePath before projecting remote log entries", async () => {
+    const { entity } = createEventFixture();
+    const engine = createEngine({
+      entities: [entity],
+      sync: {
+        adapter: {
+          async applyEntityPatch() {
+            // no-op
+          },
+          async appendLogEntry() {
+            // no-op
+          },
+        },
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-123",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+
+    await expect(engine.sync.now()).rejects.toThrow(
+      "Pod logBasePath is required for remote log projection.",
+    );
+  });
 });
 
 describe("mocked entity sync", () => {
+  const pod = {
+    logBasePath: "apps/my-journal/log/",
+  };
+
   it("projects local changes into canonical entity file patches", async () => {
     const { entity } = createEventFixture();
     const requests: Array<{
@@ -1146,6 +1188,7 @@ describe("mocked entity sync", () => {
     }> = [];
     const engine = createEngine({
       entities: [entity],
+      pod,
       sync: {
         adapter: {
           async applyEntityPatch(request) {
@@ -1188,6 +1231,7 @@ describe("mocked entity sync", () => {
     let attempts = 0;
     const engine = createEngine({
       entities: [entity],
+      pod,
       sync: {
         adapter: {
           async applyEntityPatch() {
@@ -1233,6 +1277,7 @@ describe("mocked entity sync", () => {
     const patches: string[] = [];
     const engine = createEngine({
       entities: [entity],
+      pod,
       sync: {
         adapter: {
           async applyEntityPatch(request) {
@@ -1284,6 +1329,7 @@ describe("mocked entity sync", () => {
     }> = [];
     const engine = createEngine({
       entities: [entity],
+      pod,
       sync: {
         adapter: {
           async applyEntityPatch() {
@@ -1313,7 +1359,7 @@ describe("mocked entity sync", () => {
 
     expect(calls).toEqual(["entity", "log"]);
     expect(logRequests).toHaveLength(1);
-    expect(logRequests[0]?.path).toContain("apps/lofipod/log/event/");
+    expect(logRequests[0]?.path).toContain("apps/my-journal/log/event/");
     expect(logRequests[0]?.assertions).toHaveLength(4);
     expect(logRequests[0]?.retractions).toHaveLength(0);
   });
@@ -1324,6 +1370,7 @@ describe("mocked entity sync", () => {
     let logAttempts = 0;
     const engine = createEngine({
       entities: [entity],
+      pod,
       sync: {
         adapter: {
           async applyEntityPatch() {

@@ -194,6 +194,7 @@ const eventEntity = defineEntity<Event>({
 const engine = await createEngine({
   pod: {
     root: "/apps/my-journal/",
+    logBasePath: "apps/my-journal/log/",
   },
   entities: [eventEntity],
   storage: indexedDbStorage(),

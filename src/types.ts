@@ -104,6 +104,9 @@ export type LocalStorageAdapter = {
 export type EngineConfig = {
   entities: EntityDefinition<unknown>[];
   storage?: LocalStorageAdapter;
+  pod?: {
+    logBasePath?: string;
+  };
   sync?: {
     adapter: PodSyncAdapter;
   };
