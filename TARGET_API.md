@@ -14,6 +14,7 @@ The current design preference is:
 - keep entity configuration, Pod placement, and identity rules together in
   `defineEntity<T>(...)`
 - make vocabulary helpers explicit and reusable without requiring proxy magic
+- treat entity graphs as canonical and application objects as projections
 
 ## Example
 
@@ -22,11 +23,22 @@ const ex = defineVocabulary({
   base: "https://example.com/",
   terms: {
     Event: "ns#Event",
+    title: "ns#title",
+    time: "ns#time",
+    year: "ns#year",
   },
   uri({ base, entityName, id }) {
     return `${base}id/${entityName}/${id}`
   },
 })
+
+type Event = {
+  id: string
+  title: string
+  time: {
+    year: number
+  }
+}
 
 const EventEntity = defineEntity<Event>({
   name: "event",
@@ -35,22 +47,77 @@ const EventEntity = defineEntity<Event>({
   },
   rdfType: ex.Event,
   id: (event) => event.id,
-  toRdf(event, { uri }) {
+
+  toRdf(event, { uri, child }) {
+    const subject = uri(event)
+    const time = child("time")
+
     return [
-      [uri(event), rdf.type, ex.Event],
+      [subject, rdf.type, ex.Event],
+      [subject, ex.title, event.title],
+      [subject, ex.time, time],
+      [time, ex.year, event.time.year],
     ]
   },
+
+  project(graph, { uri, child }) {
+    const subject = uri()
+    const time = child("time")
+
+    return {
+      id: idFromUri(subject),
+      title: objectOf(graph, subject, ex.title),
+      time: {
+        year: numberObjectOf(graph, time, ex.year),
+      },
+    }
+  },
 })
+```
+
+## Current function shapes
+
+```ts
+toRdf(entity, helpers) => Triple[]
+project(graph, helpers) => entity
+```
+
+Where:
+
+- `toRdf(...)` takes an application object and returns the full canonical RDF
+  triple set for that entity
+- `project(...)` takes the canonical graph for one entity and returns a full
+  projected object
+- `child(path)` returns a stable graph-local node for a parent-owned embedded
+  structure such as `child("time")`
+
+Expanded sketch:
+
+```ts
+type Triple = [subject: Term, predicate: Term, object: Term]
+
+type ToRdfHelpers<T> = {
+  uri(entity: T): Term
+  child(path: string): Term
+}
+
+type ProjectionHelpers = {
+  uri(): Term
+  child(path: string): Term
+}
 ```
 
 ## Notes
 
 - `toRdf(...)` should remain pure.
-- `toRdf(...)` should return RDF data rather than mutating external state.
+- `toRdf(...)` should return RDF triples rather than mutating external state.
+- `project(...)` should remain pure and return a full projected object.
 - The `uri(...)` helper passed to `toRdf(...)` should be derived from the
   vocabulary and entity definition so the entity name and ID rules do not need
   to be repeated in every codec.
+- `project(...)` is preferred over `fromGraph(...)` because the graph is the
+  canonical state and the object is a projection.
 - `rdfType` belongs on the entity definition, not on each entity instance, for
   the simple single-class case.
-- The exact shape of `defineVocabulary(...)`, `toRdf(...)` return values, and
-  any matching `fromRdf(...)` API are still open.
+- The exact shape of helper functions such as `idFromUri(...)`,
+  `objectOf(...)`, and `numberObjectOf(...)` is still open.

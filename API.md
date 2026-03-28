@@ -37,7 +37,7 @@ terms, and entity-specific RDF mapping.
 
 The first public surface should stay small and explicit:
 
-- `defineNamespace(...)`
+- `defineVocabulary(...)`
 - `defineEntity<T>(...)`
 - `createEngine(...)`
 - `engine.save(entityName, entity)`
@@ -57,20 +57,27 @@ Each entity definition should include:
 - `name`
 - a TypeScript type parameter for the domain object
 - `pod.basePath`
-- `rdf.class`
-- `rdf.toRdf(entity, ctx)`
-- `rdf.fromRdf(ctx)`
+- `rdfType`
+- `id(entity)`
+- `toRdf(entity, helpers)`
+- `project(graph, helpers)`
 
 The initial assumptions are:
 
 - identity lives on the entity object in v0
 - RDF mapping is owned per entity, not globally
-- the RDF context should be higher-level than raw triples
+- `toRdf(...)` should be pure and should return RDF triples rather than mutate
+  external state
+- `project(...)` should be pure and should return a full projected object from
+  the canonical entity graph
+- embedded one-to-one structures can use path-based stable child node helpers
+  such as `child("time")`
 - the library owns its internal revision, index, and sync vocabulary
 - application code owns domain ontology terms and entity mapping logic
 
 The API should not require developers to define field kinds in a separate DSL
-if the same information already exists in their TypeScript types and RDF codec.
+if the same information already exists in their TypeScript types and RDF
+projection logic.
 
 ## Pod configuration contract
 
@@ -127,46 +134,60 @@ operations in the common case.
 ## Example
 
 ```ts
-import { createEngine, defineEntity, defineNamespace } from "lofipod"
+import { createEngine, defineEntity, defineVocabulary, rdf } from "lofipod"
 
-const ns = defineNamespace({
-  ex: "https://example.com/ns#",
-  schema: "http://schema.org/",
+const ex = defineVocabulary({
+  base: "https://example.com/",
+  terms: {
+    Event: "ns#Event",
+    title: "ns#title",
+    time: "ns#time",
+    year: "ns#year",
+  },
+  uri({ base, entityName, id }) {
+    return `${base}id/${entityName}/${id}`
+  },
 })
 
-type Note = {
+type Event = {
   id: string
   title: string
-  body: string
-  tags: string[]
-  metadata?: { pinned?: boolean }
+  time: {
+    year: number
+  }
 }
 
-const noteEntity = defineEntity<Note>({
-  name: "note",
+const eventEntity = defineEntity<Event>({
+  name: "event",
   pod: {
-    basePath: "notes/",
+    basePath: "events/",
   },
-  rdf: {
-    class: ns.ex("Note"),
-    toRdf(note, ctx) {
-      return [
-        ctx.type(ns.ex("Note")),
-        ctx.literal(ns.schema("headline"), note.title),
-        ctx.literal(ns.schema("text"), note.body),
-        ...note.tags.map((tag) => ctx.literal(ns.ex("tag"), tag)),
-        ...(note.metadata ? [ctx.json(ns.ex("metadata"), note.metadata)] : []),
-      ]
-    },
-    fromRdf(ctx) {
-      return {
-        id: ctx.id(),
-        title: ctx.requiredString(ns.schema("headline")),
-        body: ctx.requiredString(ns.schema("text")),
-        tags: ctx.strings(ns.ex("tag")),
-        metadata: ctx.optionalJson(ns.ex("metadata")),
-      }
-    },
+  rdfType: ex.Event,
+  id: (event) => event.id,
+
+  toRdf(event, { uri, child }) {
+    const subject = uri(event)
+    const time = child("time")
+
+    return [
+      [subject, rdf.type, ex.Event],
+      [subject, ex.title, event.title],
+      [subject, ex.time, time],
+      [time, ex.year, event.time.year],
+    ]
+  },
+
+  project(graph, { uri, child }) {
+    const subject = uri()
+    const time = child("time")
+
+    return {
+      id: idFromUri(subject),
+      title: objectOf(graph, subject, ex.title),
+      time: {
+        year: numberObjectOf(graph, time, ex.year),
+      },
+    }
   },
 })
 
@@ -174,20 +195,21 @@ const engine = await createEngine({
   pod: {
     root: "/apps/my-journal/",
   },
-  entities: [noteEntity],
+  entities: [eventEntity],
   storage: indexedDbStorage(),
   sync: solidSync({ podUrl, auth }),
 })
 
-await engine.save("note", {
+await engine.save("event", {
   id: "n1",
   title: "Hello",
-  body: "World",
-  tags: ["draft"],
+  time: {
+    year: 2024,
+  },
 })
 
-const note = await engine.get("note", "n1")
-const notes = await engine.list("note", { limit: 20 })
+const event = await engine.get("event", "n1")
+const events = await engine.list("event", { limit: 20 })
 
 const connection = engine.connection.state()
 const syncState = engine.sync.state()
@@ -206,7 +228,7 @@ Current defaults:
 
 Still open:
 
-- the exact shape of the RDF context helpers
+- the exact helper set exposed to `project(...)`
 - the exact list and cursor API beyond basic newest-first listing
 - whether any observation API belongs in the first public surface
 - how conflict and branch state should eventually appear in the public API
