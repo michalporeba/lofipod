@@ -1,5 +1,6 @@
 import { createMemoryStorage } from "./storage/memory.js";
 import {
+  applyTripleDelta,
   createStoredRecord,
   createToRdfHelpers,
   diffTriples,
@@ -206,13 +207,71 @@ export function createEngine(config: EngineConfig): Engine {
 
           if (!change.logProjected) {
             await config.sync.adapter.appendLogEntry(
-              createLogAppendRequest(change, requireLogBasePath()),
+              createLogAppendRequest(change, record, requireLogBasePath()),
             );
 
             await storage.transact((transaction) => {
               transaction.markChangeLogProjected(change.changeId);
             });
           }
+        }
+
+        const remoteEntries = await config.sync.adapter.listLogEntries?.();
+
+        if (!remoteEntries) {
+          return;
+        }
+
+        const knownChangeIds = new Set(
+          (await storage.listChanges()).map((change) => change.changeId),
+        );
+
+        for (const entry of remoteEntries) {
+          if (knownChangeIds.has(entry.changeId)) {
+            continue;
+          }
+
+          const definition = requireEntity(entry.entityName);
+          const existingRecord = await storage.readEntity(
+            entry.entityName,
+            entry.entityId,
+          );
+          const nextGraph = applyTripleDelta(existingRecord?.graph ?? [], {
+            assertions: entry.assertions,
+            retractions: entry.retractions,
+          });
+
+          await storage.transact((transaction) => {
+            const updatedOrder = transaction.nextUpdatedOrder();
+            const nextProjection = definition.project(nextGraph, {
+              uri() {
+                return existingRecord?.rootUri ?? entry.rootUri;
+              },
+              child(path) {
+                return `${existingRecord?.rootUri ?? entry.rootUri}#${path}`;
+              },
+            });
+
+            transaction.writeEntity(entry.entityName, entry.entityId, {
+              rootUri: existingRecord?.rootUri ?? entry.rootUri,
+              graph: nextGraph,
+              projection: nextProjection,
+              lastChangeId: entry.changeId,
+              updatedOrder,
+            });
+            transaction.appendChange({
+              entityName: entry.entityName,
+              entityId: entry.entityId,
+              changeId: entry.changeId,
+              parentChangeId: entry.parentChangeId,
+              assertions: entry.assertions,
+              retractions: entry.retractions,
+              entityProjected: true,
+              logProjected: true,
+            });
+          });
+
+          knownChangeIds.add(entry.changeId);
         }
       },
     },

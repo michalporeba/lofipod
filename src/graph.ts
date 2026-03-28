@@ -87,3 +87,23 @@ export function diffTriples(previous: Triple[], next: Triple[]) {
     retractions: previous.filter((triple) => !nextKeys.has(tripleKey(triple))),
   };
 }
+
+export function applyTripleDelta(
+  current: Triple[],
+  input: {
+    assertions: Triple[];
+    retractions: Triple[];
+  },
+): Triple[] {
+  const next = new Map(current.map((triple) => [tripleKey(triple), triple]));
+
+  for (const triple of input.retractions) {
+    next.delete(tripleKey(triple));
+  }
+
+  for (const triple of input.assertions) {
+    next.set(tripleKey(triple), triple);
+  }
+
+  return Array.from(next.values());
+}

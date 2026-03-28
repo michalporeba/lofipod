@@ -97,6 +97,7 @@ export function normalizeLogBasePath(logBasePath: string): string {
 
 export function createLogAppendRequest(
   change: LocalChange,
+  record: StoredEntityRecord<unknown>,
   logBasePath: string,
 ): PodLogAppendRequest {
   return {
@@ -105,6 +106,7 @@ export function createLogAppendRequest(
     changeId: change.changeId,
     parentChangeId: change.parentChangeId,
     path: `${normalizeLogBasePath(logBasePath)}${change.entityName}/${change.changeId}.ttl`,
+    rootUri: record.rootUri,
     assertions: change.assertions,
     retractions: change.retractions,
   };

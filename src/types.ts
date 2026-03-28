@@ -80,6 +80,7 @@ export type PodLogAppendRequest = {
   changeId: string;
   parentChangeId: string | null;
   path: string;
+  rootUri: string;
   assertions: Triple[];
   retractions: Triple[];
 };
@@ -87,6 +88,7 @@ export type PodLogAppendRequest = {
 export type PodSyncAdapter = {
   applyEntityPatch(request: PodEntityPatchRequest): Promise<void>;
   appendLogEntry(request: PodLogAppendRequest): Promise<void>;
+  listLogEntries?(): Promise<PodLogAppendRequest[]>;
 };
 
 export type LocalStorageAdapter = {

@@ -1215,6 +1215,50 @@ describe("mocked entity sync", () => {
   const pod = {
     logBasePath: "apps/my-journal/log/",
   };
+  const createSharedRemoteAdapter = () => {
+    const logEntries: Array<{
+      entityName: string;
+      entityId: string;
+      changeId: string;
+      parentChangeId: string | null;
+      path: string;
+      rootUri: string;
+      assertions: Triple[];
+      retractions: Triple[];
+    }> = [];
+
+    return {
+      adapter: {
+        async applyEntityPatch() {
+          // no-op for mocked canonical file writes in pull tests
+        },
+        async appendLogEntry(request: {
+          entityName: string;
+          entityId: string;
+          changeId: string;
+          parentChangeId: string | null;
+          path: string;
+          rootUri: string;
+          assertions: Triple[];
+          retractions: Triple[];
+        }) {
+          logEntries.push({
+            ...request,
+            assertions: [...request.assertions],
+            retractions: [...request.retractions],
+          });
+        },
+        async listLogEntries() {
+          return logEntries.map((entry) => ({
+            ...entry,
+            assertions: [...entry.assertions],
+            retractions: [...entry.retractions],
+          }));
+        },
+      },
+      logEntries,
+    };
+  };
 
   it("projects local changes into canonical entity file patches", async () => {
     const { entity } = createEventFixture();
@@ -1449,5 +1493,119 @@ describe("mocked entity sync", () => {
       configured: true,
       pendingChanges: 0,
     });
+  });
+
+  it("replays remote log entries into local graph state on another engine", async () => {
+    const { entity } = createEventFixture();
+    const remote = createSharedRemoteAdapter();
+    const firstEngine = createEngine({
+      entities: [entity],
+      pod,
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+    const secondStorage = createMemoryStorage();
+    const secondEngine = createEngine({
+      entities: [entity],
+      pod,
+      storage: secondStorage,
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+
+    await firstEngine.save("event", {
+      id: "ev-123",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+    await firstEngine.sync.now();
+
+    await expect(secondEngine.get("event", "ev-123")).resolves.toBeNull();
+
+    await secondEngine.sync.now();
+
+    await expect(secondEngine.get("event", "ev-123")).resolves.toEqual({
+      id: "ev-123",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+    await expect(
+      secondStorage.listChanges("event", "ev-123"),
+    ).resolves.toHaveLength(1);
+    await expect(secondEngine.sync.state()).resolves.toEqual({
+      status: "idle",
+      configured: true,
+      pendingChanges: 0,
+    });
+  });
+
+  it("applies later remote updates and tolerates duplicate remote log entries", async () => {
+    const { entity } = createEventFixture();
+    const remote = createSharedRemoteAdapter();
+    const firstEngine = createEngine({
+      entities: [entity],
+      pod,
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+    const secondStorage = createMemoryStorage();
+    const secondEngine = createEngine({
+      entities: [entity],
+      pod,
+      storage: secondStorage,
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+
+    await firstEngine.save("event", {
+      id: "ev-123",
+      title: "First",
+      time: {
+        year: 2024,
+      },
+    });
+    await firstEngine.sync.now();
+    await secondEngine.sync.now();
+
+    await firstEngine.save("event", {
+      id: "ev-123",
+      title: "Updated",
+      time: {
+        year: 2025,
+      },
+    });
+    await firstEngine.sync.now();
+    await secondEngine.sync.now();
+    await secondEngine.sync.now();
+
+    await expect(secondEngine.get("event", "ev-123")).resolves.toEqual({
+      id: "ev-123",
+      title: "Updated",
+      time: {
+        year: 2025,
+      },
+    });
+    await expect(secondEngine.list("event")).resolves.toEqual([
+      {
+        id: "ev-123",
+        title: "Updated",
+        time: {
+          year: 2025,
+        },
+      },
+    ]);
+    await expect(
+      secondStorage.listChanges("event", "ev-123"),
+    ).resolves.toHaveLength(2);
   });
 });
