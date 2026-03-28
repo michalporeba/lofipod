@@ -113,6 +113,7 @@ async function readDraftState(database: IDBDatabase): Promise<DraftState> {
 
 async function writeDraftState(
   database: IDBDatabase,
+  original: DraftState,
   draft: DraftState,
 ): Promise<void> {
   const transaction = database.transaction(
@@ -123,21 +124,32 @@ async function writeDraftState(
   const changeStore = transaction.objectStore(CHANGE_STORE);
   const metaStore = transaction.objectStore(META_STORE);
 
-  entityStore.clear();
-  changeStore.clear();
+  for (const [key, record] of draft.records.entries()) {
+    const previous = original.records.get(key);
 
-  for (const record of draft.records.values()) {
-    entityStore.put(record);
+    if (JSON.stringify(previous) !== JSON.stringify(record)) {
+      entityStore.put(record);
+    }
   }
+
+  const originalChanges = new Map(
+    original.changes.map((change) => [change.key, change]),
+  );
 
   for (const change of draft.changes) {
-    changeStore.put(change);
+    const previous = originalChanges.get(change.key);
+
+    if (JSON.stringify(previous) !== JSON.stringify(change)) {
+      changeStore.put(change);
+    }
   }
 
-  metaStore.put({
-    key: UPDATED_ORDER_KEY,
-    value: draft.updatedOrder,
-  } satisfies MetaRow);
+  if (draft.updatedOrder !== original.updatedOrder) {
+    metaStore.put({
+      key: UPDATED_ORDER_KEY,
+      value: draft.updatedOrder,
+    } satisfies MetaRow);
+  }
 
   await promisifyTransaction(transaction);
 }
@@ -190,7 +202,12 @@ export function createIndexedDbStorage(
       work: (transaction: LocalStorageTransaction) => Promise<T> | T,
     ): Promise<T> {
       const database = await databasePromise;
-      const draft = await readDraftState(database);
+      const original = await readDraftState(database);
+      const draft: DraftState = {
+        records: new Map(original.records),
+        changes: [...original.changes],
+        updatedOrder: original.updatedOrder,
+      };
 
       const scopedTransaction: LocalStorageTransaction = {
         readEntity(entityName, entityId) {
@@ -237,7 +254,7 @@ export function createIndexedDbStorage(
       };
 
       const result = await work(scopedTransaction);
-      await writeDraftState(database, draft);
+      await writeDraftState(database, original, draft);
       return result;
     },
   };
