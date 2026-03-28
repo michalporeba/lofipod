@@ -74,8 +74,48 @@ export function defineEntity<T>(
   return definition;
 }
 
+export type LocalChange = {
+  entityName: string;
+  entityId: string;
+  changeId: string;
+  parentChangeId: string | null;
+  assertions: Triple[];
+  retractions: Triple[];
+};
+
+export type StoredEntityRecord<T = unknown> = {
+  graph: Triple[];
+  projection: T;
+  lastChangeId: string | null;
+};
+
+export type LocalStorageTransaction = {
+  readEntity(
+    entityName: string,
+    entityId: string,
+  ): StoredEntityRecord<unknown> | null;
+  writeEntity(
+    entityName: string,
+    entityId: string,
+    record: StoredEntityRecord<unknown>,
+  ): void;
+  appendChange(change: LocalChange): void;
+};
+
+export type LocalStorageAdapter = {
+  readEntity(
+    entityName: string,
+    entityId: string,
+  ): Promise<StoredEntityRecord<unknown> | null>;
+  listChanges(entityName?: string, entityId?: string): Promise<LocalChange[]>;
+  transact<T>(
+    work: (transaction: LocalStorageTransaction) => Promise<T> | T,
+  ): Promise<T>;
+};
+
 export type EngineConfig = {
   entities: EntityDefinition<unknown>[];
+  storage?: LocalStorageAdapter;
 };
 
 export type Engine = {
@@ -91,11 +131,109 @@ function createChildUri(rootUri: string, path: string): string {
   return `${rootUri}#${path}`;
 }
 
+function createChangeId(entityName: string, id: string): string {
+  return `${entityName}:${id}:${Date.now()}:${Math.random()
+    .toString(36)
+    .slice(2)}`;
+}
+
+function tripleKey([subject, predicate, object]: Triple): string {
+  return JSON.stringify([subject, predicate, object]);
+}
+
+function diffTriples(previous: Triple[], next: Triple[]) {
+  const previousKeys = new Set(previous.map(tripleKey));
+  const nextKeys = new Set(next.map(tripleKey));
+
+  return {
+    assertions: next.filter((triple) => !previousKeys.has(tripleKey(triple))),
+    retractions: previous.filter((triple) => !nextKeys.has(tripleKey(triple))),
+  };
+}
+
+export function createMemoryStorage(): LocalStorageAdapter {
+  const state = {
+    records: new Map<string, StoredEntityRecord<unknown>>(),
+    changes: [] as LocalChange[],
+  };
+
+  const cloneRecord = (
+    record: StoredEntityRecord<unknown>,
+  ): StoredEntityRecord<unknown> => ({
+    graph: [...record.graph],
+    projection: record.projection,
+    lastChangeId: record.lastChangeId,
+  });
+
+  return {
+    async readEntity(entityName, entityId) {
+      const record = state.records.get(`${entityName}:${entityId}`);
+
+      return record ? cloneRecord(record) : null;
+    },
+
+    async listChanges(entityName, entityId) {
+      return state.changes
+        .filter(
+          (change) =>
+            (entityName ? change.entityName === entityName : true) &&
+            (entityId ? change.entityId === entityId : true),
+        )
+        .map((change) => ({
+          ...change,
+          assertions: [...change.assertions],
+          retractions: [...change.retractions],
+        }));
+    },
+
+    async transact<T>(
+      work: (transaction: LocalStorageTransaction) => Promise<T> | T,
+    ): Promise<T> {
+      const draft = {
+        records: new Map(
+          Array.from(state.records.entries(), ([key, value]) => [
+            key,
+            cloneRecord(value),
+          ]),
+        ),
+        changes: state.changes.map((change) => ({
+          ...change,
+          assertions: [...change.assertions],
+          retractions: [...change.retractions],
+        })),
+      };
+
+      const transaction: LocalStorageTransaction = {
+        readEntity(entityName, entityId) {
+          return draft.records.get(`${entityName}:${entityId}`) ?? null;
+        },
+        writeEntity(entityName, entityId, record) {
+          draft.records.set(`${entityName}:${entityId}`, cloneRecord(record));
+        },
+        appendChange(change) {
+          draft.changes.push({
+            ...change,
+            assertions: [...change.assertions],
+            retractions: [...change.retractions],
+          });
+        },
+      };
+
+      const result = await work(transaction);
+
+      state.records = draft.records;
+      state.changes = draft.changes;
+
+      return result;
+    },
+  };
+}
+
 export function createEngine(config: EngineConfig): Engine {
   const entities = new Map(
     config.entities.map((entity) => [entity.name, entity]),
   );
-  const graphs = new Map<string, Triple[]>();
+  const storage = config.storage ?? createMemoryStorage();
 
   const requireEntity = (entityName: string): EntityDefinition<unknown> => {
     const entity = entities.get(entityName);
@@ -112,6 +250,7 @@ export function createEngine(config: EngineConfig): Engine {
       const definition = requireEntity(entityName) as EntityDefinition<T>;
       const id = definition.id(entity);
       const rootUri = createRootUri(definition.name, id);
+      const previousRecord = await storage.readEntity(definition.name, id);
       const graph = definition.toRdf(entity, {
         uri() {
           return rootUri;
@@ -120,23 +259,7 @@ export function createEngine(config: EngineConfig): Engine {
           return createChildUri(rootUri, path);
         },
       });
-
-      graphs.set(`${definition.name}:${id}`, graph);
-
-      return entity;
-    },
-
-    async get<T>(entityName: string, id: string): Promise<T | null> {
-      const definition = requireEntity(entityName) as EntityDefinition<T>;
-      const graph = graphs.get(`${definition.name}:${id}`);
-
-      if (!graph) {
-        return null;
-      }
-
-      const rootUri = createRootUri(definition.name, id);
-
-      return definition.project(graph, {
+      const projection = definition.project(graph, {
         uri() {
           return rootUri;
         },
@@ -144,6 +267,40 @@ export function createEngine(config: EngineConfig): Engine {
           return createChildUri(rootUri, path);
         },
       });
+      const { assertions, retractions } = diffTriples(
+        previousRecord?.graph ?? [],
+        graph,
+      );
+      const changeId = createChangeId(definition.name, id);
+
+      await storage.transact((transaction) => {
+        transaction.writeEntity(definition.name, id, {
+          graph,
+          projection,
+          lastChangeId: changeId,
+        });
+        transaction.appendChange({
+          entityName: definition.name,
+          entityId: id,
+          changeId,
+          parentChangeId: previousRecord?.lastChangeId ?? null,
+          assertions,
+          retractions,
+        });
+      });
+
+      return entity;
+    },
+
+    async get<T>(entityName: string, id: string): Promise<T | null> {
+      const definition = requireEntity(entityName) as EntityDefinition<T>;
+      const record = await storage.readEntity(definition.name, id);
+
+      if (!record) {
+        return null;
+      }
+
+      return record.projection as T;
     },
   };
 }
