@@ -549,3 +549,229 @@ describe("local persistence", () => {
     ).resolves.toEqual([]);
   });
 });
+
+describe("graph deltas", () => {
+  const createEventFixture = (): {
+    entity: EntityDefinition<EventWithDetails>;
+  } => {
+    const ex = defineVocabulary({
+      base: "https://example.com/",
+      terms: {
+        Event: "ns#Event",
+        title: "ns#title",
+        description: "ns#description",
+        time: "ns#time",
+        year: "ns#year",
+      },
+      uri({ base, entityName, id }) {
+        return `${base}id/${entityName}/${id}`;
+      },
+    });
+
+    const entity = defineEntity<EventWithDetails>({
+      name: "event",
+      pod: {
+        basePath: "events/",
+      },
+      rdfType: ex.Event,
+      id: (event) => event.id,
+      toRdf(event, { uri, child }) {
+        const subject = uri(event);
+        const time = child("time");
+
+        return [
+          [subject, rdf.type, ex.Event],
+          [subject, ex.title, event.title],
+          ...(event.description
+            ? ([
+                [subject, ex.description, event.description],
+              ] satisfies Triple[])
+            : []),
+          [subject, ex.time, time],
+          [time, ex.year, event.time.year],
+        ];
+      },
+      project(graph, { uri, child }) {
+        const subject = uri();
+        const time = child("time");
+
+        const objectOf = (target: string, predicate: string) =>
+          graph.find(
+            ([subjectTerm, predicateTerm]) =>
+              subjectTerm === target && predicateTerm === predicate,
+          )?.[2];
+
+        return {
+          id: subject.split("/").at(-1) ?? "",
+          title: String(objectOf(subject, ex.title) ?? ""),
+          description:
+            typeof objectOf(subject, ex.description) === "string"
+              ? String(objectOf(subject, ex.description))
+              : undefined,
+          time: {
+            year: Number(objectOf(time, ex.year) ?? 0),
+          },
+        };
+      },
+    });
+
+    return { entity };
+  };
+
+  it("records one retraction and one assertion when a literal value changes", async () => {
+    const { entity } = createEventFixture();
+    const storage = createMemoryStorage();
+    const engine = createEngine({
+      entities: [entity],
+      storage,
+    });
+
+    await engine.save("event", {
+      id: "ev-123",
+      title: "First",
+      time: {
+        year: 2024,
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-123",
+      title: "Updated",
+      time: {
+        year: 2024,
+      },
+    });
+
+    const changes = await storage.listChanges("event", "ev-123");
+    const latest = changes.at(-1);
+
+    expect(latest?.assertions).toEqual([
+      [
+        "lofipod://entity/event/ev-123",
+        "https://example.com/ns#title",
+        "Updated",
+      ],
+    ]);
+    expect(latest?.retractions).toEqual([
+      [
+        "lofipod://entity/event/ev-123",
+        "https://example.com/ns#title",
+        "First",
+      ],
+    ]);
+  });
+
+  it("records embedded structure updates using the stable child node", async () => {
+    const { entity } = createEventFixture();
+    const storage = createMemoryStorage();
+    const engine = createEngine({
+      entities: [entity],
+      storage,
+    });
+
+    await engine.save("event", {
+      id: "ev-123",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-123",
+      title: "Hello",
+      time: {
+        year: 2025,
+      },
+    });
+
+    const changes = await storage.listChanges("event", "ev-123");
+    const latest = changes.at(-1);
+
+    expect(latest?.assertions).toEqual([
+      [
+        "lofipod://entity/event/ev-123#time",
+        "https://example.com/ns#year",
+        2025,
+      ],
+    ]);
+    expect(latest?.retractions).toEqual([
+      [
+        "lofipod://entity/event/ev-123#time",
+        "https://example.com/ns#year",
+        2024,
+      ],
+    ]);
+  });
+
+  it("retracts deleted properties per triple", async () => {
+    const { entity } = createEventFixture();
+    const storage = createMemoryStorage();
+    const engine = createEngine({
+      entities: [entity],
+      storage,
+    });
+
+    await engine.save("event", {
+      id: "ev-123",
+      title: "Hello",
+      description: "Soon",
+      time: {
+        year: 2024,
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-123",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+
+    const changes = await storage.listChanges("event", "ev-123");
+    const latest = changes.at(-1);
+
+    expect(latest?.assertions).toEqual([]);
+    expect(latest?.retractions).toEqual([
+      [
+        "lofipod://entity/event/ev-123",
+        "https://example.com/ns#description",
+        "Soon",
+      ],
+    ]);
+  });
+
+  it("does not append a new change when the canonical graph is unchanged", async () => {
+    const { entity } = createEventFixture();
+    const storage = createMemoryStorage();
+    const engine = createEngine({
+      entities: [entity],
+      storage,
+    });
+
+    const event: EventWithDetails = {
+      id: "ev-123",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    };
+
+    await engine.save("event", event);
+    await engine.save("event", event);
+
+    await expect(storage.listChanges("event", "ev-123")).resolves.toHaveLength(
+      1,
+    );
+  });
+});
+
+type EventWithDetails = {
+  id: string;
+  title: string;
+  description?: string;
+  time: {
+    year: number;
+  };
+};

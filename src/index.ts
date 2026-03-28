@@ -271,6 +271,11 @@ export function createEngine(config: EngineConfig): Engine {
         previousRecord?.graph ?? [],
         graph,
       );
+
+      if (assertions.length === 0 && retractions.length === 0) {
+        return entity;
+      }
+
       const changeId = createChangeId(definition.name, id);
 
       await storage.transact((transaction) => {
