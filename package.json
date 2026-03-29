@@ -1,8 +1,10 @@
 {
   "name": "lofipod",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Local-first library for building privacy-first applications with RDF data and SOLID Pod sync.",
   "license": "MIT",
+  "author": "Michał Poręba <michalporeba@gmail.com>",
+  "repository": "github:michalporeba/lofipod",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
