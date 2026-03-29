@@ -3,16 +3,19 @@ import type {
   LocalStorageAdapter,
   LocalStorageTransaction,
   StoredEntityRecord,
+  SyncMetadata,
 } from "../types.js";
 import {
   cloneLocalChange,
   cloneStoredRecord,
+  cloneSyncMetadata,
   createListedEntityRecord,
 } from "./shared.js";
 
 type MemoryStorageState = {
   records: Map<string, StoredEntityRecord<unknown>>;
   changes: LocalChange[];
+  syncMetadata: SyncMetadata;
   updatedOrder: number;
 };
 
@@ -25,6 +28,7 @@ function cloneState(state: MemoryStorageState): MemoryStorageState {
       ]),
     ),
     changes: state.changes.map(cloneLocalChange),
+    syncMetadata: cloneSyncMetadata(state.syncMetadata),
     updatedOrder: state.updatedOrder,
   };
 }
@@ -33,6 +37,9 @@ export function createMemoryStorage(): LocalStorageAdapter {
   const state: MemoryStorageState = {
     records: new Map<string, StoredEntityRecord<unknown>>(),
     changes: [],
+    syncMetadata: {
+      observedRemoteChangeIds: [],
+    },
     updatedOrder: 0,
   };
 
@@ -62,6 +69,10 @@ export function createMemoryStorage(): LocalStorageAdapter {
             (entityId ? change.entityId === entityId : true),
         )
         .map(cloneLocalChange);
+    },
+
+    async readSyncMetadata() {
+      return cloneSyncMetadata(state.syncMetadata);
     },
 
     async transact<T>(
@@ -102,6 +113,12 @@ export function createMemoryStorage(): LocalStorageAdapter {
               : change,
           );
         },
+        readSyncMetadata() {
+          return cloneSyncMetadata(draft.syncMetadata);
+        },
+        writeSyncMetadata(metadata) {
+          draft.syncMetadata = cloneSyncMetadata(metadata);
+        },
         nextUpdatedOrder() {
           draft.updatedOrder += 1;
           return draft.updatedOrder;
@@ -112,6 +129,7 @@ export function createMemoryStorage(): LocalStorageAdapter {
 
       state.records = draft.records;
       state.changes = draft.changes;
+      state.syncMetadata = draft.syncMetadata;
       state.updatedOrder = draft.updatedOrder;
 
       return result;

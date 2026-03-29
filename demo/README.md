@@ -38,6 +38,7 @@ The demo can also project its local-first data to a Solid Pod.
 
 Use:
 
+- `sync bootstrap --pod-base-url <url>`
 - `sync status`
 - `sync now --pod-base-url <url>`
 

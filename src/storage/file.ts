@@ -6,10 +6,12 @@ import type {
   LocalStorageAdapter,
   LocalStorageTransaction,
   StoredEntityRecord,
+  SyncMetadata,
 } from "../types.js";
 import {
   cloneLocalChange,
   cloneStoredRecord,
+  cloneSyncMetadata,
   createListedEntityRecord,
 } from "./shared.js";
 
@@ -20,12 +22,16 @@ type FileStorageOptions = {
 type FileStorageState = {
   records: Record<string, StoredEntityRecord<unknown>>;
   changes: LocalChange[];
+  syncMetadata: SyncMetadata;
   updatedOrder: number;
 };
 
 const EMPTY_STATE: FileStorageState = {
   records: {},
   changes: [],
+  syncMetadata: {
+    observedRemoteChangeIds: [],
+  },
   updatedOrder: 0,
 };
 
@@ -38,6 +44,7 @@ function cloneState(state: FileStorageState): FileStorageState {
       ]),
     ),
     changes: state.changes.map(cloneLocalChange),
+    syncMetadata: cloneSyncMetadata(state.syncMetadata),
     updatedOrder: state.updatedOrder,
   };
 }
@@ -61,6 +68,12 @@ async function readState(filePath: string): Promise<FileStorageState> {
       changes: (parsed.changes ?? []).map((change) =>
         cloneLocalChange(change as LocalChange),
       ),
+      syncMetadata: cloneSyncMetadata({
+        observedRemoteChangeIds:
+          (parsed.syncMetadata?.observedRemoteChangeIds as
+            | string[]
+            | undefined) ?? [],
+      }),
       updatedOrder: Number(parsed.updatedOrder ?? 0),
     };
   } catch (error) {
@@ -130,6 +143,11 @@ export function createFileStorage(
         .map(cloneLocalChange);
     },
 
+    async readSyncMetadata() {
+      const state = await readState(filePath);
+      return cloneSyncMetadata(state.syncMetadata);
+    },
+
     async transact<T>(
       work: (transaction: LocalStorageTransaction) => Promise<T> | T,
     ): Promise<T> {
@@ -167,6 +185,12 @@ export function createFileStorage(
                 }
               : change,
           );
+        },
+        readSyncMetadata() {
+          return cloneSyncMetadata(draft.syncMetadata);
+        },
+        writeSyncMetadata(metadata) {
+          draft.syncMetadata = cloneSyncMetadata(metadata);
         },
         nextUpdatedOrder() {
           draft.updatedOrder += 1;

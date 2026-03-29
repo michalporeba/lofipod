@@ -2,6 +2,10 @@ export type Term = string | number | boolean;
 
 export type Triple = [subject: Term, predicate: Term, object: Term];
 
+export type SyncMetadata = {
+  observedRemoteChangeIds: string[];
+};
+
 export type ToRdfHelpers<T> = {
   uri(entity: T): string;
   child(path: string): string;
@@ -61,6 +65,8 @@ export type LocalStorageTransaction = {
   appendChange(change: LocalChange): void;
   markChangeEntityProjected(changeId: string): void;
   markChangeLogProjected(changeId: string): void;
+  readSyncMetadata(): SyncMetadata;
+  writeSyncMetadata(metadata: SyncMetadata): void;
   nextUpdatedOrder(): number;
 };
 
@@ -91,6 +97,18 @@ export type PodSyncAdapter = {
   applyEntityPatch(request: PodEntityPatchRequest): Promise<void>;
   appendLogEntry(request: PodLogAppendRequest): Promise<void>;
   listLogEntries?(): Promise<PodLogAppendRequest[]>;
+  listCanonicalEntities?(input: {
+    entityName: string;
+    basePath: string;
+    rdfType: string;
+  }): Promise<
+    {
+      entityId: string;
+      path: string;
+      rootUri: string;
+      graph: Triple[];
+    }[]
+  >;
 };
 
 export type LocalStorageAdapter = {
@@ -100,6 +118,7 @@ export type LocalStorageAdapter = {
   ): Promise<StoredEntityRecord<unknown> | null>;
   listEntities(entityName: string): Promise<ListedEntityRecord[]>;
   listChanges(entityName?: string, entityId?: string): Promise<LocalChange[]>;
+  readSyncMetadata(): Promise<SyncMetadata>;
   transact<T>(
     work: (transaction: LocalStorageTransaction) => Promise<T> | T,
   ): Promise<T>;
@@ -122,6 +141,18 @@ export type SyncState = {
   pendingChanges: number;
 };
 
+export type BootstrapCollision = {
+  entityName: string;
+  entityId: string;
+  path: string;
+};
+
+export type BootstrapResult = {
+  imported: number;
+  skipped: number;
+  collisions: BootstrapCollision[];
+};
+
 export type Engine = {
   save<T>(entityName: string, entity: T): Promise<T>;
   get<T>(entityName: string, id: string): Promise<T | null>;
@@ -129,5 +160,6 @@ export type Engine = {
   sync: {
     state(): Promise<SyncState>;
     now(): Promise<void>;
+    bootstrap(): Promise<BootstrapResult>;
   };
 };

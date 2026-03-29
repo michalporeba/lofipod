@@ -193,4 +193,16 @@ describe("demo CLI", () => {
       stderr: [],
     });
   });
+
+  it("requires a pod base URL for bootstrap", async () => {
+    const dataDir = await createDataDir();
+
+    await expect(
+      runWithCapturedOutput(["sync", "bootstrap", "--data-dir", dataDir]),
+    ).resolves.toMatchObject({
+      exitCode: 1,
+      stdout: [],
+      stderr: ["Missing required option: --pod-base-url"],
+    });
+  });
 });

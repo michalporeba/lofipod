@@ -10,6 +10,8 @@ type SolidPodAdapterOptions = {
   fetch?: typeof fetch;
 };
 
+const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
 }
@@ -53,6 +55,108 @@ function serializeTriples(
         `${termToTurtle(subject)} ${termToTurtle(predicate)} ${termToTurtle(object)} .`,
     )
     .join("\n");
+}
+
+function parseQuotedLiteral(value: string): string {
+  return JSON.parse(value);
+}
+
+function parseTerm(term: string): string | number | boolean {
+  const trimmed = term.trim();
+
+  if (trimmed.startsWith("<") && trimmed.endsWith(">")) {
+    return trimmed.slice(1, -1);
+  }
+
+  if (trimmed.startsWith('"')) {
+    return parseQuotedLiteral(trimmed);
+  }
+
+  if (trimmed === "true" || trimmed === "false") {
+    return trimmed === "true";
+  }
+
+  const numeric = Number(trimmed);
+
+  if (!Number.isNaN(numeric) && trimmed !== "") {
+    return numeric;
+  }
+
+  throw new Error(`Unsupported Turtle term: ${term}`);
+}
+
+function parseSimpleTurtleTriples(body: string) {
+  const triples: [
+    string | number | boolean,
+    string | number | boolean,
+    string | number | boolean,
+  ][] = [];
+
+  for (const line of body.split("\n")) {
+    const trimmed = line.trim();
+
+    if (
+      trimmed.length === 0 ||
+      trimmed.startsWith("@prefix") ||
+      trimmed.startsWith("#")
+    ) {
+      continue;
+    }
+
+    const match = trimmed.match(
+      /^(<[^>]+>|"[^"\\]*(?:\\.[^"\\]*)*"|true|false|-?\d+(?:\.\d+)?)\s+(<[^>]+>)\s+(<[^>]+>|"[^"\\]*(?:\\.[^"\\]*)*"|true|false|-?\d+(?:\.\d+)?)\s*\.\s*$/,
+    );
+
+    if (!match) {
+      continue;
+    }
+
+    triples.push([
+      parseTerm(match[1]!),
+      parseTerm(match[2]!),
+      parseTerm(match[3]!),
+    ]);
+  }
+
+  return triples;
+}
+
+function parseContainedResourcePaths(
+  containerBody: string,
+  containerUrl: string,
+) {
+  const paths = new Set<string>();
+  const lines = containerBody.split("\n");
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]!;
+
+    if (
+      !line.includes("ldp:contains") &&
+      !line.includes("<http://www.w3.org/ns/ldp#contains>")
+    ) {
+      continue;
+    }
+
+    let statement = line
+      .replace(/^.*?<http:\/\/www\.w3\.org\/ns\/ldp#contains>\s*/, "")
+      .replace(/^.*?ldp:contains\s*/, "")
+      .trim();
+
+    while (!statement.trim().endsWith(".") && index + 1 < lines.length) {
+      index += 1;
+      statement = `${statement} ${lines[index]!.trim()}`;
+    }
+
+    for (const iriMatch of statement.matchAll(/<([^>]+)>/g)) {
+      const resourceUrl = new URL(iriMatch[1]!, containerUrl);
+      if (!resourceUrl.pathname.endsWith("/")) {
+        paths.add(resourceUrl.pathname.replace(/^\/+/, ""));
+      }
+    }
+  }
+
+  return Array.from(paths);
 }
 
 function textResponse(response: Response): Promise<string> {
@@ -213,6 +317,73 @@ export function createSolidPodAdapter(
         response,
         `Append remote log entry for ${request.entityName}/${request.changeId}`,
       );
+    },
+
+    async listCanonicalEntities(input) {
+      const containerUrl = joinUrl(podBaseUrl, input.basePath);
+      const containerResponse = await fetchImpl(containerUrl, {
+        headers: {
+          ...authHeaders,
+          Accept: "text/turtle",
+        },
+      });
+
+      if (containerResponse.status === 404) {
+        return [];
+      }
+
+      await ensureSuccess(
+        containerResponse,
+        `List canonical entities for ${input.entityName}`,
+      );
+
+      const containerBody = await containerResponse.text();
+      const resourcePaths = parseContainedResourcePaths(
+        containerBody,
+        containerUrl,
+      )
+        .filter((path) => path.startsWith(input.basePath))
+        .filter((path) => path.endsWith(".ttl"));
+      const results: {
+        entityId: string;
+        path: string;
+        rootUri: string;
+        graph: PodEntityPatchRequest["assertions"];
+      }[] = [];
+
+      for (const path of resourcePaths) {
+        const response = await fetchImpl(joinUrl(podBaseUrl, path), {
+          headers: {
+            ...authHeaders,
+            Accept: "text/turtle",
+          },
+        });
+
+        await ensureSuccess(response, `Read canonical entity ${path}`);
+        const body = await response.text();
+        const graph = parseSimpleTurtleTriples(body);
+        const rootUri = graph.find(
+          ([_, predicate, object]) =>
+            predicate === RDF_TYPE && object === input.rdfType,
+        )?.[0];
+
+        if (typeof rootUri !== "string") {
+          continue;
+        }
+
+        results.push({
+          entityId:
+            path
+              .split("/")
+              .at(-1)
+              ?.replace(/\.ttl$/, "") ?? "",
+          path,
+          rootUri,
+          graph,
+        });
+      }
+
+      return results;
     },
   };
 }

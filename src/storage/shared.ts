@@ -2,6 +2,7 @@ import type {
   ListedEntityRecord,
   LocalChange,
   StoredEntityRecord,
+  SyncMetadata,
   Triple,
 } from "../types.js";
 
@@ -36,6 +37,12 @@ export function cloneLocalChange(change: LocalChange): LocalChange {
     retractions: cloneTriples(change.retractions),
     entityProjected: change.entityProjected,
     logProjected: change.logProjected,
+  };
+}
+
+export function cloneSyncMetadata(metadata: SyncMetadata): SyncMetadata {
+  return {
+    observedRemoteChangeIds: [...metadata.observedRemoteChangeIds],
   };
 }
 

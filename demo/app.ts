@@ -2,6 +2,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import {
+  type BootstrapResult,
   createEngine,
   createFileStorage,
   createSolidPodAdapter,
@@ -43,6 +44,7 @@ export type DemoApp = {
   listJournalEntries(): Promise<JournalEntry[]>;
   syncState(): Promise<SyncState>;
   syncNow(): Promise<void>;
+  syncBootstrap(): Promise<BootstrapResult>;
 };
 
 function defaultNow(): string {
@@ -157,6 +159,10 @@ export function createDemoApp(options: CreateDemoAppOptions = {}): DemoApp {
 
     async syncNow() {
       await engine.sync.now();
+    },
+
+    async syncBootstrap() {
+      return engine.sync.bootstrap();
     },
   };
 }

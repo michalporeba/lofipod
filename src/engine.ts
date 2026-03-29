@@ -2,9 +2,11 @@ import { createMemoryStorage } from "./storage/memory.js";
 import {
   applyTripleDelta,
   createStoredRecord,
+  createProjectionHelpers,
   createToRdfHelpers,
   diffTriples,
   fallbackRootUri,
+  graphsMatch,
   projectionsMatch,
   projectStoredRecord,
 } from "./graph.js";
@@ -16,6 +18,7 @@ import {
   readSyncState,
 } from "./sync.js";
 import type {
+  BootstrapResult,
   Engine,
   EngineConfig,
   EntityDefinition,
@@ -81,6 +84,28 @@ export function createEngine(config: EngineConfig): Engine {
     }
 
     return normalizeLogBasePath(logBasePath);
+  };
+
+  const readObservedRemoteChangeIds = async (): Promise<Set<string>> => {
+    const metadata = await storage.readSyncMetadata();
+    return new Set(metadata.observedRemoteChangeIds);
+  };
+
+  const rememberObservedRemoteChangeIds = async (
+    changeIds: Iterable<string>,
+  ): Promise<void> => {
+    await storage.transact((transaction) => {
+      const metadata = transaction.readSyncMetadata();
+      const observed = new Set(metadata.observedRemoteChangeIds);
+
+      for (const changeId of changeIds) {
+        observed.add(changeId);
+      }
+
+      transaction.writeSyncMetadata({
+        observedRemoteChangeIds: Array.from(observed).sort(),
+      });
+    });
   };
 
   return {
@@ -222,12 +247,16 @@ export function createEngine(config: EngineConfig): Engine {
           return;
         }
 
+        const observedRemoteChangeIds = await readObservedRemoteChangeIds();
         const knownChangeIds = new Set(
           (await storage.listChanges()).map((change) => change.changeId),
         );
 
         for (const entry of remoteEntries) {
-          if (knownChangeIds.has(entry.changeId)) {
+          if (
+            knownChangeIds.has(entry.changeId) ||
+            observedRemoteChangeIds.has(entry.changeId)
+          ) {
             continue;
           }
 
@@ -273,6 +302,82 @@ export function createEngine(config: EngineConfig): Engine {
 
           knownChangeIds.add(entry.changeId);
         }
+      },
+
+      async bootstrap(): Promise<BootstrapResult> {
+        if (!config.sync?.adapter.listCanonicalEntities) {
+          return {
+            imported: 0,
+            skipped: 0,
+            collisions: [],
+          };
+        }
+
+        let imported = 0;
+        let skipped = 0;
+        const collisions: BootstrapResult["collisions"] = [];
+
+        for (const definition of entities.values()) {
+          const remoteEntities =
+            await config.sync.adapter.listCanonicalEntities({
+              entityName: definition.name,
+              basePath: definition.pod.basePath,
+              rdfType: definition.rdfType,
+            });
+
+          for (const remoteEntity of remoteEntities) {
+            const existingRecord = await storage.readEntity(
+              definition.name,
+              remoteEntity.entityId,
+            );
+
+            if (existingRecord) {
+              if (graphsMatch(existingRecord.graph, remoteEntity.graph)) {
+                skipped += 1;
+                continue;
+              }
+
+              collisions.push({
+                entityName: definition.name,
+                entityId: remoteEntity.entityId,
+                path: remoteEntity.path,
+              });
+              continue;
+            }
+
+            const nextProjection = definition.project(
+              remoteEntity.graph,
+              createProjectionHelpers(remoteEntity.rootUri),
+            );
+
+            await storage.transact((transaction) => {
+              const updatedOrder = transaction.nextUpdatedOrder();
+              transaction.writeEntity(definition.name, remoteEntity.entityId, {
+                rootUri: remoteEntity.rootUri,
+                graph: remoteEntity.graph,
+                projection: nextProjection,
+                lastChangeId: null,
+                updatedOrder,
+              });
+            });
+
+            imported += 1;
+          }
+        }
+
+        const remoteEntries = await config.sync.adapter.listLogEntries?.();
+
+        if (remoteEntries) {
+          await rememberObservedRemoteChangeIds(
+            remoteEntries.map((entry) => entry.changeId),
+          );
+        }
+
+        return {
+          imported,
+          skipped,
+          collisions,
+        };
       },
     },
   };

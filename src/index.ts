@@ -8,6 +8,8 @@ export { createIndexedDbStorage } from "./storage/indexeddb.js";
 export { createMemoryStorage } from "./storage/memory.js";
 export { defineVocabulary, rdf } from "./vocabulary.js";
 export type {
+  BootstrapCollision,
+  BootstrapResult,
   Engine,
   EngineConfig,
   EntityDefinition,
@@ -20,6 +22,7 @@ export type {
   ProjectionHelpers,
   StoredEntityRecord,
   SyncState,
+  SyncMetadata,
   Term,
   ToRdfHelpers,
   Triple,

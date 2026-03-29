@@ -74,6 +74,11 @@ export function projectionsMatch(current: unknown, next: unknown): boolean {
   return JSON.stringify(current) === JSON.stringify(next);
 }
 
+export function graphsMatch(current: Triple[], next: Triple[]): boolean {
+  const diff = diffTriples(current, next);
+  return diff.assertions.length === 0 && diff.retractions.length === 0;
+}
+
 function tripleKey([subject, predicate, object]: Triple): string {
   return JSON.stringify([subject, predicate, object]);
 }

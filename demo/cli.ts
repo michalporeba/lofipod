@@ -80,6 +80,7 @@ export function renderHelp(): string {
     "  task done <id> [--data-dir <dir>]",
     "  journal add --title <title> --text <text> --date <edtf> [--task <task-id>] [--id <id>] [--data-dir <dir>]",
     "  journal list [--data-dir <dir>]",
+    "  sync bootstrap [--data-dir <dir>] --pod-base-url <url> [--log-base-path <path>]",
     "  sync status [--data-dir <dir>] [--pod-base-url <url>] [--log-base-path <path>]",
     "  sync now [--data-dir <dir>] --pod-base-url <url> [--log-base-path <path>]",
   ].join("\n");
@@ -187,6 +188,21 @@ export async function runCli(
       const state = await app.syncState();
       output.stdout(
         `status=${state.status} configured=${state.configured} pending=${state.pendingChanges}`,
+      );
+      return 0;
+    }
+
+    if (resource === "sync" && command === "bootstrap") {
+      if (
+        !optionAsString(options, "pod-base-url") &&
+        !process.env.LIFEGRAPH_DEMO_POD_BASE_URL
+      ) {
+        throw new Error("Missing required option: --pod-base-url");
+      }
+
+      const result = await app.syncBootstrap();
+      output.stdout(
+        `imported=${result.imported} skipped=${result.skipped} collisions=${result.collisions.length}`,
       );
       return 0;
     }

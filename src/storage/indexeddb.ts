@@ -4,8 +4,13 @@ import type {
   LocalStorageAdapter,
   LocalStorageTransaction,
   StoredEntityRecord,
+  SyncMetadata,
 } from "../types.js";
-import { cloneLocalChange, cloneStoredRecord } from "./shared.js";
+import {
+  cloneLocalChange,
+  cloneStoredRecord,
+  cloneSyncMetadata,
+} from "./shared.js";
 
 type IndexedDbStorageOptions = {
   databaseName: string;
@@ -28,6 +33,7 @@ type ChangeRow = LocalChange & {
 type DraftState = {
   records: Map<string, StoredRecordRow>;
   changes: ChangeRow[];
+  syncMetadata: SyncMetadata;
   updatedOrder: number;
 };
 
@@ -36,6 +42,7 @@ const ENTITY_STORE = "entities";
 const CHANGE_STORE = "changes";
 const META_STORE = "meta";
 const UPDATED_ORDER_KEY = "updatedOrder";
+const SYNC_METADATA_KEY = "syncMetadata";
 
 function promisifyRequest<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -99,6 +106,14 @@ async function readDraftState(database: IDBDatabase): Promise<DraftState> {
   const meta = (await promisifyRequest(metaStore.get(UPDATED_ORDER_KEY))) as
     | MetaRow
     | undefined;
+  const syncMetadataRow = (await promisifyRequest(
+    metaStore.get(SYNC_METADATA_KEY),
+  )) as
+    | {
+        key: string;
+        value: SyncMetadata;
+      }
+    | undefined;
 
   await promisifyTransaction(transaction);
 
@@ -107,6 +122,11 @@ async function readDraftState(database: IDBDatabase): Promise<DraftState> {
       rows.map((row) => [`${row.entityName}:${row.entityId}`, row]),
     ),
     changes,
+    syncMetadata: cloneSyncMetadata(
+      syncMetadataRow?.value ?? {
+        observedRemoteChangeIds: [],
+      },
+    ),
     updatedOrder: meta?.value ?? 0,
   };
 }
@@ -149,6 +169,15 @@ async function writeDraftState(
       key: UPDATED_ORDER_KEY,
       value: draft.updatedOrder,
     } satisfies MetaRow);
+  }
+
+  if (
+    JSON.stringify(original.syncMetadata) !== JSON.stringify(draft.syncMetadata)
+  ) {
+    metaStore.put({
+      key: SYNC_METADATA_KEY,
+      value: cloneSyncMetadata(draft.syncMetadata),
+    });
   }
 
   await promisifyTransaction(transaction);
@@ -198,6 +227,12 @@ export function createIndexedDbStorage(
         .map(cloneLocalChange);
     },
 
+    async readSyncMetadata() {
+      const database = await databasePromise;
+      const draft = await readDraftState(database);
+      return cloneSyncMetadata(draft.syncMetadata);
+    },
+
     async transact<T>(
       work: (transaction: LocalStorageTransaction) => Promise<T> | T,
     ): Promise<T> {
@@ -206,6 +241,7 @@ export function createIndexedDbStorage(
       const draft: DraftState = {
         records: new Map(original.records),
         changes: [...original.changes],
+        syncMetadata: cloneSyncMetadata(original.syncMetadata),
         updatedOrder: original.updatedOrder,
       };
 
@@ -246,6 +282,12 @@ export function createIndexedDbStorage(
                 }
               : change,
           );
+        },
+        readSyncMetadata() {
+          return cloneSyncMetadata(draft.syncMetadata);
+        },
+        writeSyncMetadata(metadata) {
+          draft.syncMetadata = cloneSyncMetadata(metadata);
         },
         nextUpdatedOrder() {
           draft.updatedOrder += 1;

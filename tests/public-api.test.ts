@@ -532,6 +532,9 @@ describe("local persistence", () => {
         }
       >(),
       changes: [] as LocalChange[],
+      syncMetadata: {
+        observedRemoteChangeIds: [] as string[],
+      },
       updatedOrder: 0,
     };
 
@@ -553,6 +556,11 @@ describe("local persistence", () => {
         assertions: [...change.assertions],
         retractions: [...change.retractions],
       })),
+      syncMetadata: {
+        observedRemoteChangeIds: [
+          ...state.syncMetadata.observedRemoteChangeIds,
+        ],
+      },
       updatedOrder: state.updatedOrder,
     });
 
@@ -569,6 +577,13 @@ describe("local persistence", () => {
             (entityName ? change.entityName === entityName : true) &&
             (entityId ? change.entityId === entityId : true),
         );
+      },
+      async readSyncMetadata() {
+        return {
+          observedRemoteChangeIds: [
+            ...state.syncMetadata.observedRemoteChangeIds,
+          ],
+        };
       },
       async transact<T>(
         work: (transaction: LocalStorageTransaction) => Promise<T> | T,
@@ -589,6 +604,18 @@ describe("local persistence", () => {
           },
           markChangeLogProjected() {
             // no-op in the failing transaction stub
+          },
+          readSyncMetadata() {
+            return {
+              observedRemoteChangeIds: [
+                ...draft.syncMetadata.observedRemoteChangeIds,
+              ],
+            };
+          },
+          writeSyncMetadata(metadata) {
+            draft.syncMetadata = {
+              observedRemoteChangeIds: [...metadata.observedRemoteChangeIds],
+            };
           },
           nextUpdatedOrder() {
             draft.updatedOrder += 1;
@@ -1226,6 +1253,14 @@ describe("mocked entity sync", () => {
       assertions: Triple[];
       retractions: Triple[];
     }> = [];
+    const canonicalEntities: Array<{
+      entityName: string;
+      entityId: string;
+      path: string;
+      rootUri: string;
+      rdfType: string;
+      graph: Triple[];
+    }> = [];
 
     return {
       adapter: {
@@ -1255,8 +1290,28 @@ describe("mocked entity sync", () => {
             retractions: [...entry.retractions],
           }));
         },
+        async listCanonicalEntities(input: {
+          entityName: string;
+          basePath: string;
+          rdfType: string;
+        }) {
+          return canonicalEntities
+            .filter(
+              (entity) =>
+                entity.entityName === input.entityName &&
+                entity.path.startsWith(input.basePath) &&
+                entity.rdfType === input.rdfType,
+            )
+            .map((entity) => ({
+              entityId: entity.entityId,
+              path: entity.path,
+              rootUri: entity.rootUri,
+              graph: [...entity.graph],
+            }));
+        },
       },
       logEntries,
+      canonicalEntities,
     };
   };
 
@@ -1608,5 +1663,213 @@ describe("mocked entity sync", () => {
     await expect(
       secondStorage.listChanges("event", "ev-123"),
     ).resolves.toHaveLength(2);
+  });
+
+  it("bootstraps missing local entities from canonical remote resources", async () => {
+    const { entity } = createEventFixture();
+    const remote = createSharedRemoteAdapter();
+    remote.canonicalEntities.push({
+      entityName: "event",
+      entityId: "ev-remote",
+      path: "events/ev-remote.ttl",
+      rootUri: "https://example.com/id/event/ev-remote",
+      rdfType: entity.rdfType,
+      graph: [
+        [
+          "https://example.com/id/event/ev-remote",
+          rdf.type,
+          "https://example.com/ns#Event",
+        ],
+        [
+          "https://example.com/id/event/ev-remote",
+          "https://example.com/ns#title",
+          "Remote",
+        ],
+        [
+          "https://example.com/id/event/ev-remote",
+          "https://example.com/ns#time",
+          "https://example.com/id/event/ev-remote#time",
+        ],
+        [
+          "https://example.com/id/event/ev-remote#time",
+          "https://example.com/ns#year",
+          2024,
+        ],
+      ],
+    });
+    const engine = createEngine({
+      entities: [entity],
+      pod,
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+
+    await expect(engine.sync.bootstrap()).resolves.toEqual({
+      imported: 1,
+      skipped: 0,
+      collisions: [],
+    });
+    await expect(engine.get("event", "ev-remote")).resolves.toEqual({
+      id: "ev-remote",
+      title: "Remote",
+      time: {
+        year: 2024,
+      },
+    });
+  });
+
+  it("skips replay of older remote log entries already observed during bootstrap", async () => {
+    const { entity } = createEventFixture();
+    const remote = createSharedRemoteAdapter();
+    remote.canonicalEntities.push({
+      entityName: "event",
+      entityId: "ev-remote",
+      path: "events/ev-remote.ttl",
+      rootUri: "https://example.com/id/event/ev-remote",
+      rdfType: entity.rdfType,
+      graph: [
+        [
+          "https://example.com/id/event/ev-remote",
+          rdf.type,
+          "https://example.com/ns#Event",
+        ],
+        [
+          "https://example.com/id/event/ev-remote",
+          "https://example.com/ns#title",
+          "Remote",
+        ],
+        [
+          "https://example.com/id/event/ev-remote",
+          "https://example.com/ns#time",
+          "https://example.com/id/event/ev-remote#time",
+        ],
+        [
+          "https://example.com/id/event/ev-remote#time",
+          "https://example.com/ns#year",
+          2024,
+        ],
+      ],
+    });
+    remote.logEntries.push({
+      entityName: "event",
+      entityId: "ev-remote",
+      changeId: "remote-1",
+      parentChangeId: null,
+      path: "apps/my-journal/log/event/remote-1.ttl",
+      rootUri: "https://example.com/id/event/ev-remote",
+      assertions: [
+        [
+          "https://example.com/id/event/ev-remote",
+          "https://example.com/ns#title",
+          "Historical",
+        ],
+      ],
+      retractions: [
+        [
+          "https://example.com/id/event/ev-remote",
+          "https://example.com/ns#title",
+          "Remote",
+        ],
+      ],
+    });
+    const engine = createEngine({
+      entities: [entity],
+      pod,
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+
+    await engine.sync.bootstrap();
+    await engine.sync.now();
+
+    await expect(engine.get("event", "ev-remote")).resolves.toEqual({
+      id: "ev-remote",
+      title: "Remote",
+      time: {
+        year: 2024,
+      },
+    });
+    await expect(engine.sync.state()).resolves.toEqual({
+      status: "idle",
+      configured: true,
+      pendingChanges: 0,
+    });
+  });
+
+  it("reports collisions instead of overwriting differing local entities during bootstrap", async () => {
+    const { entity } = createEventFixture();
+    const remote = createSharedRemoteAdapter();
+    remote.canonicalEntities.push({
+      entityName: "event",
+      entityId: "ev-123",
+      path: "events/ev-123.ttl",
+      rootUri: "https://example.com/id/event/ev-123",
+      rdfType: entity.rdfType,
+      graph: [
+        [
+          "https://example.com/id/event/ev-123",
+          rdf.type,
+          "https://example.com/ns#Event",
+        ],
+        [
+          "https://example.com/id/event/ev-123",
+          "https://example.com/ns#title",
+          "Remote title",
+        ],
+        [
+          "https://example.com/id/event/ev-123",
+          "https://example.com/ns#time",
+          "https://example.com/id/event/ev-123#time",
+        ],
+        [
+          "https://example.com/id/event/ev-123#time",
+          "https://example.com/ns#year",
+          2024,
+        ],
+      ],
+    });
+    const storage = createMemoryStorage();
+    const engine = createEngine({
+      entities: [entity],
+      pod,
+      storage,
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-123",
+      title: "Local title",
+      time: {
+        year: 2025,
+      },
+    });
+
+    await expect(engine.sync.bootstrap()).resolves.toEqual({
+      imported: 0,
+      skipped: 0,
+      collisions: [
+        {
+          entityName: "event",
+          entityId: "ev-123",
+          path: "events/ev-123.ttl",
+        },
+      ],
+    });
+    await expect(engine.get("event", "ev-123")).resolves.toEqual({
+      id: "ev-123",
+      title: "Local title",
+      time: {
+        year: 2025,
+      },
+    });
+    await expect(storage.listChanges("event", "ev-123")).resolves.toHaveLength(
+      1,
+    );
   });
 });
