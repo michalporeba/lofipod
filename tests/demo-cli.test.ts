@@ -181,4 +181,16 @@ describe("demo CLI", () => {
       stderr: [],
     });
   });
+
+  it("reports sync state for an unconfigured demo app", async () => {
+    const dataDir = await createDataDir();
+
+    await expect(
+      runWithCapturedOutput(["sync", "status", "--data-dir", dataDir]),
+    ).resolves.toMatchObject({
+      exitCode: 0,
+      stdout: ["status=unconfigured configured=false pending=0"],
+      stderr: [],
+    });
+  });
 });

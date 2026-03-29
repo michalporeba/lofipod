@@ -1,7 +1,13 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { createEngine, createFileStorage, type Engine } from "../src/index.js";
+import {
+  createEngine,
+  createFileStorage,
+  createSolidPodAdapter,
+  type Engine,
+  type SyncState,
+} from "../src/index.js";
 import {
   demoEntities,
   JournalEntryEntity,
@@ -13,6 +19,12 @@ import {
 type CreateDemoAppOptions = {
   dataDir?: string;
   now?: () => string;
+  pod?: {
+    podBaseUrl: string;
+    logBasePath?: string;
+    authorization?: string;
+    fetch?: typeof fetch;
+  };
 };
 
 export type DemoApp = {
@@ -29,6 +41,8 @@ export type DemoApp = {
     aboutTaskId?: string;
   }): Promise<JournalEntry>;
   listJournalEntries(): Promise<JournalEntry[]>;
+  syncState(): Promise<SyncState>;
+  syncNow(): Promise<void>;
 };
 
 function defaultNow(): string {
@@ -57,6 +71,20 @@ export function createDemoApp(options: CreateDemoAppOptions = {}): DemoApp {
     storage: createFileStorage({
       filePath: join(dataDir, "state.json"),
     }),
+    pod: options.pod
+      ? {
+          logBasePath: options.pod.logBasePath ?? "apps/lifegraph-demo/log/",
+        }
+      : undefined,
+    sync: options.pod
+      ? {
+          adapter: createSolidPodAdapter({
+            podBaseUrl: options.pod.podBaseUrl,
+            authorization: options.pod.authorization,
+            fetch: options.pod.fetch,
+          }),
+        }
+      : undefined,
   });
 
   return {
@@ -121,6 +149,14 @@ export function createDemoApp(options: CreateDemoAppOptions = {}): DemoApp {
 
     async listJournalEntries() {
       return engine.list<JournalEntry>(JournalEntryEntity.name);
+    },
+
+    async syncState() {
+      return engine.sync.state();
+    },
+
+    async syncNow() {
+      await engine.sync.now();
     },
   };
 }

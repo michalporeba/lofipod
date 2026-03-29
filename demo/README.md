@@ -31,3 +31,15 @@ store, by default under a cache directory such as:
 
 - `$XDG_CACHE_HOME/lifegraph-demo`
 - or `~/.cache/lifegraph-demo`
+
+## Sync
+
+The demo can also project its local-first data to a Solid Pod.
+
+Use:
+
+- `sync status`
+- `sync now --pod-base-url <url>`
+
+The log path defaults to `apps/lifegraph-demo/log/` and can be overridden with
+`--log-base-path`.

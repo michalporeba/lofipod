@@ -38,6 +38,15 @@ function parseArguments(argv: string[]): ParsedArguments {
   return { positional, options };
 }
 
+function optionAsString(
+  options: Record<string, string | boolean>,
+  name: string,
+): string | undefined {
+  return typeof options[name] === "string"
+    ? (options[name] as string)
+    : undefined;
+}
+
 function requireOption(
   options: Record<string, string | boolean>,
   name: string,
@@ -71,6 +80,8 @@ export function renderHelp(): string {
     "  task done <id> [--data-dir <dir>]",
     "  journal add --title <title> --text <text> --date <edtf> [--task <task-id>] [--id <id>] [--data-dir <dir>]",
     "  journal list [--data-dir <dir>]",
+    "  sync status [--data-dir <dir>] [--pod-base-url <url>] [--log-base-path <path>]",
+    "  sync now [--data-dir <dir>] --pod-base-url <url> [--log-base-path <path>]",
   ].join("\n");
 }
 
@@ -94,8 +105,23 @@ export async function runCli(
   }
 
   const app = createDemoApp({
-    dataDir:
-      typeof options["data-dir"] === "string" ? options["data-dir"] : undefined,
+    dataDir: optionAsString(options, "data-dir"),
+    pod:
+      optionAsString(options, "pod-base-url") ||
+      process.env.LIFEGRAPH_DEMO_POD_BASE_URL
+        ? {
+            podBaseUrl:
+              optionAsString(options, "pod-base-url") ??
+              process.env.LIFEGRAPH_DEMO_POD_BASE_URL ??
+              "",
+            logBasePath:
+              optionAsString(options, "log-base-path") ??
+              process.env.LIFEGRAPH_DEMO_LOG_BASE_PATH,
+            authorization:
+              optionAsString(options, "authorization") ??
+              process.env.LIFEGRAPH_DEMO_AUTHORIZATION,
+          }
+        : undefined,
   });
 
   try {
@@ -153,6 +179,30 @@ export async function runCli(
         entries.length === 0
           ? "no journal entries"
           : entries.map(formatJournalEntry).join("\n"),
+      );
+      return 0;
+    }
+
+    if (resource === "sync" && command === "status") {
+      const state = await app.syncState();
+      output.stdout(
+        `status=${state.status} configured=${state.configured} pending=${state.pendingChanges}`,
+      );
+      return 0;
+    }
+
+    if (resource === "sync" && command === "now") {
+      if (
+        !optionAsString(options, "pod-base-url") &&
+        !process.env.LIFEGRAPH_DEMO_POD_BASE_URL
+      ) {
+        throw new Error("Missing required option: --pod-base-url");
+      }
+
+      await app.syncNow();
+      const state = await app.syncState();
+      output.stdout(
+        `status=${state.status} configured=${state.configured} pending=${state.pendingChanges}`,
       );
       return 0;
     }
