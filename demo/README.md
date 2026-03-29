@@ -14,3 +14,20 @@ The intended shape is:
 
 See [ontology/README.md](ontology/README.md) for the initial `mlg` ontology
 subset used by the future demo.
+
+## Intended app shape
+
+The first demo will use two entity families:
+
+- tasks
+- journal entries
+
+The command-line interface is the primary surface. The demo application logic
+should stay separate from the CLI shell so a lightweight TUI can wrap the same
+operations later.
+
+The local-first state for the demo is intended to live in a filesystem-backed
+store, by default under a cache directory such as:
+
+- `$XDG_CACHE_HOME/lifegraph-demo`
+- or `~/.cache/lifegraph-demo`

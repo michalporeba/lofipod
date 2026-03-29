@@ -27,6 +27,7 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --clean",
     "check": "tsc --noEmit",
+    "demo": "node --loader ts-node/esm demo/cli.ts",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
@@ -58,6 +59,7 @@
     "fake-indexeddb": "^6.0.0",
     "globals": "^16.0.0",
     "prettier": "^3.5.3",
+    "ts-node": "^10.9.2",
     "tsup": "^8.3.5",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.28.0",
