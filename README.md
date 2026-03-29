@@ -63,6 +63,7 @@ See [QUICKSTART.md](QUICKSTART.md) for a small end-to-end example using
 - [API.md](API.md): current public API direction
 - [ADR.md](ADR.md): accepted architectural decisions
 - [PLANS.md](PLANS.md): delivery slices
+- [demo/README.md](demo/README.md): in-repo demo app area and ontology seed
 
 ## Why it exists
 

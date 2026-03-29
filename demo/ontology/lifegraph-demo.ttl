@@ -1,0 +1,70 @@
+@prefix mlg: <https://michalporeba.com/ns/lifegraph#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix schema: <https://schema.org/> .
+@prefix life: <http://purl.org/vocab/lifecycle/schema#> .
+
+<https://michalporeba.com/ns/lifegraph>
+  a owl:Ontology ;
+  rdfs:label "LifeGraph ontology"@en ;
+  rdfs:comment "Core ontology for personal local-first applications."@en .
+
+mlg:Task
+  a owl:Class ;
+  rdfs:label "Task"@en ;
+  rdfs:comment "A personal task or to-do item."@en ;
+  rdfs:subClassOf life:Task .
+
+mlg:JournalEntry
+  a owl:Class ;
+  rdfs:label "Journal entry"@en ;
+  rdfs:comment "A dated personal journal entry."@en ;
+  rdfs:subClassOf schema:BlogPosting .
+
+mlg:edtf
+  a rdfs:Datatype ;
+  rdfs:label "EDTF literal"@en ;
+  rdfs:comment "A string literal interpreted as an EDTF date or date-like expression."@en .
+
+mlg:status
+  a owl:ObjectProperty ;
+  rdfs:label "status"@en ;
+  rdfs:comment "The current status of a task."@en ;
+  rdfs:domain mlg:Task .
+
+mlg:entryDate
+  a owl:DatatypeProperty ;
+  rdfs:label "entry date"@en ;
+  rdfs:comment "A journal date expressed in EDTF form."@en ;
+  rdfs:domain mlg:JournalEntry ;
+  rdfs:range mlg:edtf .
+
+mlg:due
+  a owl:DatatypeProperty ;
+  rdfs:label "due"@en ;
+  rdfs:comment "A task due date expressed in EDTF form."@en ;
+  rdfs:domain mlg:Task ;
+  rdfs:range mlg:edtf .
+
+mlg:aboutTask
+  a owl:ObjectProperty ;
+  rdfs:label "about task"@en ;
+  rdfs:comment "Links a journal entry to a related task."@en ;
+  rdfs:domain mlg:JournalEntry ;
+  rdfs:range mlg:Task .
+
+mlg:relatedTo
+  a owl:ObjectProperty ;
+  rdfs:label "related to"@en ;
+  rdfs:comment "A generic relation between LifeGraph resources."@en .
+
+mlg:Todo
+  a owl:NamedIndividual ;
+  rdfs:label "To do"@en .
+
+mlg:Done
+  a owl:NamedIndividual ;
+  rdfs:label "Done"@en .

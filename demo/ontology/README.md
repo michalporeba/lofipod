@@ -1,0 +1,81 @@
+# LifeGraph Demo Ontology
+
+This directory contains the first draft of the `mlg` ontology subset used by
+the minimal in-repo demo application.
+
+The public namespace is:
+
+- `mlg:` = `https://michalporeba.com/ns/lifegraph#`
+
+This first subset is intentionally narrow. It only covers:
+
+- tasks
+- journal entries
+
+It is meant to seed a broader ontology for future personal applications, while
+staying small enough to use in the first CLI/TUI demo and test harness.
+
+## Main terms
+
+- `mlg:Task`
+- `mlg:JournalEntry`
+- `mlg:status`
+- `mlg:entryDate`
+- `mlg:due`
+- `mlg:aboutTask`
+- `mlg:relatedTo`
+- `mlg:edtf`
+- `mlg:Todo`
+- `mlg:Done`
+
+## Reused vocabularies
+
+The ontology draft reuses:
+
+- `schema:name`
+- `schema:text`
+- `dct:created`
+- `dct:modified`
+- `life:Task`
+
+## EDTF
+
+`mlg:edtf` is a custom datatype whose lexical value is a string interpreted as
+an EDTF-like date expression.
+
+The intended first supported examples are:
+
+- `"2022"^^mlg:edtf`
+- `"2026-04"^^mlg:edtf`
+- `"2026-04-12"^^mlg:edtf`
+- `"2026-21"^^mlg:edtf`
+- `"2026-04~"^^mlg:edtf`
+
+This keeps the ontology aligned with the intended app behaviour:
+
+- journal entries may use imprecise dates such as a year summary
+- task deadlines may use month precision or approximate values
+
+## Example
+
+```turtle
+@prefix mlg: <https://michalporeba.com/ns/lifegraph#> .
+@prefix schema: <https://schema.org/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+
+<#task-1>
+  a mlg:Task ;
+  schema:name "Prepare April review" ;
+  mlg:status mlg:Todo ;
+  mlg:due "2026-04"^^mlg:edtf ;
+  dct:created "2026-03-29T09:00:00Z" .
+
+<#entry-1>
+  a mlg:JournalEntry ;
+  schema:name "Summary 2022" ;
+  schema:text "A retrospective over the year." ;
+  mlg:entryDate "2022"^^mlg:edtf ;
+  dct:created "2026-03-29T09:05:00Z" .
+```
+
+See [lifegraph-demo.ttl](lifegraph-demo.ttl) for the ontology draft itself.
