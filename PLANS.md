@@ -1,15 +1,15 @@
 # PLANS
 
-This document lists the first small implementation features for `lofipod`.
-Features should be built sequentially, but each one should stand on its own as
-an independently testable public-API slice.
+This document tracks the first implementation slices for `lofipod` and the
+next planned work. Features should still stand on their own as independently
+testable public-API slices.
 
-The plan is centered on developer activities and high test coverage. Most tests
-should exercise the public API and verify persistence behaviour. Solid Pod
-integration should be mocked for most tests and covered by a smaller focused
-integration suite later.
+The project remains centered on developer activities and high test coverage.
+Most tests should exercise the public API and verify persistence behaviour.
+Solid Pod integration should stay mostly mocked, with a smaller focused real
+integration suite.
 
-## Feature roadmap
+## Completed roadmap
 
 ### 1. Define one entity and its RDF projection
 
@@ -149,7 +149,41 @@ This should prove:
 - real file layout compatibility
 - real authentication and resource update flow
 
-### 13. Optional framework bindings
+## Next roadmap
+
+### 13. Refine remote discovery and recovery
+
+Plan and implement the next remote discovery model on top of the current
+bootstrap import and sequential log replay.
+
+This should prove:
+
+- canonical `./<entity>/` resources remain the correctness source
+- per-app logs remain acceleration rather than required discovery infrastructure
+- applications can recover compatible canonical data created by other tools
+- out-of-band canonical edits can be detected and reconciled deliberately
+
+### 14. Add a framework-agnostic observation API
+
+Expose a small core observation surface before adding framework bindings.
+
+This should prove:
+
+- the core can publish entity or query updates without framework assumptions
+- projected object replacement remains driven by core graph state
+- UI bindings can subscribe without taking ownership of persistence or sync
+
+### 15. Prepare package boundaries for framework bindings
+
+Restructure the repository for separate core and binding packages.
+
+This should prove:
+
+- `lofipod` remains independently consumable
+- a future binding package can depend on the core without leaking React into it
+- the repo layout can support shared tooling and release flow across packages
+
+### 16. Add React bindings as a separate package
 
 Add a thin wrapper layer around the framework-agnostic core, with React as the
 first candidate.
@@ -157,7 +191,7 @@ first candidate.
 This should prove:
 
 - the core remains independent of framework assumptions
-- bindings can consume the engine API rather than redefine it
+- bindings can consume the engine and observation APIs rather than redefine them
 - the public API is suitable for use across multiple UI frameworks
 
 ## Testing guidance
@@ -170,3 +204,5 @@ This should prove:
 - Keep Docker-backed Solid integration tests focused and few.
 - Prioritise tests that verify persistence correctness, restart recovery, graph
   delta behaviour, and public API semantics.
+- For the next roadmap, prioritise tests around canonical recovery,
+  cross-application discovery, and framework-agnostic observation semantics.

@@ -33,22 +33,29 @@ This means `lofipod` should own orchestration, local-first behaviour, sync, and
 Pod projection mechanics, while application code owns domain types, ontology
 terms, and entity-specific RDF mapping.
 
-## Proposed public surface
+## Current public surface
 
-The first public surface should stay small and explicit:
+The current public surface is still intentionally small and explicit:
 
 - `defineVocabulary(...)`
 - `defineEntity<T>(...)`
 - `createEngine(...)`
+- `createMemoryStorage(...)`
+- `createIndexedDbStorage(...)`
+- `createFileStorage(...)`
+- `createSolidPodAdapter(...)`
 - `engine.save(entityName, entity)`
 - `engine.get(entityName, id)`
 - `engine.list(entityName, options?)`
-- `engine.connection.state()`
 - `engine.sync.state()`
 - `engine.sync.now()`
+- `engine.sync.bootstrap()`
 
-This is intentionally not a full query or schema system. The initial API should
-prefer stability and clarity over breadth.
+There is currently no `engine.connection.state()` API and no general
+observation/subscription API yet.
+
+This is intentionally not a full query or schema system. The initial API still
+prefers stability and clarity over breadth.
 
 ## Entity definition contract
 
@@ -81,20 +88,20 @@ projection logic.
 
 ## Pod configuration contract
 
-Engine-level Pod configuration should include:
+Engine-level Pod configuration currently includes:
 
-- `root`
+- `logBasePath`
 
 Per-entity Pod configuration should include:
 
 - `basePath`
 
-The first version should let developers choose:
+The current version lets developers choose:
 
-- the application root directory in the Pod
+- the app-private replication log base path in the Pod
 - the collection or base path used for each entity type
 
-The first version should not expose:
+The current version does not expose:
 
 - full resource path callback hooks
 - detailed customization of internal revision or index layout
@@ -124,9 +131,10 @@ Sync should be visible but not central to ordinary CRUD.
 Developers should be able to:
 
 - determine whether remote sync is configured at all
-- observe whether the remote is currently reachable
 - inspect overall sync status
 - trigger sync explicitly when needed
+- explicitly bootstrap from canonical remote resources on first attach or
+  recovery
 
 Normal save, get, and list flows should work without requiring explicit sync
 operations in the common case.
@@ -193,12 +201,13 @@ const eventEntity = defineEntity<Event>({
 
 const engine = await createEngine({
   pod: {
-    root: "/apps/my-journal/",
     logBasePath: "apps/my-journal/log/",
   },
   entities: [eventEntity],
-  storage: indexedDbStorage(),
-  sync: solidSync({ podUrl, auth }),
+  storage: createIndexedDbStorage(),
+  sync: {
+    adapter: createSolidPodAdapter({ podBaseUrl, authHeaders }),
+  },
 });
 
 await engine.save("event", {
@@ -212,9 +221,9 @@ await engine.save("event", {
 const event = await engine.get("event", "n1");
 const events = await engine.list("event", { limit: 20 });
 
-const connection = engine.connection.state();
 const syncState = engine.sync.state();
 await engine.sync.now();
+await engine.sync.bootstrap();
 ```
 
 ## Defaults and open points
@@ -224,12 +233,14 @@ Current defaults:
 - identity is part of the entity object
 - per-entity RDF codecs are the default mapping mechanism
 - per-entity Pod base paths are supported
-- local persistence is JSON-centric in the first cut
+- local persistence is adapter-driven, with in-memory, IndexedDB, and file
+  storage currently available
 - sync state is inspectable, but CRUD should remain the primary experience
+- bootstrap from canonical Pod resources is explicit rather than automatic
 
 Still open:
 
 - the exact helper set exposed to `project(...)`
 - the exact list and cursor API beyond basic newest-first listing
-- whether any observation API belongs in the first public surface
+- what framework-agnostic observation API should exist before React bindings
 - how conflict and branch state should eventually appear in the public API

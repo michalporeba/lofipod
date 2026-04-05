@@ -18,10 +18,12 @@ It is for applications that want:
 The project currently includes:
 
 - a small public API for defining entities and vocabularies
-- local persistence with in-memory and IndexedDB adapters
+- local persistence with in-memory, IndexedDB, and file-backed adapters
 - canonical graph projection and rehydration
 - mocked sync coverage for canonical Pod files and replication logs
+- explicit bootstrap import from canonical Pod resources on first attach
 - focused Community Solid Server integration tests
+- a small CLI demo app that acts as an end-to-end regression harness
 
 Expect the API to keep evolving while the core model is being proven.
 
@@ -36,6 +38,7 @@ The intended flow is:
 2. save and read entities through a local-first API
 3. keep application queries local
 4. sync canonical RDF resources and replication data in the background
+5. recover compatible data from existing canonical Pod resources when needed
 
 ## What it is not
 
@@ -63,6 +66,7 @@ See [QUICKSTART.md](QUICKSTART.md) for a small end-to-end example using
 - [API.md](API.md): current public API direction
 - [ADR.md](ADR.md): accepted architectural decisions
 - [PLANS.md](PLANS.md): delivery slices
+- [WIP.md](WIP.md): current implementation state and open questions
 - [demo/README.md](demo/README.md): in-repo demo app area and ontology seed
 
 ## Why it exists

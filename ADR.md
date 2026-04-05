@@ -24,6 +24,9 @@ and known boundaries for the project.
 - The project should be implemented in TypeScript.
 - The published package should be consumable from plain JavaScript projects.
 - Types are part of the developer experience, but not required of consumers.
+- The framework-agnostic core should remain in the `lofipod` package.
+- Future framework bindings should be published as separate packages in the
+  same repository rather than folded into the core package.
 
 ### Data model
 
@@ -68,6 +71,12 @@ and known boundaries for the project.
   - minimal mutable metadata for log discovery
 - Bucket and log design exists to support sequential replication rather than
   Pod-side application querying.
+- Canonical entity directories are also the mandatory recovery and
+  cross-application discovery surface.
+- Data created or edited by another application must still be recoverable from
+  canonical entity resources even if there is no compatible app-private log.
+- Any shared `apps/lofipod/` interoperability area is optional future
+  infrastructure, not a correctness dependency.
 
 ### Synchronisation
 
@@ -82,6 +91,14 @@ and known boundaries for the project.
   local entity graph state, and the local read model before remote sync.
 - Remote sync should project local changes to canonical entity resources first
   and then append the same logical changes to the Pod replication log.
+- First attach to an existing Pod should support explicit bootstrap import from
+  canonical entity directories.
+- Bootstrap import should be additive by default:
+  - import missing local entities
+  - skip identical local and remote entities
+  - report differing entities as collisions rather than overwriting either side
+- Sequential replay of app-private logs is an acceleration path, not the only
+  valid remote discovery mechanism.
 - Realtime collaborative editing is out of scope.
 
 ### Local-first query model
@@ -131,6 +148,9 @@ and known boundaries for the project.
 
 - What exact RDF representation should a replication log entry use in the Pod?
 - What minimal metadata is required for bucket discovery and log replay?
-- What should the first public API look like in detail?
+- How should canonical reconciliation work after first bootstrap when other
+  applications can edit canonical resources directly?
+- What framework-agnostic observation API is needed before React bindings are
+  added?
 - How should branch/conflict state be exposed to consumers?
 - How far should unordered primitive sets go in the RDF mapping?
