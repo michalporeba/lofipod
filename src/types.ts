@@ -118,6 +118,7 @@ export type LocalStorageAdapter = {
   ): Promise<StoredEntityRecord<unknown> | null>;
   listEntities(entityName: string): Promise<ListedEntityRecord[]>;
   listChanges(entityName?: string, entityId?: string): Promise<LocalChange[]>;
+  listPendingChanges?(): Promise<LocalChange[]>;
   readSyncMetadata(): Promise<SyncMetadata>;
   transact<T>(
     work: (transaction: LocalStorageTransaction) => Promise<T> | T,

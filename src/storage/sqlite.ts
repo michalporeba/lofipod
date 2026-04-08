@@ -189,6 +189,20 @@ export function createSqliteStorage(
     FROM changes
     ORDER BY rowid
   `);
+  const listPendingChangesStatement = database.prepare<[], ChangeRow>(`
+    SELECT
+      change_id,
+      entity_name,
+      entity_id,
+      parent_change_id,
+      assertions,
+      retractions,
+      entity_projected,
+      log_projected
+    FROM changes
+    WHERE entity_projected = 0 OR log_projected = 0
+    ORDER BY rowid
+  `);
   const listEntityChangesStatement = database.prepare<[string], ChangeRow>(`
     SELECT
       change_id,
@@ -299,6 +313,12 @@ export function createSqliteStorage(
             (entityName ? change.entityName === entityName : true) &&
             (entityId ? change.entityId === entityId : true),
         );
+    },
+
+    async listPendingChanges() {
+      return listPendingChangesStatement
+        .all()
+        .map((row) => cloneLocalChange(hydrateLocalChange(row)));
     },
 
     async readSyncMetadata() {

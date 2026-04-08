@@ -17,8 +17,10 @@ export async function readSyncState(
   storage: NonNullable<EngineConfig["storage"]>,
   syncConfig: EngineConfig["sync"],
 ): Promise<SyncState> {
-  const pendingChanges = (await storage.listChanges()).filter(
-    hasPendingSync,
+  const pendingChanges = (
+    storage.listPendingChanges
+      ? await storage.listPendingChanges()
+      : (await storage.listChanges()).filter(hasPendingSync)
   ).length;
 
   if (!syncConfig) {

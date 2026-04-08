@@ -71,6 +71,10 @@ export function createMemoryStorage(): LocalStorageAdapter {
         .map(cloneLocalChange);
     },
 
+    async listPendingChanges() {
+      return state.changes.filter((change) => !change.entityProjected || !change.logProjected).map(cloneLocalChange);
+    },
+
     async readSyncMetadata() {
       return cloneSyncMetadata(state.syncMetadata);
     },

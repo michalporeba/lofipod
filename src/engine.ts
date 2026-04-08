@@ -205,9 +205,9 @@ export function createEngine(config: EngineConfig): Engine {
           return;
         }
 
-        const pendingChanges = (await storage.listChanges()).filter(
-          hasPendingSync,
-        );
+        const pendingChanges = storage.listPendingChanges
+          ? await storage.listPendingChanges()
+          : (await storage.listChanges()).filter(hasPendingSync);
 
         for (const change of pendingChanges) {
           const definition = requireEntity(change.entityName);
