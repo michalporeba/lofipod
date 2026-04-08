@@ -42,7 +42,7 @@ The current public surface is still intentionally small and explicit:
 - `createEngine(...)`
 - `createMemoryStorage(...)`
 - `createIndexedDbStorage(...)`
-- `createFileStorage(...)`
+- `createSqliteStorage(...)`
 - `createSolidPodAdapter(...)`
 - `engine.save(entityName, entity)`
 - `engine.get(entityName, id)`
@@ -233,7 +233,7 @@ Current defaults:
 - identity is part of the entity object
 - per-entity RDF codecs are the default mapping mechanism
 - per-entity Pod base paths are supported
-- local persistence is adapter-driven, with in-memory, IndexedDB, and file
+- local persistence is adapter-driven, with in-memory, IndexedDB, and SQLite
   storage currently available
 - sync state is inspectable, but CRUD should remain the primary experience
 - bootstrap from canonical Pod resources is explicit rather than automatic

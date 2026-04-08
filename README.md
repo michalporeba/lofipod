@@ -18,7 +18,7 @@ It is for applications that want:
 The project currently includes:
 
 - a small public API for defining entities and vocabularies
-- local persistence with in-memory, IndexedDB, and file-backed adapters
+- local persistence with in-memory, IndexedDB, and SQLite adapters
 - canonical graph projection and rehydration
 - mocked sync coverage for canonical Pod files and replication logs
 - explicit bootstrap import from canonical Pod resources on first attach

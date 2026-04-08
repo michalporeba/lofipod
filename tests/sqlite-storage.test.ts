@@ -4,10 +4,10 @@ import { tmpdir } from "node:os";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { createEngine, createFileStorage } from "../src/index.js";
+import { createEngine, createSqliteStorage } from "../src/index.js";
 import { createEventFixture } from "./support/eventFixture.js";
 
-describe("createFileStorage", () => {
+describe("createSqliteStorage", () => {
   const tempDirectories: string[] = [];
 
   afterEach(async () => {
@@ -19,9 +19,9 @@ describe("createFileStorage", () => {
   });
 
   async function createStorageFilePath(): Promise<string> {
-    const directory = await mkdtemp(join(tmpdir(), "lofipod-file-storage-"));
+    const directory = await mkdtemp(join(tmpdir(), "lofipod-sqlite-storage-"));
     tempDirectories.push(directory);
-    return join(directory, "state.json");
+    return join(directory, "state.sqlite");
   }
 
   it("persists entities across engine recreation", async () => {
@@ -29,7 +29,7 @@ describe("createFileStorage", () => {
     const filePath = await createStorageFilePath();
     const firstEngine = createEngine({
       entities: [entity],
-      storage: createFileStorage({
+      storage: createSqliteStorage({
         filePath,
       }),
     });
@@ -44,7 +44,7 @@ describe("createFileStorage", () => {
 
     const secondEngine = createEngine({
       entities: [entity],
-      storage: createFileStorage({
+      storage: createSqliteStorage({
         filePath,
       }),
     });
@@ -61,7 +61,7 @@ describe("createFileStorage", () => {
   it("does not commit partial writes when a transaction fails", async () => {
     const { entity } = createEventFixture();
     const filePath = await createStorageFilePath();
-    const storage = createFileStorage({
+    const storage = createSqliteStorage({
       filePath,
     });
     const engine = createEngine({
@@ -106,10 +106,10 @@ describe("createFileStorage", () => {
     });
   });
 
-  it("returns defensive copies from file-backed reads", async () => {
+  it("returns defensive copies from SQLite reads", async () => {
     const { entity } = createEventFixture();
     const filePath = await createStorageFilePath();
-    const storage = createFileStorage({
+    const storage = createSqliteStorage({
       filePath,
     });
     const engine = createEngine({

@@ -4,8 +4,8 @@ import { join } from "node:path";
 import {
   type BootstrapResult,
   createEngine,
-  createFileStorage,
   createSolidPodAdapter,
+  createSqliteStorage,
   type Engine,
   type SyncState,
 } from "../src/index.js";
@@ -70,8 +70,8 @@ export function createDemoApp(options: CreateDemoAppOptions = {}): DemoApp {
   const now = options.now ?? defaultNow;
   const engine = createEngine({
     entities: [...demoEntities],
-    storage: createFileStorage({
-      filePath: join(dataDir, "state.json"),
+    storage: createSqliteStorage({
+      filePath: join(dataDir, "state.sqlite"),
     }),
     pod: options.pod
       ? {
