@@ -1,4 +1,10 @@
-import { defineEntity, defineVocabulary, rdf } from "../../src/index.js";
+import {
+  defineEntity,
+  defineVocabulary,
+  isNamedNodeTerm,
+  rdf,
+  stringValue,
+} from "../../src/index.js";
 import type { EntityDefinition, Triple } from "../../src/index.js";
 
 export type TaggableNote = {
@@ -46,21 +52,26 @@ export function createTaggableNoteFixture(): {
     },
     project(graph, { uri }) {
       const subject = uri();
-      const title = graph.find(
-        ([subjectTerm, predicateTerm]) =>
-          subjectTerm === subject && predicateTerm === ex.title,
-      )?.[2];
       const tags = graph
         .filter(
           ([subjectTerm, predicateTerm]) =>
-            subjectTerm === subject && predicateTerm === ex.tag,
+            isNamedNodeTerm(subjectTerm) &&
+            isNamedNodeTerm(predicateTerm) &&
+            subjectTerm.value === subject.value &&
+            predicateTerm.value === ex.tag.value,
         )
-        .map(([, , object]) => String(object))
+        .map(([, , object]) =>
+          typeof object === "string" ||
+          typeof object === "number" ||
+          typeof object === "boolean"
+            ? String(object)
+            : String(object.value),
+        )
         .sort();
 
       return {
-        id: subject.split("/").at(-1) ?? "",
-        title: String(title ?? ""),
+        id: subject.value.split("/").at(-1) ?? "",
+        title: stringValue(graph, subject, ex.title),
         tags,
       };
     },

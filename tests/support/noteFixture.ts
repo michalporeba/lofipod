@@ -1,4 +1,9 @@
-import { defineEntity, defineVocabulary, rdf } from "../../src/index.js";
+import {
+  defineEntity,
+  defineVocabulary,
+  rdf,
+  stringValue,
+} from "../../src/index.js";
 import type { EntityDefinition, Triple } from "../../src/index.js";
 
 export type Note = {
@@ -43,16 +48,11 @@ export function createNoteFixture(): { entity: EntityDefinition<Note> } {
     },
     project(graph, { uri }) {
       const subject = uri();
-      const objectOf = (predicate: string) =>
-        graph.find(
-          ([subjectTerm, predicateTerm]) =>
-            subjectTerm === subject && predicateTerm === predicate,
-        )?.[2];
 
       return {
-        id: subject.split("/").at(-1) ?? "",
-        title: String(objectOf(ex.title) ?? ""),
-        body: String(objectOf(ex.body) ?? ""),
+        id: subject.value.split("/").at(-1) ?? "",
+        title: stringValue(graph, subject, ex.title),
+        body: stringValue(graph, subject, ex.body),
       };
     },
   });

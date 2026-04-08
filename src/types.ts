@@ -1,19 +1,20 @@
-export type Term = string | number | boolean;
+import type { NamedNode } from "n3";
+import type { RdfTerm, Term, Triple } from "./rdf.js";
 
-export type Triple = [subject: Term, predicate: Term, object: Term];
+export type { RdfTerm, Term, Triple };
 
 export type SyncMetadata = {
   observedRemoteChangeIds: string[];
 };
 
 export type ToRdfHelpers<T> = {
-  uri(entity: T): string;
-  child(path: string): string;
+  uri(entity: T): NamedNode;
+  child(path: string): NamedNode;
 };
 
 export type ProjectionHelpers = {
-  uri(): string;
-  child(path: string): string;
+  uri(): NamedNode;
+  child(path: string): NamedNode;
 };
 
 export type EntityDefinition<T> = {
@@ -21,9 +22,9 @@ export type EntityDefinition<T> = {
   pod: {
     basePath: string;
   };
-  rdfType: string;
+  rdfType: NamedNode;
   id(entity: T): string;
-  uri?(entity: T): string;
+  uri?(entity: T): NamedNode;
   toRdf(entity: T, helpers: ToRdfHelpers<T>): Triple[];
   project(graph: Triple[], helpers: ProjectionHelpers): T;
 };
@@ -100,7 +101,7 @@ export type PodSyncAdapter = {
   listCanonicalEntities?(input: {
     entityName: string;
     basePath: string;
-    rdfType: string;
+    rdfType: NamedNode;
   }): Promise<
     {
       entityId: string;

@@ -1,4 +1,11 @@
-import { defineEntity, defineVocabulary, rdf } from "../../src/index.js";
+import {
+  defineEntity,
+  defineVocabulary,
+  numberValue,
+  objectOf,
+  rdf,
+  stringValue,
+} from "../../src/index.js";
 import type { EntityDefinition, Triple } from "../../src/index.js";
 
 export type Event = {
@@ -58,17 +65,12 @@ export function createEventFixture(): { entity: EntityDefinition<Event> } {
     project(graph, { uri, child }) {
       const subject = uri();
       const time = child("time");
-      const objectOf = (target: string, predicate: string) =>
-        graph.find(
-          ([subjectTerm, predicateTerm]) =>
-            subjectTerm === target && predicateTerm === predicate,
-        )?.[2];
 
       return {
-        id: subject.split("/").at(-1) ?? "",
-        title: String(objectOf(subject, ex.title) ?? ""),
+        id: subject.value.split("/").at(-1) ?? "",
+        title: stringValue(graph, subject, ex.title),
         time: {
-          year: Number(objectOf(time, ex.year) ?? 0),
+          year: numberValue(graph, time, ex.year),
         },
       };
     },
@@ -123,21 +125,14 @@ export function createEventWithDetailsFixture(): {
     project(graph, { uri, child }) {
       const subject = uri();
       const time = child("time");
-      const objectOf = (target: string, predicate: string) =>
-        graph.find(
-          ([subjectTerm, predicateTerm]) =>
-            subjectTerm === target && predicateTerm === predicate,
-        )?.[2];
+      const description = objectOf(graph, subject, ex.description);
 
       return {
-        id: subject.split("/").at(-1) ?? "",
-        title: String(objectOf(subject, ex.title) ?? ""),
-        description:
-          typeof objectOf(subject, ex.description) === "string"
-            ? String(objectOf(subject, ex.description))
-            : undefined,
+        id: subject.value.split("/").at(-1) ?? "",
+        title: stringValue(graph, subject, ex.title),
+        description: typeof description === "string" ? description : undefined,
         time: {
-          year: Number(objectOf(time, ex.year) ?? 0),
+          year: numberValue(graph, time, ex.year),
         },
       };
     },

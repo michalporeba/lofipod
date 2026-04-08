@@ -6,6 +6,7 @@ import {
   defineVocabulary,
   packageVersion,
   rdf,
+  uri,
   type LocalChange,
   type LocalStorageAdapter,
   type LocalStorageTransaction,
@@ -20,13 +21,45 @@ import {
 import { createNoteFixture, type Note } from "./support/noteFixture.js";
 import { createTaggableNoteFixture } from "./support/taggableNoteFixture.js";
 
+function comparableTerm(term: Triple[number]): string | number | boolean {
+  if (typeof term === "string" || typeof term === "number" || typeof term === "boolean") {
+    return term;
+  }
+
+  return term.value;
+}
+
+function comparableTriples(triples: Triple[]) {
+  return triples.map(([subject, predicate, object]) => [
+    comparableTerm(subject),
+    comparableTerm(predicate),
+    comparableTerm(object),
+  ]);
+}
+
+function eventGraph(entityId: string, title: string, year: number): Triple[] {
+  const subject = uri(`https://example.com/id/event/${entityId}`);
+  const time = uri(`https://example.com/id/event/${entityId}#time`);
+
+  return [
+    [
+      subject,
+      uri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+      uri("https://example.com/ns#Event"),
+    ],
+    [subject, uri("https://example.com/ns#title"), title],
+    [subject, uri("https://example.com/ns#time"), time],
+    [time, uri("https://example.com/ns#year"), year],
+  ] satisfies Triple[];
+}
+
 describe("public API scaffold", () => {
   it("exposes the initial package version", () => {
     expect(packageVersion).toBe("0.1.0");
   });
 
   it("provides standard RDF terms", () => {
-    expect(rdf.type).toBe("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
+    expect(rdf.type.value).toBe("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
   });
 });
 
@@ -43,8 +76,8 @@ describe("defineVocabulary", () => {
       },
     });
 
-    expect(ex.Event).toBe("https://example.com/ns#Event");
-    expect(ex.title).toBe("https://example.com/ns#title");
+    expect(ex.Event.value).toBe("https://example.com/ns#Event");
+    expect(ex.title.value).toBe("https://example.com/ns#title");
   });
 
   it("binds the base IRI into the vocabulary uri factory", () => {
@@ -58,7 +91,7 @@ describe("defineVocabulary", () => {
       },
     });
 
-    expect(ex.uri({ entityName: "event", id: "ev-123" })).toBe(
+    expect(ex.uri({ entityName: "event", id: "ev-123" }).value).toBe(
       "https://example.com/id/event/ev-123",
     );
   });
@@ -70,7 +103,7 @@ describe("defineEntity", () => {
 
     expect(entity.name).toBe("event");
     expect(entity.pod.basePath).toBe("events/");
-    expect(entity.rdfType).toBe("https://example.com/ns#Event");
+    expect(entity.rdfType.value).toBe("https://example.com/ns#Event");
   });
 
   it("supports path-based child nodes for embedded one-to-one structures", () => {
@@ -85,17 +118,17 @@ describe("defineEntity", () => {
 
     const graph = entity.toRdf(event, {
       uri(currentEvent) {
-        return entity.uri?.(currentEvent) ?? "";
+        return entity.uri?.(currentEvent) ?? uri("");
       },
       child(path: string) {
-        return `child:${path}`;
+        return uri(`child:${path}`);
       },
     });
 
-    expect(graph).toEqual<Triple[]>([
+    expect(comparableTriples(graph)).toEqual([
       [
         "https://example.com/id/event/ev-123",
-        rdf.type,
+        rdf.type.value,
         "https://example.com/ns#Event",
       ],
       [
@@ -113,10 +146,10 @@ describe("defineEntity", () => {
 
     const projected = entity.project(graph, {
       uri() {
-        return "https://example.com/id/event/ev-123";
+        return uri("https://example.com/id/event/ev-123");
       },
       child(path: string) {
-        return `child:${path}`;
+        return uri(`child:${path}`);
       },
     });
 
@@ -133,17 +166,17 @@ describe("defineEntity", () => {
 
     const graph = entity.toRdf(note, {
       uri(currentNote) {
-        return entity.uri?.(currentNote) ?? "";
+        return entity.uri?.(currentNote) ?? uri("");
       },
       child(path: string) {
-        return `unused:${path}`;
+        return uri(`unused:${path}`);
       },
     });
 
-    expect(graph).toEqual<Triple[]>([
+    expect(comparableTriples(graph)).toEqual([
       [
         "https://example.com/id/note/note-1",
-        rdf.type,
+        rdf.type.value,
         "https://example.com/ns#Note",
       ],
       [
@@ -161,10 +194,10 @@ describe("defineEntity", () => {
     expect(
       entity.project(graph, {
         uri() {
-          return "https://example.com/id/note/note-1";
+          return uri("https://example.com/id/note/note-1");
         },
         child(path: string) {
-          return `unused:${path}`;
+          return uri(`unused:${path}`);
         },
       }),
     ).toEqual(note);
@@ -180,17 +213,17 @@ describe("defineEntity", () => {
 
     const graph = entity.toRdf(note, {
       uri(currentNote) {
-        return entity.uri?.(currentNote) ?? "";
+        return entity.uri?.(currentNote) ?? uri("");
       },
       child(path: string) {
-        return `unused:${path}`;
+        return uri(`unused:${path}`);
       },
     });
 
-    expect(graph).toEqual<Triple[]>([
+    expect(comparableTriples(graph)).toEqual([
       [
         "https://example.com/id/taggable-note/note-1",
-        rdf.type,
+        rdf.type.value,
         "https://example.com/ns#Note",
       ],
       [
@@ -213,10 +246,10 @@ describe("defineEntity", () => {
     expect(
       entity.project(graph, {
         uri() {
-          return "https://example.com/id/taggable-note/note-1";
+          return uri("https://example.com/id/taggable-note/note-1");
         },
         child(path: string) {
-          return `unused:${path}`;
+          return uri(`unused:${path}`);
         },
       }),
     ).toEqual({
@@ -404,7 +437,7 @@ describe("local persistence", () => {
       throw new Error("missing record");
     }
 
-    stored.graph[0]![0] = "https://example.com/id/event/mutated";
+    stored.graph[0]![0] = uri("https://example.com/id/event/mutated");
     (stored.projection as Event).title = "Mutated";
 
     await expect(storage.readEntity("event", "ev-123")).resolves.toMatchObject({
@@ -679,14 +712,14 @@ describe("graph deltas", () => {
     const changes = await storage.listChanges("event", "ev-123");
     const latest = changes.at(-1);
 
-    expect(latest?.assertions).toEqual([
+    expect(comparableTriples(latest?.assertions ?? [])).toEqual([
       [
         "https://example.com/id/event/ev-123",
         "https://example.com/ns#title",
         "Updated",
       ],
     ]);
-    expect(latest?.retractions).toEqual([
+    expect(comparableTriples(latest?.retractions ?? [])).toEqual([
       [
         "https://example.com/id/event/ev-123",
         "https://example.com/ns#title",
@@ -722,14 +755,14 @@ describe("graph deltas", () => {
     const changes = await storage.listChanges("event", "ev-123");
     const latest = changes.at(-1);
 
-    expect(latest?.assertions).toEqual([
+    expect(comparableTriples(latest?.assertions ?? [])).toEqual([
       [
         "https://example.com/id/event/ev-123#time",
         "https://example.com/ns#year",
         2025,
       ],
     ]);
-    expect(latest?.retractions).toEqual([
+    expect(comparableTriples(latest?.retractions ?? [])).toEqual([
       [
         "https://example.com/id/event/ev-123#time",
         "https://example.com/ns#year",
@@ -766,8 +799,8 @@ describe("graph deltas", () => {
     const changes = await storage.listChanges("event", "ev-123");
     const latest = changes.at(-1);
 
-    expect(latest?.assertions).toEqual([]);
-    expect(latest?.retractions).toEqual([
+    expect(comparableTriples(latest?.assertions ?? [])).toEqual([]);
+    expect(comparableTriples(latest?.retractions ?? [])).toEqual([
       [
         "https://example.com/id/event/ev-123",
         "https://example.com/ns#description",
@@ -822,7 +855,11 @@ describe("graph deltas", () => {
 
     const changes = await storage.listChanges("note", "note-1");
 
-    expect(changes.at(-1)).toMatchObject({
+    expect({
+      ...changes.at(-1),
+      assertions: comparableTriples(changes.at(-1)?.assertions ?? []),
+      retractions: comparableTriples(changes.at(-1)?.retractions ?? []),
+    }).toMatchObject({
       assertions: [
         [
           "https://example.com/id/note/note-1",
@@ -864,14 +901,14 @@ describe("graph deltas", () => {
       -1,
     );
 
-    expect(addChange?.assertions).toEqual([
+    expect(comparableTriples(addChange?.assertions ?? [])).toEqual([
       [
         "https://example.com/id/taggable-note/note-1",
         "https://example.com/ns#tag",
         "beta",
       ],
     ]);
-    expect(addChange?.retractions).toEqual([]);
+    expect(comparableTriples(addChange?.retractions ?? [])).toEqual([]);
 
     await engine.save("taggable-note", {
       id: "note-1",
@@ -883,8 +920,8 @@ describe("graph deltas", () => {
       await storage.listChanges("taggable-note", "note-1")
     ).at(-1);
 
-    expect(removeChange?.assertions).toEqual([]);
-    expect(removeChange?.retractions).toEqual([
+    expect(comparableTriples(removeChange?.assertions ?? [])).toEqual([]);
+    expect(comparableTriples(removeChange?.retractions ?? [])).toEqual([
       [
         "https://example.com/id/taggable-note/note-1",
         "https://example.com/ns#tag",
@@ -1258,7 +1295,7 @@ describe("mocked entity sync", () => {
       entityId: string;
       path: string;
       rootUri: string;
-      rdfType: string;
+      rdfType: ReturnType<typeof uri>;
       graph: Triple[];
     }> = [];
 
@@ -1293,14 +1330,14 @@ describe("mocked entity sync", () => {
         async listCanonicalEntities(input: {
           entityName: string;
           basePath: string;
-          rdfType: string;
+          rdfType: ReturnType<typeof uri>;
         }) {
           return canonicalEntities
             .filter(
               (entity) =>
                 entity.entityName === input.entityName &&
                 entity.path.startsWith(input.basePath) &&
-                entity.rdfType === input.rdfType,
+                entity.rdfType.value === input.rdfType.value,
             )
             .map((entity) => ({
               entityId: entity.entityId,
@@ -1674,28 +1711,7 @@ describe("mocked entity sync", () => {
       path: "events/ev-remote.ttl",
       rootUri: "https://example.com/id/event/ev-remote",
       rdfType: entity.rdfType,
-      graph: [
-        [
-          "https://example.com/id/event/ev-remote",
-          rdf.type,
-          "https://example.com/ns#Event",
-        ],
-        [
-          "https://example.com/id/event/ev-remote",
-          "https://example.com/ns#title",
-          "Remote",
-        ],
-        [
-          "https://example.com/id/event/ev-remote",
-          "https://example.com/ns#time",
-          "https://example.com/id/event/ev-remote#time",
-        ],
-        [
-          "https://example.com/id/event/ev-remote#time",
-          "https://example.com/ns#year",
-          2024,
-        ],
-      ],
+      graph: eventGraph("ev-remote", "Remote", 2024),
     });
     const engine = createEngine({
       entities: [entity],
@@ -1729,28 +1745,7 @@ describe("mocked entity sync", () => {
       path: "events/ev-remote.ttl",
       rootUri: "https://example.com/id/event/ev-remote",
       rdfType: entity.rdfType,
-      graph: [
-        [
-          "https://example.com/id/event/ev-remote",
-          rdf.type,
-          "https://example.com/ns#Event",
-        ],
-        [
-          "https://example.com/id/event/ev-remote",
-          "https://example.com/ns#title",
-          "Remote",
-        ],
-        [
-          "https://example.com/id/event/ev-remote",
-          "https://example.com/ns#time",
-          "https://example.com/id/event/ev-remote#time",
-        ],
-        [
-          "https://example.com/id/event/ev-remote#time",
-          "https://example.com/ns#year",
-          2024,
-        ],
-      ],
+      graph: eventGraph("ev-remote", "Remote", 2024),
     });
     remote.logEntries.push({
       entityName: "event",
@@ -1761,15 +1756,15 @@ describe("mocked entity sync", () => {
       rootUri: "https://example.com/id/event/ev-remote",
       assertions: [
         [
-          "https://example.com/id/event/ev-remote",
-          "https://example.com/ns#title",
+          uri("https://example.com/id/event/ev-remote"),
+          uri("https://example.com/ns#title"),
           "Historical",
         ],
       ],
       retractions: [
         [
-          "https://example.com/id/event/ev-remote",
-          "https://example.com/ns#title",
+          uri("https://example.com/id/event/ev-remote"),
+          uri("https://example.com/ns#title"),
           "Remote",
         ],
       ],
@@ -1809,28 +1804,7 @@ describe("mocked entity sync", () => {
       path: "events/ev-123.ttl",
       rootUri: "https://example.com/id/event/ev-123",
       rdfType: entity.rdfType,
-      graph: [
-        [
-          "https://example.com/id/event/ev-123",
-          rdf.type,
-          "https://example.com/ns#Event",
-        ],
-        [
-          "https://example.com/id/event/ev-123",
-          "https://example.com/ns#title",
-          "Remote title",
-        ],
-        [
-          "https://example.com/id/event/ev-123",
-          "https://example.com/ns#time",
-          "https://example.com/id/event/ev-123#time",
-        ],
-        [
-          "https://example.com/id/event/ev-123#time",
-          "https://example.com/ns#year",
-          2024,
-        ],
-      ],
+      graph: eventGraph("ev-123", "Remote title", 2024),
     });
     const storage = createMemoryStorage();
     const engine = createEngine({

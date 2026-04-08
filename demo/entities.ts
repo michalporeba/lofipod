@@ -1,19 +1,23 @@
 import {
   defineEntity,
   defineVocabulary,
+  isNamedNodeTerm,
+  objectOf,
   rdf,
+  stringValue,
   type EntityDefinition,
   type Triple,
+  uri,
 } from "../src/index.js";
 
 const schema = {
-  name: "https://schema.org/name",
-  text: "https://schema.org/text",
+  name: uri("https://schema.org/name"),
+  text: uri("https://schema.org/text"),
 } as const;
 
 const dct = {
-  created: "http://purl.org/dc/terms/created",
-  modified: "http://purl.org/dc/terms/modified",
+  created: uri("http://purl.org/dc/terms/created"),
+  modified: uri("http://purl.org/dc/terms/modified"),
 } as const;
 
 export type Task = {
@@ -54,27 +58,16 @@ export const mlg = defineVocabulary({
   },
 });
 
-function objectOf(
-  graph: Triple[],
-  target: string,
-  predicate: string,
-): Triple[2] | undefined {
-  return graph.find(
-    ([subjectTerm, predicateTerm]) =>
-      subjectTerm === target && predicateTerm === predicate,
-  )?.[2];
-}
-
-function statusToTerm(status: Task["status"]): string {
+function statusToTerm(status: Task["status"]) {
   return status === "done" ? mlg.Done : mlg.Todo;
 }
 
 function termToStatus(value: Triple[2] | undefined): Task["status"] {
-  return value === mlg.Done ? "done" : "todo";
+  return isNamedNodeTerm(value) && value.value === mlg.Done.value ? "done" : "todo";
 }
 
-function idFromUri(subject: string): string {
-  return subject.split("/").at(-1) ?? "";
+function idFromUri(subject: { value: string }): string {
+  return subject.value.split("/").at(-1) ?? "";
 }
 
 export const TaskEntity: EntityDefinition<Task> = defineEntity<Task>({
@@ -106,14 +99,14 @@ export const TaskEntity: EntityDefinition<Task> = defineEntity<Task>({
 
     return {
       id: idFromUri(subject),
-      title: String(objectOf(graph, subject, schema.name) ?? ""),
+      title: stringValue(graph, subject, schema.name),
       status: termToStatus(objectOf(graph, subject, mlg.status)),
       due:
         typeof objectOf(graph, subject, mlg.due) === "string"
           ? String(objectOf(graph, subject, mlg.due))
           : undefined,
-      createdAt: String(objectOf(graph, subject, dct.created) ?? ""),
-      modifiedAt: String(objectOf(graph, subject, dct.modified) ?? ""),
+      createdAt: stringValue(graph, subject, dct.created),
+      modifiedAt: stringValue(graph, subject, dct.modified),
     };
   },
 });
@@ -161,13 +154,13 @@ export const JournalEntryEntity: EntityDefinition<JournalEntry> =
 
       return {
         id: idFromUri(subject),
-        title: String(objectOf(graph, subject, schema.name) ?? ""),
-        text: String(objectOf(graph, subject, schema.text) ?? ""),
-        entryDate: String(objectOf(graph, subject, mlg.entryDate) ?? ""),
+        title: stringValue(graph, subject, schema.name),
+        text: stringValue(graph, subject, schema.text),
+        entryDate: stringValue(graph, subject, mlg.entryDate),
         aboutTaskId:
-          typeof aboutTask === "string" ? idFromUri(aboutTask) : undefined,
-        createdAt: String(objectOf(graph, subject, dct.created) ?? ""),
-        modifiedAt: String(objectOf(graph, subject, dct.modified) ?? ""),
+          isNamedNodeTerm(aboutTask) ? idFromUri(aboutTask) : undefined,
+        createdAt: stringValue(graph, subject, dct.created),
+        modifiedAt: stringValue(graph, subject, dct.modified),
       };
     },
   });

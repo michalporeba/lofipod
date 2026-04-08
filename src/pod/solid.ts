@@ -3,7 +3,13 @@ import type {
   PodLogAppendRequest,
   PodSyncAdapter,
 } from "../types.js";
-import { publicTriplesToRdfTriples, rdfTermToN3 } from "../rdf.js";
+import {
+  isNamedNodeTerm,
+  literal,
+  publicTriplesToRdfTriples,
+  rdfTermToN3,
+  uri,
+} from "../rdf.js";
 
 type SolidPodAdapterOptions = {
   podBaseUrl: string;
@@ -46,15 +52,15 @@ function parseQuotedLiteral(value: string): string {
   return JSON.parse(value);
 }
 
-function parseTerm(term: string): string | number | boolean {
+function parseTerm(term: string) {
   const trimmed = term.trim();
 
   if (trimmed.startsWith("<") && trimmed.endsWith(">")) {
-    return trimmed.slice(1, -1);
+    return uri(trimmed.slice(1, -1));
   }
 
   if (trimmed.startsWith('"')) {
-    return parseQuotedLiteral(trimmed);
+    return literal(parseQuotedLiteral(trimmed));
   }
 
   if (trimmed === "true" || trimmed === "false") {
@@ -71,11 +77,7 @@ function parseTerm(term: string): string | number | boolean {
 }
 
 function parseSimpleTurtleTriples(body: string) {
-  const triples: [
-    string | number | boolean,
-    string | number | boolean,
-    string | number | boolean,
-  ][] = [];
+  const triples: PodEntityPatchRequest["assertions"] = [];
 
   for (const line of body.split("\n")) {
     const trimmed = line.trim();
@@ -96,11 +98,15 @@ function parseSimpleTurtleTriples(body: string) {
       continue;
     }
 
-    triples.push([
-      parseTerm(match[1]!),
-      parseTerm(match[2]!),
-      parseTerm(match[3]!),
-    ]);
+    const subject = parseTerm(match[1]!);
+    const predicate = parseTerm(match[2]!);
+    const object = parseTerm(match[3]!);
+
+    if (!isNamedNodeTerm(subject) || !isNamedNodeTerm(predicate)) {
+      continue;
+    }
+
+    triples.push([subject, predicate, object]);
   }
 
   return triples;
@@ -243,7 +249,19 @@ export function createSolidPodAdapter(
               "Content-Type": "text/turtle",
               "If-None-Match": "*",
             },
-            body: serializeTriples(request.assertions),
+            body: serializeTriples(request.assertions, {
+              rdfType: request.assertions.find(
+                ([, predicate]) => predicate.value === RDF_TYPE,
+              )?.[2] && isNamedNodeTerm(
+                request.assertions.find(([, predicate]) => predicate.value === RDF_TYPE)?.[2],
+              )
+                ? (
+                    request.assertions.find(([, predicate]) => predicate.value === RDF_TYPE)?.[2] as {
+                      value: string;
+                    }
+                  ).value
+                : undefined,
+            }),
           },
         );
 
@@ -349,10 +367,12 @@ export function createSolidPodAdapter(
         const graph = parseSimpleTurtleTriples(body);
         const rootUri = graph.find(
           ([_, predicate, object]) =>
-            predicate === RDF_TYPE && object === input.rdfType,
+            predicate.value === RDF_TYPE &&
+            isNamedNodeTerm(object) &&
+            object.value === input.rdfType.value,
         )?.[0];
 
-        if (typeof rootUri !== "string") {
+        if (!isNamedNodeTerm(rootUri)) {
           continue;
         }
 
@@ -363,7 +383,7 @@ export function createSolidPodAdapter(
               .at(-1)
               ?.replace(/\.ttl$/, "") ?? "",
           path,
-          rootUri,
+          rootUri: rootUri.value,
           graph,
         });
       }

@@ -142,7 +142,14 @@ operations in the common case.
 ## Example
 
 ```ts
-import { createEngine, defineEntity, defineVocabulary, rdf } from "lofipod";
+import {
+  createEngine,
+  defineEntity,
+  defineVocabulary,
+  numberValue,
+  rdf,
+  stringValue,
+} from "lofipod";
 
 const ex = defineVocabulary({
   base: "https://example.com/",
@@ -190,10 +197,10 @@ const eventEntity = defineEntity<Event>({
     const time = child("time");
 
     return {
-      id: idFromUri(subject),
-      title: objectOf(graph, subject, ex.title),
+      id: idFromUri(subject.value),
+      title: stringValue(graph, subject, ex.title),
       time: {
-        year: numberObjectOf(graph, time, ex.year),
+        year: numberValue(graph, time, ex.year),
       },
     };
   },

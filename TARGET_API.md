@@ -65,10 +65,10 @@ const EventEntity = defineEntity<Event>({
     const time = child("time");
 
     return {
-      id: idFromUri(subject),
-      title: objectOf(graph, subject, ex.title),
+      id: idFromUri(subject.value),
+      title: stringValue(graph, subject, ex.title),
       time: {
-        year: numberObjectOf(graph, time, ex.year),
+        year: numberValue(graph, time, ex.year),
       },
     };
   },
@@ -94,16 +94,20 @@ Where:
 Expanded sketch:
 
 ```ts
-type Triple = [subject: Term, predicate: Term, object: Term];
+type Triple = [
+  subject: NamedNode,
+  predicate: NamedNode,
+  object: RdfTerm | string | number | boolean,
+];
 
 type ToRdfHelpers<T> = {
-  uri(entity: T): Term;
-  child(path: string): Term;
+  uri(entity: T): NamedNode;
+  child(path: string): NamedNode;
 };
 
 type ProjectionHelpers = {
-  uri(): Term;
-  child(path: string): Term;
+  uri(): NamedNode;
+  child(path: string): NamedNode;
 };
 ```
 

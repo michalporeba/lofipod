@@ -2,7 +2,6 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { DataFactory } from "n3";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -10,7 +9,11 @@ import {
   createSqliteStorage,
   defineEntity,
   defineVocabulary,
+  literal,
+  objectOf,
   rdf,
+  stringValue,
+  uri,
   type Triple,
 } from "../src/index.js";
 import { createEventFixture } from "./support/eventFixture.js";
@@ -139,7 +142,7 @@ describe("createSqliteStorage", () => {
       throw new Error("missing stored record");
     }
 
-    stored.graph[0]![0] = "https://example.com/id/event/mutated";
+    stored.graph[0]![0] = uri("https://example.com/id/event/mutated");
     stored.projection = {
       id: "ev-123",
       title: "Mutated",
@@ -194,20 +197,16 @@ describe("createSqliteStorage", () => {
           [
             subject,
             ex.url,
-            DataFactory.literal(bookmark.url) as unknown as string,
+            literal(bookmark.url),
           ],
         ] satisfies Triple[];
       },
       project(graph, { uri }) {
         const subject = uri();
-        const url = graph.find(
-          ([subjectTerm, predicateTerm]) =>
-            subjectTerm === subject && predicateTerm === ex.url,
-        )?.[2];
 
         return {
-          id: subject.split("/").at(-1) ?? "",
-          url: String(url ?? ""),
+          id: subject.value.split("/").at(-1) ?? "",
+          url: stringValue(graph, subject, ex.url),
         };
       },
     });

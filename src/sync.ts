@@ -40,7 +40,7 @@ export async function readSyncState(
 
 function triplesToN3(
   triples: LocalChange["assertions"],
-  options: { rdfType?: string } = {},
+  options: { rdfType?: EntityDefinition<unknown>["rdfType"] } = {},
 ): string {
   return publicTriplesToRdfTriples(triples, options)
     .map(

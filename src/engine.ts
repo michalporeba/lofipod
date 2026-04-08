@@ -13,6 +13,7 @@ import {
 import {
   publicTriplesToRdfTriples,
   rdfTriplesToPublicTriples,
+  uri,
 } from "./rdf.js";
 import {
   createEntityPatchRequest,
@@ -117,12 +118,12 @@ export function createEngine(config: EngineConfig): Engine {
       const definition = requireEntity(entityName) as EntityDefinition<T>;
       const entityId = definition.id(entity);
       const rootUri =
-        definition.uri?.(entity) ?? fallbackRootUri(definition.name, entityId);
+        definition.uri?.(entity) ?? uri(fallbackRootUri(definition.name, entityId));
       const previousRecord = await storage.readEntity(
         definition.name,
         entityId,
       );
-      const graph = definition.toRdf(entity, createToRdfHelpers(rootUri));
+      const graph = definition.toRdf(entity, createToRdfHelpers(rootUri.value));
       const internalGraph = publicTriplesToRdfTriples(graph, {
         rdfType: definition.rdfType,
       });
@@ -310,10 +311,10 @@ export function createEngine(config: EngineConfig): Engine {
             const updatedOrder = transaction.nextUpdatedOrder();
             const nextProjection = definition.project(nextPublicGraph, {
               uri() {
-                return existingRecord?.rootUri ?? entry.rootUri;
+                return uri(existingRecord?.rootUri ?? entry.rootUri);
               },
               child(path) {
-                return `${existingRecord?.rootUri ?? entry.rootUri}#${path}`;
+                return uri(`${existingRecord?.rootUri ?? entry.rootUri}#${path}`);
               },
             });
 

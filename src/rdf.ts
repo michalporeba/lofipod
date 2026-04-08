@@ -1,7 +1,5 @@
 import { DataFactory, type BlankNode, type Literal, type NamedNode } from "n3";
 
-import type { Term, Triple } from "./types.js";
-
 const XSD_BOOLEAN = "http://www.w3.org/2001/XMLSchema#boolean";
 const XSD_INTEGER = "http://www.w3.org/2001/XMLSchema#integer";
 const XSD_DECIMAL = "http://www.w3.org/2001/XMLSchema#decimal";
@@ -10,14 +8,17 @@ const XSD_STRING = "http://www.w3.org/2001/XMLSchema#string";
 const INTERNAL_TRIPLES = "__lofipod_internal_rdf_triples";
 
 export const { blankNode, literal, namedNode } = DataFactory;
+export const uri = namedNode;
 
-export type RdfSubject = NamedNode | BlankNode;
+export type RdfSubject = NamedNode;
 export type RdfTerm = NamedNode | BlankNode | Literal;
+export type Term = RdfTerm | string | number | boolean;
 export type RdfTriple = [
   subject: RdfSubject,
   predicate: NamedNode,
   object: RdfTerm,
 ];
+export type Triple = [subject: NamedNode, predicate: NamedNode, object: Term];
 
 type SerializedRdfTerm =
   | {
@@ -49,7 +50,7 @@ type StoredTriplesValue =
     };
 
 type ToRdfTriplesOptions = {
-  rdfType?: string;
+  rdfType?: string | NamedNode;
 };
 
 function isRdfJsTerm(value: unknown): value is RdfTerm {
@@ -72,8 +73,8 @@ function isUriLike(value: string): boolean {
   );
 }
 
-function resourceTerm(value: string): RdfSubject {
-  return value.startsWith("_:") ? blankNode(value.slice(2)) : namedNode(value);
+function resourceTerm(value: string): NamedNode {
+  return namedNode(value);
 }
 
 function asRdfSubject(value: string | RdfTerm): RdfSubject {
@@ -81,11 +82,11 @@ function asRdfSubject(value: string | RdfTerm): RdfSubject {
     return resourceTerm(value);
   }
 
-  if (value.termType === "NamedNode" || value.termType === "BlankNode") {
+  if (value.termType === "NamedNode") {
     return value;
   }
 
-  throw new Error("RDF subjects must be named nodes or blank nodes.");
+  throw new Error("RDF subjects must be named nodes.");
 }
 
 function asRdfPredicate(value: string | RdfTerm): NamedNode {
@@ -173,8 +174,7 @@ function deserializeRdfTriple([
   const deserializedObject = deserializeRdfTerm(object);
 
   if (
-    (deserializedSubject.termType !== "NamedNode" &&
-      deserializedSubject.termType !== "BlankNode") ||
+    deserializedSubject.termType !== "NamedNode" ||
     deserializedPredicate.termType !== "NamedNode"
   ) {
     throw new Error("Invalid serialized RDF triple.");
@@ -238,19 +238,16 @@ export function decodeStoredTriples(value: StoredTriplesValue): Triple[] {
     return clonePublicTriples(value);
   }
 
-  return attachInternalTriples(
-    clonePublicTriples(value.triples),
-    value.internal.map(deserializeRdfTriple),
-  );
+  return rdfTriplesToPublicTriples(value.internal.map(deserializeRdfTriple));
 }
 
 export function rdfTermToPublicTerm(term: RdfTerm): Term {
   if (term.termType === "NamedNode") {
-    return term.value;
+    return term;
   }
 
   if (term.termType === "BlankNode") {
-    return `_:${term.value}`;
+    return term;
   }
 
   if (term.datatype.value === XSD_BOOLEAN) {
@@ -271,8 +268,8 @@ export function rdfTermToPublicTerm(term: RdfTerm): Term {
 export function rdfTriplesToPublicTriples(triples: RdfTriple[]): Triple[] {
   return attachInternalTriples(
     triples.map(([subject, predicate, object]) => [
-      rdfTermToPublicTerm(subject),
-      rdfTermToPublicTerm(predicate),
+      subject,
+      predicate,
       rdfTermToPublicTerm(object),
     ]),
     triples,
@@ -302,7 +299,9 @@ export function publicTriplesToRdfTriples(
   }
 
   if (options.rdfType) {
-    knownResourceTerms.add(options.rdfType);
+    knownResourceTerms.add(
+      typeof options.rdfType === "string" ? options.rdfType : options.rdfType.value,
+    );
   }
 
   return triples.map(([subject, predicate, object]) => {
@@ -366,4 +365,100 @@ export function rdfTermToN3(term: RdfTerm): string {
   }
 
   return `${escaped}^^<${term.datatype.value}>`;
+}
+
+export function isNamedNodeTerm(value: unknown): value is NamedNode {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "termType" in value &&
+    "value" in value &&
+    (value as { termType?: unknown }).termType === "NamedNode" &&
+    typeof (value as { value?: unknown }).value === "string"
+  );
+}
+
+export function objectOf(
+  graph: Triple[],
+  subject: NamedNode,
+  predicate: NamedNode,
+): Triple[2] | undefined {
+  const sameNode = (left: unknown, right: NamedNode): boolean => {
+    if (isNamedNodeTerm(left)) {
+      return left.value === right.value;
+    }
+
+    return typeof left === "string" && left === right.value;
+  };
+
+  return graph.find(
+    ([subjectTerm, predicateTerm]) =>
+      sameNode(subjectTerm, subject) && sameNode(predicateTerm, predicate),
+  )?.[2];
+}
+
+export function stringValue(
+  graph: Triple[],
+  subject: NamedNode,
+  predicate: NamedNode,
+): string {
+  const value = objectOf(graph, subject, predicate);
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  if (!value) {
+    return "";
+  }
+
+  return typeof value === "string" ? value : value.value;
+}
+
+export function numberValue(
+  graph: Triple[],
+  subject: NamedNode,
+  predicate: NamedNode,
+): number {
+  const value = objectOf(graph, subject, predicate);
+
+  if (typeof value === "number") {
+    return value;
+  }
+
+  if (typeof value === "boolean") {
+    return Number(value);
+  }
+
+  if (!value) {
+    return 0;
+  }
+
+  return Number(typeof value === "string" ? value : value.value);
+}
+
+export function booleanValue(
+  graph: Triple[],
+  subject: NamedNode,
+  predicate: NamedNode,
+): boolean {
+  const value = objectOf(graph, subject, predicate);
+
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    return value !== 0;
+  }
+
+  if (!value) {
+    return false;
+  }
+
+  return (typeof value === "string" ? value : value.value) === "true";
 }

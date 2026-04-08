@@ -21,7 +21,9 @@ import {
   createMemoryStorage,
   defineEntity,
   defineVocabulary,
+  numberValue,
   rdf,
+  stringValue,
 } from "lofipod";
 
 const ex = defineVocabulary({
@@ -73,17 +75,12 @@ const EventEntity = defineEntity<Event>({
   project(graph, { uri, child }) {
     const subject = uri();
     const time = child("time");
-    const objectOf = (target: string, predicate: string) =>
-      graph.find(
-        ([subjectTerm, predicateTerm]) =>
-          subjectTerm === target && predicateTerm === predicate,
-      )?.[2];
 
     return {
-      id: subject.split("/").at(-1) ?? "",
-      title: String(objectOf(subject, ex.title) ?? ""),
+      id: subject.value.split("/").at(-1) ?? "",
+      title: stringValue(graph, subject, ex.title),
       time: {
-        year: Number(objectOf(time, ex.year) ?? 0),
+        year: numberValue(graph, time, ex.year),
       },
     };
   },

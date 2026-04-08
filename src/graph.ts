@@ -6,7 +6,7 @@ import type {
   Triple,
 } from "./types.js";
 import type { RdfTriple } from "./rdf.js";
-import { publicTriplesToRdfTriples, rdfTripleKey } from "./rdf.js";
+import { publicTriplesToRdfTriples, rdfTripleKey, uri } from "./rdf.js";
 
 export function fallbackRootUri(entityName: string, id: string): string {
   return `lofipod://entity/${entityName}/${id}`;
@@ -19,10 +19,10 @@ export function createChildUri(rootUri: string, path: string): string {
 export function createToRdfHelpers<T>(rootUri: string): ToRdfHelpers<T> {
   return {
     uri() {
-      return rootUri;
+      return uri(rootUri);
     },
     child(path) {
-      return createChildUri(rootUri, path);
+      return uri(createChildUri(rootUri, path));
     },
   };
 }
@@ -30,10 +30,10 @@ export function createToRdfHelpers<T>(rootUri: string): ToRdfHelpers<T> {
 export function createProjectionHelpers(rootUri: string): ProjectionHelpers {
   return {
     uri() {
-      return rootUri;
+      return uri(rootUri);
     },
     child(path) {
-      return createChildUri(rootUri, path);
+      return uri(createChildUri(rootUri, path));
     },
   };
 }
@@ -47,14 +47,14 @@ export function createStoredRecord<T>(
 ): StoredEntityRecord<T> {
   const rootUri =
     definition.uri?.(entity) ??
-    fallbackRootUri(definition.name, definition.id(entity));
+    uri(fallbackRootUri(definition.name, definition.id(entity)));
   const projection = definition.project(
     graph,
-    createProjectionHelpers(rootUri),
+    createProjectionHelpers(rootUri.value),
   );
 
   return {
-    rootUri,
+    rootUri: rootUri.value,
     graph,
     projection,
     lastChangeId: changeId,

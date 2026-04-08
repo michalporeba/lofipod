@@ -2,7 +2,7 @@ import "fake-indexeddb/auto";
 
 import { describe, expect, it } from "vitest";
 
-import { createEngine, createIndexedDbStorage } from "../src/index.js";
+import { createEngine, createIndexedDbStorage, uri } from "../src/index.js";
 import { createEventFixture } from "./support/eventFixture.js";
 
 describe("createIndexedDbStorage", () => {
@@ -115,7 +115,7 @@ describe("createIndexedDbStorage", () => {
       throw new Error("missing stored record");
     }
 
-    stored.graph[0]![0] = "https://example.com/id/event/mutated";
+    stored.graph[0]![0] = uri("https://example.com/id/event/mutated");
     stored.projection = {
       id: "ev-123",
       title: "Mutated",
