@@ -31,10 +31,8 @@ import type {
   SyncState,
 } from "./types.js";
 
-function createChangeId(entityName: string, id: string): string {
-  return `${entityName}:${id}:${Date.now()}:${Math.random()
-    .toString(36)
-    .slice(2)}`;
+function createChangeId(): string {
+  return globalThis.crypto.randomUUID();
 }
 
 async function repairStoredProjection<T>(
@@ -146,7 +144,7 @@ export function createEngine(config: EngineConfig): Engine {
       const storedAssertions = rdfTriplesToPublicTriples(assertions);
       const storedRetractions = rdfTriplesToPublicTriples(retractions);
 
-      const changeId = createChangeId(definition.name, entityId);
+      const changeId = createChangeId();
 
       const storedRecord = await storage.transact((transaction) => {
         const updatedOrder = transaction.nextUpdatedOrder();

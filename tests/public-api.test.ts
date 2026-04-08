@@ -394,6 +394,35 @@ describe("local persistence", () => {
     expect(changes[0]?.retractions).toHaveLength(0);
   });
 
+  it("generates unique change IDs across rapid saves", async () => {
+    const { entity } = createEventFixture();
+    const storage = createMemoryStorage();
+    const engine = createEngine({
+      entities: [entity],
+      storage,
+    });
+
+    for (let year = 2020; year < 2030; year += 1) {
+      await engine.save("event", {
+        id: "ev-rapid",
+        title: `Version ${year}`,
+        time: {
+          year,
+        },
+      });
+    }
+
+    const changeIds = (await storage.listChanges("event", "ev-rapid")).map(
+      (change) => change.changeId,
+    );
+
+    expect(changeIds).toHaveLength(10);
+    expect(new Set(changeIds).size).toBe(changeIds.length);
+    expect(changeIds.every((changeId) => typeof changeId === "string")).toBe(
+      true,
+    );
+  });
+
   it("survives engine recreation with the same storage adapter", async () => {
     const { entity } = createEventFixture();
     const storage = createMemoryStorage();
