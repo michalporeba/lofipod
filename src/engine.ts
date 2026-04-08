@@ -118,7 +118,8 @@ export function createEngine(config: EngineConfig): Engine {
       const definition = requireEntity(entityName) as EntityDefinition<T>;
       const entityId = definition.id(entity);
       const rootUri =
-        definition.uri?.(entity) ?? uri(fallbackRootUri(definition.name, entityId));
+        definition.uri?.(entity) ??
+        uri(fallbackRootUri(definition.name, entityId));
       const previousRecord = await storage.readEntity(
         definition.name,
         entityId,
@@ -314,7 +315,9 @@ export function createEngine(config: EngineConfig): Engine {
                 return uri(existingRecord?.rootUri ?? entry.rootUri);
               },
               child(path) {
-                return uri(`${existingRecord?.rootUri ?? entry.rootUri}#${path}`);
+                return uri(
+                  `${existingRecord?.rootUri ?? entry.rootUri}#${path}`,
+                );
               },
             });
 

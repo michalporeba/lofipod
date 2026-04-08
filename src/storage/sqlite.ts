@@ -10,7 +10,6 @@ import type {
   LocalStorageTransaction,
   StoredEntityRecord,
   SyncMetadata,
-  Triple,
 } from "../types.js";
 import { decodeStoredTriples, encodeStoredTriples } from "../rdf.js";
 import {
@@ -296,7 +295,9 @@ export function createSqliteStorage(
     },
 
     async listEntities(entityName) {
-      return listEntitiesStatement.all(entityName).map(hydrateListedEntityRecord);
+      return listEntitiesStatement
+        .all(entityName)
+        .map(hydrateListedEntityRecord);
     },
 
     async listChanges(entityName, entityId) {
@@ -326,9 +327,7 @@ export function createSqliteStorage(
       const row = readMetaStatement.get(SYNC_METADATA_KEY);
 
       return cloneSyncMetadata(
-        row
-          ? parseJson<SyncMetadata>(row.value)
-          : createDefaultSyncMetadata(),
+        row ? parseJson<SyncMetadata>(row.value) : createDefaultSyncMetadata(),
       );
     },
 

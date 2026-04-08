@@ -164,11 +164,7 @@ describe("Solid pod adapter", () => {
           uri("https://example.com/ns#time"),
           blankNode("time"),
         ],
-        [
-          blankNode("time"),
-          uri("https://example.com/ns#year"),
-          2024,
-        ],
+        [blankNode("time"), uri("https://example.com/ns#year"), 2024],
       ],
       retractions: [
         [

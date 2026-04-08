@@ -89,8 +89,12 @@ export function diffTriples(previous: RdfTriple[], next: RdfTriple[]) {
   const nextKeys = new Set(next.map(rdfTripleKey));
 
   return {
-    assertions: next.filter((triple) => !previousKeys.has(rdfTripleKey(triple))),
-    retractions: previous.filter((triple) => !nextKeys.has(rdfTripleKey(triple))),
+    assertions: next.filter(
+      (triple) => !previousKeys.has(rdfTripleKey(triple)),
+    ),
+    retractions: previous.filter(
+      (triple) => !nextKeys.has(rdfTripleKey(triple)),
+    ),
   };
 }
 

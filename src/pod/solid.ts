@@ -1,4 +1,11 @@
-import { Parser, Writer, type BlankNode, type Literal, type NamedNode, type Quad } from "n3";
+import {
+  Parser,
+  Writer,
+  type BlankNode,
+  type Literal,
+  type NamedNode,
+  type Quad,
+} from "n3";
 import type {
   PodEntityPatchRequest,
   PodLogAppendRequest,
@@ -64,7 +71,9 @@ function findRdfType(
   return isNamedNodeTerm(rdfType) ? rdfType.value : undefined;
 }
 
-function isSubjectNode(term: Quad["subject"] | Quad["object"]): term is SubjectNode {
+function isSubjectNode(
+  term: Quad["subject"] | Quad["object"],
+): term is SubjectNode {
   return term.termType === "NamedNode" || term.termType === "BlankNode";
 }
 
@@ -104,9 +113,12 @@ function serializeRdfTriples(
 ) {
   const writer = new Writer({ format: options.format ?? "Turtle" });
 
-  for (const [subject, predicate, object] of publicTriplesToRdfTriples(triples, {
-    rdfType: options.rdfType,
-  })) {
+  for (const [subject, predicate, object] of publicTriplesToRdfTriples(
+    triples,
+    {
+      rdfType: options.rdfType,
+    },
+  )) {
     writer.addQuad(subject, predicate, object);
   }
 
@@ -135,9 +147,7 @@ export function parseCanonicalTriples(
     return triple ? [triple] : [];
   });
 
-  return rdfTriplesToPublicTriples(
-    triples,
-  );
+  return rdfTriplesToPublicTriples(triples);
 }
 
 function parseContainedResourcePaths(
@@ -173,14 +183,12 @@ function n3ObjectLiteral(value: string) {
   return literal(value);
 }
 
-async function serializeLogEntry(request: PodLogAppendRequest): Promise<string> {
+async function serializeLogEntry(
+  request: PodLogAppendRequest,
+): Promise<string> {
   const changeNode = blankNode("change");
   const writer = new Writer({ format: "N-Triples" });
-  const add = (
-    subject: SubjectNode,
-    predicate: string,
-    object: ObjectNode,
-  ) => {
+  const add = (subject: SubjectNode, predicate: string, object: ObjectNode) => {
     writer.addQuad(subject, uri(predicate), object);
   };
 
@@ -191,12 +199,18 @@ async function serializeLogEntry(request: PodLogAppendRequest): Promise<string> 
   add(changeNode, LOG_ROOT_URI, uri(request.rootUri));
 
   if (request.parentChangeId) {
-    add(changeNode, LOG_PARENT_CHANGE_ID, n3ObjectLiteral(request.parentChangeId));
+    add(
+      changeNode,
+      LOG_PARENT_CHANGE_ID,
+      n3ObjectLiteral(request.parentChangeId),
+    );
   }
 
   for (const [index, triple] of request.assertions.entries()) {
     const statementNode = blankNode(`assert-${index}`);
-    const [subject, predicate, object] = publicTriplesToRdfTriples([triple])[0]!;
+    const [subject, predicate, object] = publicTriplesToRdfTriples([
+      triple,
+    ])[0]!;
 
     add(changeNode, LOG_ASSERTS, statementNode);
     writer.addQuad(statementNode, uri(LOG_SUBJECT), subject);
@@ -206,7 +220,9 @@ async function serializeLogEntry(request: PodLogAppendRequest): Promise<string> 
 
   for (const [index, triple] of request.retractions.entries()) {
     const statementNode = blankNode(`retract-${index}`);
-    const [subject, predicate, object] = publicTriplesToRdfTriples([triple])[0]!;
+    const [subject, predicate, object] = publicTriplesToRdfTriples([
+      triple,
+    ])[0]!;
 
     add(changeNode, LOG_RETRACTS, statementNode);
     writer.addQuad(statementNode, uri(LOG_SUBJECT), subject);
@@ -226,11 +242,7 @@ async function serializeLogEntry(request: PodLogAppendRequest): Promise<string> 
   });
 }
 
-function readObject(
-  quads: Quad[],
-  subject: SubjectNode,
-  predicate: string,
-) {
+function readObject(quads: Quad[], subject: SubjectNode, predicate: string) {
   return quads.find(
     (quad) =>
       quad.subject.equals(subject) &&
@@ -251,15 +263,22 @@ function parseLogStatements(
         quad.predicate.termType === "NamedNode" &&
         quad.predicate.value === predicate,
     )
-    .flatMap((quad) => (quad.object.termType === "BlankNode" ? [quad.object] : []))
+    .flatMap((quad) =>
+      quad.object.termType === "BlankNode" ? [quad.object] : [],
+    )
     .map((statementNode) => {
       const subject = readObject(quads, statementNode, LOG_SUBJECT);
-      const statementPredicate = readObject(quads, statementNode, LOG_PREDICATE);
+      const statementPredicate = readObject(
+        quads,
+        statementNode,
+        LOG_PREDICATE,
+      );
       const object = readObject(quads, statementNode, LOG_OBJECT);
 
       if (
         !subject ||
-        (subject.termType !== "NamedNode" && subject.termType !== "BlankNode") ||
+        (subject.termType !== "NamedNode" &&
+          subject.termType !== "BlankNode") ||
         !statementPredicate ||
         statementPredicate.termType !== "NamedNode" ||
         !object ||
@@ -304,8 +323,7 @@ export function parseLogEntryNTriples(
 
   if (
     changeId?.termType !== "Literal" ||
-    (parentChangeId &&
-      parentChangeId.termType !== "Literal") ||
+    (parentChangeId && parentChangeId.termType !== "Literal") ||
     entityName?.termType !== "Literal" ||
     entityId?.termType !== "Literal" ||
     rootUri?.termType !== "NamedNode"
@@ -317,7 +335,8 @@ export function parseLogEntryNTriples(
     entityName: entityName.value,
     entityId: entityId.value,
     changeId: changeId.value,
-    parentChangeId: parentChangeId?.termType === "Literal" ? parentChangeId.value : null,
+    parentChangeId:
+      parentChangeId?.termType === "Literal" ? parentChangeId.value : null,
     path,
     rootUri: rootUri.value,
     assertions: parseLogStatements(quads, changeNode, LOG_ASSERTS),

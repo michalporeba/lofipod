@@ -150,4 +150,3 @@ This should prove:
 - real authentication and resource update flow
 
 ## Next roadmap
-

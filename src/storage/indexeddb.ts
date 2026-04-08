@@ -104,10 +104,14 @@ function normalizeChangeRow(row: ChangeRow): ChangeRow {
   };
 }
 
-function hydrateStoredRecord(row: StoredRecordRow): StoredEntityRecord<unknown> {
+function hydrateStoredRecord(
+  row: StoredRecordRow,
+): StoredEntityRecord<unknown> {
   return {
     rootUri: row.rootUri,
-    graph: decodeStoredTriples(row.graph as Parameters<typeof decodeStoredTriples>[0]),
+    graph: decodeStoredTriples(
+      row.graph as Parameters<typeof decodeStoredTriples>[0],
+    ),
     projection: row.projection,
     lastChangeId: row.lastChangeId,
     updatedOrder: row.updatedOrder,
@@ -161,7 +165,10 @@ function openDatabase(databaseName: string): Promise<IDBDatabase> {
         metaStore.createIndex("byKey", "key");
       }
 
-      if (event.oldVersion < 2 && database.objectStoreNames.contains(CHANGE_STORE)) {
+      if (
+        event.oldVersion < 2 &&
+        database.objectStoreNames.contains(CHANGE_STORE)
+      ) {
         const cursorRequest = changeStore.openCursor();
 
         cursorRequest.onsuccess = () => {
@@ -190,7 +197,9 @@ function cloneStoredRecordRow(row: StoredRecordRow): StoredRecordRow {
   };
 }
 
-async function readEntityRows(database: IDBDatabase): Promise<StoredRecordRow[]> {
+async function readEntityRows(
+  database: IDBDatabase,
+): Promise<StoredRecordRow[]> {
   const transaction = database.transaction([ENTITY_STORE], "readonly");
   const store = transaction.objectStore(ENTITY_STORE);
   const rows = (await promisifyRequest(store.getAll())) as StoredRecordRow[];
@@ -210,7 +219,9 @@ async function readUpdatedOrder(database: IDBDatabase): Promise<number> {
   return typeof row?.value === "number" ? row.value : 0;
 }
 
-async function readSyncMetadataRow(database: IDBDatabase): Promise<SyncMetadata> {
+async function readSyncMetadataRow(
+  database: IDBDatabase,
+): Promise<SyncMetadata> {
   const transaction = database.transaction([META_STORE], "readonly");
   const metaStore = transaction.objectStore(META_STORE);
   const row = (await promisifyRequest(metaStore.get(SYNC_METADATA_KEY))) as
@@ -338,7 +349,10 @@ export function createIndexedDbStorage(
       ]);
       const draft: TransactionDraft = {
         records: new Map(
-          rows.map((row) => [`${row.entityName}:${row.entityId}`, cloneStoredRecordRow(row)]),
+          rows.map((row) => [
+            `${row.entityName}:${row.entityId}`,
+            cloneStoredRecordRow(row),
+          ]),
         ),
         syncMetadata,
         updatedOrder,

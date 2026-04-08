@@ -23,10 +23,14 @@ describe("internal RDF terms", () => {
     ];
 
     const literalRoundTrip = publicTriplesToRdfTriples(
-      decodeStoredTriples(encodeStoredTriples(rdfTriplesToPublicTriples(literalTriple))),
+      decodeStoredTriples(
+        encodeStoredTriples(rdfTriplesToPublicTriples(literalTriple)),
+      ),
     );
     const namedNodeRoundTrip = publicTriplesToRdfTriples(
-      decodeStoredTriples(encodeStoredTriples(rdfTriplesToPublicTriples(namedNodeTriple))),
+      decodeStoredTriples(
+        encodeStoredTriples(rdfTriplesToPublicTriples(namedNodeTriple)),
+      ),
     );
 
     expect(literalRoundTrip[0]?.[2].termType).toBe("Literal");

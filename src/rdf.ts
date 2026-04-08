@@ -13,7 +13,11 @@ export const uri = namedNode;
 export type RdfSubject = NamedNode | BlankNode;
 export type RdfTerm = NamedNode | BlankNode | Literal;
 export type Term = RdfTerm | string | number | boolean;
-export type RdfTriple = [subject: RdfSubject, predicate: NamedNode, object: RdfTerm];
+export type RdfTriple = [
+  subject: RdfSubject,
+  predicate: NamedNode,
+  object: RdfTerm,
+];
 export type Triple = [subject: RdfSubject, predicate: NamedNode, object: Term];
 
 type SerializedRdfTerm =
@@ -152,7 +156,11 @@ export function deserializeRdfTerm(term: SerializedRdfTerm): RdfTerm {
   return literal(term.value, namedNode(term.datatype));
 }
 
-function serializeRdfTriple([subject, predicate, object]: RdfTriple): SerializedRdfTriple {
+function serializeRdfTriple([
+  subject,
+  predicate,
+  object,
+]: RdfTriple): SerializedRdfTriple {
   return [
     serializeRdfTerm(subject),
     serializeRdfTerm(predicate),
@@ -194,10 +202,14 @@ export function attachInternalTriples(
   return triples;
 }
 
-export function readAttachedInternalTriples(triples: Triple[]): RdfTriple[] | null {
-  const serialized = (triples as Triple[] & {
-    [INTERNAL_TRIPLES]?: SerializedRdfTriple[];
-  })[INTERNAL_TRIPLES];
+export function readAttachedInternalTriples(
+  triples: Triple[],
+): RdfTriple[] | null {
+  const serialized = (
+    triples as Triple[] & {
+      [INTERNAL_TRIPLES]?: SerializedRdfTriple[];
+    }
+  )[INTERNAL_TRIPLES];
 
   return serialized ? serialized.map(deserializeRdfTriple) : null;
 }
@@ -297,7 +309,9 @@ export function publicTriplesToRdfTriples(
 
   if (options.rdfType) {
     knownResourceTerms.add(
-      typeof options.rdfType === "string" ? options.rdfType : options.rdfType.value,
+      typeof options.rdfType === "string"
+        ? options.rdfType
+        : options.rdfType.value,
     );
   }
 
@@ -315,7 +329,8 @@ export function publicTriplesToRdfTriples(
     } else if (typeof object === "number" || typeof object === "boolean") {
       rdfObject = termToLiteral(object);
     } else if (
-      rdfPredicate.value === "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" ||
+      rdfPredicate.value ===
+        "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" ||
       knownResourceTerms.has(object) ||
       object.startsWith("_:")
     ) {

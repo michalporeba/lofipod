@@ -63,7 +63,9 @@ function statusToTerm(status: Task["status"]) {
 }
 
 function termToStatus(value: Triple[2] | undefined): Task["status"] {
-  return isNamedNodeTerm(value) && value.value === mlg.Done.value ? "done" : "todo";
+  return isNamedNodeTerm(value) && value.value === mlg.Done.value
+    ? "done"
+    : "todo";
 }
 
 function idFromUri(subject: { value: string }): string {
@@ -157,8 +159,9 @@ export const JournalEntryEntity: EntityDefinition<JournalEntry> =
         title: stringValue(graph, subject, schema.name),
         text: stringValue(graph, subject, schema.text),
         entryDate: stringValue(graph, subject, mlg.entryDate),
-        aboutTaskId:
-          isNamedNodeTerm(aboutTask) ? idFromUri(aboutTask) : undefined,
+        aboutTaskId: isNamedNodeTerm(aboutTask)
+          ? idFromUri(aboutTask)
+          : undefined,
         createdAt: stringValue(graph, subject, dct.created),
         modifiedAt: stringValue(graph, subject, dct.modified),
       };

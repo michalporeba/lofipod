@@ -22,7 +22,11 @@ import { createNoteFixture, type Note } from "./support/noteFixture.js";
 import { createTaggableNoteFixture } from "./support/taggableNoteFixture.js";
 
 function comparableTerm(term: Triple[number]): string | number | boolean {
-  if (typeof term === "string" || typeof term === "number" || typeof term === "boolean") {
+  if (
+    typeof term === "string" ||
+    typeof term === "number" ||
+    typeof term === "boolean"
+  ) {
     return term;
   }
 
@@ -59,7 +63,9 @@ describe("public API scaffold", () => {
   });
 
   it("provides standard RDF terms", () => {
-    expect(rdf.type.value).toBe("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
+    expect(rdf.type.value).toBe(
+      "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+    );
   });
 });
 

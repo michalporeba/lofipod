@@ -10,7 +10,6 @@ import {
   defineEntity,
   defineVocabulary,
   literal,
-  objectOf,
   rdf,
   stringValue,
   uri,
@@ -194,11 +193,7 @@ describe("createSqliteStorage", () => {
 
         return [
           [subject, rdf.type, ex.Bookmark],
-          [
-            subject,
-            ex.url,
-            literal(bookmark.url),
-          ],
+          [subject, ex.url, literal(bookmark.url)],
         ] satisfies Triple[];
       },
       project(graph, { uri }) {

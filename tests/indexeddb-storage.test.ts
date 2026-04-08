@@ -307,7 +307,9 @@ describe("createIndexedDbStorage", () => {
       },
     });
 
-    await expect(storage.listChanges("event", "ev-123")).resolves.toHaveLength(1);
+    await expect(storage.listChanges("event", "ev-123")).resolves.toHaveLength(
+      1,
+    );
     await expect(storage.listPendingChanges?.()).resolves.toHaveLength(1);
   });
 });
