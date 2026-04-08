@@ -10,15 +10,11 @@ const INTERNAL_TRIPLES = "__lofipod_internal_rdf_triples";
 export const { blankNode, literal, namedNode } = DataFactory;
 export const uri = namedNode;
 
-export type RdfSubject = NamedNode;
+export type RdfSubject = NamedNode | BlankNode;
 export type RdfTerm = NamedNode | BlankNode | Literal;
 export type Term = RdfTerm | string | number | boolean;
-export type RdfTriple = [
-  subject: RdfSubject,
-  predicate: NamedNode,
-  object: RdfTerm,
-];
-export type Triple = [subject: NamedNode, predicate: NamedNode, object: Term];
+export type RdfTriple = [subject: RdfSubject, predicate: NamedNode, object: RdfTerm];
+export type Triple = [subject: RdfSubject, predicate: NamedNode, object: Term];
 
 type SerializedRdfTerm =
   | {
@@ -82,11 +78,11 @@ function asRdfSubject(value: string | RdfTerm): RdfSubject {
     return resourceTerm(value);
   }
 
-  if (value.termType === "NamedNode") {
+  if (value.termType === "NamedNode" || value.termType === "BlankNode") {
     return value;
   }
 
-  throw new Error("RDF subjects must be named nodes.");
+  throw new Error("RDF subjects must be named nodes or blank nodes.");
 }
 
 function asRdfPredicate(value: string | RdfTerm): NamedNode {
@@ -174,7 +170,8 @@ function deserializeRdfTriple([
   const deserializedObject = deserializeRdfTerm(object);
 
   if (
-    deserializedSubject.termType !== "NamedNode" ||
+    (deserializedSubject.termType !== "NamedNode" &&
+      deserializedSubject.termType !== "BlankNode") ||
     deserializedPredicate.termType !== "NamedNode"
   ) {
     throw new Error("Invalid serialized RDF triple.");

@@ -65,6 +65,8 @@ and known boundaries for the project.
 - The initial Pod shape should also include an app-private, bucketed replication
   log under a path such as `./apps/<app_name>/log/`.
 - The replication log is sync infrastructure, not the canonical data model.
+- Replication log entries should be stored as N-Triples resources for
+  unambiguous machine parsing, while canonical entity resources remain Turtle.
 - The initial Pod shape should use:
   - canonical entity resources
   - a bucketed app-private replication log

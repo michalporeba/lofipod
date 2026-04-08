@@ -1534,6 +1534,7 @@ describe("mocked entity sync", () => {
     expect(calls).toEqual(["entity", "log"]);
     expect(logRequests).toHaveLength(1);
     expect(logRequests[0]?.path).toContain("apps/my-journal/log/event/");
+    expect(logRequests[0]?.path).toMatch(/\.nt$/);
     expect(logRequests[0]?.assertions).toHaveLength(4);
     expect(logRequests[0]?.retractions).toHaveLength(0);
   });
@@ -1752,7 +1753,7 @@ describe("mocked entity sync", () => {
       entityId: "ev-remote",
       changeId: "remote-1",
       parentChangeId: null,
-      path: "apps/my-journal/log/event/remote-1.ttl",
+      path: "apps/my-journal/log/event/remote-1.nt",
       rootUri: "https://example.com/id/event/ev-remote",
       assertions: [
         [

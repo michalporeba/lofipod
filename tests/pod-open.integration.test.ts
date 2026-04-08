@@ -12,11 +12,14 @@ const solidOpenBaseUrl =
   process.env.SOLID_OPEN_BASE_URL ?? "http://localhost:3400/";
 
 describe("Community Solid Server open write path", () => {
+  const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
   beforeAll(async () => {
     await waitForSolidServer(solidOpenBaseUrl);
   }, 30_000);
 
   it("saves and syncs one entity to canonical and log resources", async () => {
+    const entityId = `ev-123-${runId}`;
     const { entity } = createEventFixture();
     const realAdapter = createSolidPodAdapter({
       podBaseUrl: solidOpenBaseUrl,
@@ -42,7 +45,7 @@ describe("Community Solid Server open write path", () => {
     });
 
     await engine.save("event", {
-      id: "ev-123",
+      id: entityId,
       title: "Hello",
       time: {
         year: 2024,
@@ -51,7 +54,7 @@ describe("Community Solid Server open write path", () => {
     await engine.sync.now();
 
     const canonicalResponse = await fetch(
-      new URL("events/ev-123.ttl", solidOpenBaseUrl),
+      new URL(`events/${entityId}.ttl`, solidOpenBaseUrl),
     );
     const canonicalBody = await canonicalResponse.text();
 
@@ -60,6 +63,7 @@ describe("Community Solid Server open write path", () => {
     expect(canonicalBody).toContain("Hello");
 
     expect(appendedPaths).toHaveLength(1);
+    expect(appendedPaths[0]).toMatch(/\.nt$/);
 
     const logResponse = await fetch(
       new URL(appendedPaths[0]!, solidOpenBaseUrl),
@@ -67,11 +71,12 @@ describe("Community Solid Server open write path", () => {
     const logBody = await logResponse.text();
 
     expect(logResponse.ok).toBe(true);
-    expect(logBody).toContain("urn:lofipod:log:Change");
-    expect(logBody).toContain("ev-123");
+    expect(logBody).toContain("<urn:lofipod:log:Change>");
+    expect(logBody).toContain(`"${entityId}"`);
   }, 30_000);
 
   it("applies a real N3 Patch update to an existing canonical resource", async () => {
+    const entityId = `ev-456-${runId}`;
     const { entity } = createEventFixture();
     const engine = createEngine({
       entities: [entity],
@@ -87,7 +92,7 @@ describe("Community Solid Server open write path", () => {
     });
 
     await engine.save("event", {
-      id: "ev-456",
+      id: entityId,
       title: "First",
       time: {
         year: 2024,
@@ -96,7 +101,7 @@ describe("Community Solid Server open write path", () => {
     await engine.sync.now();
 
     await engine.save("event", {
-      id: "ev-456",
+      id: entityId,
       title: "Updated",
       time: {
         year: 2025,
@@ -105,7 +110,7 @@ describe("Community Solid Server open write path", () => {
     await engine.sync.now();
 
     const response = await fetch(
-      new URL("events/ev-456.ttl", solidOpenBaseUrl),
+      new URL(`events/${entityId}.ttl`, solidOpenBaseUrl),
     );
     const body = await response.text();
 
