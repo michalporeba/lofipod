@@ -11,6 +11,7 @@ import {
   projectStoredRecord,
 } from "./graph.js";
 import {
+  isNamedNodeTerm,
   publicTriplesToRdfTriples,
   rdfTriplesToPublicTriples,
   uri,
@@ -22,6 +23,7 @@ import {
   normalizeLogBasePath,
   readSyncState,
 } from "./sync.js";
+import { rdf } from "./vocabulary.js";
 import type {
   BootstrapResult,
   Engine,
@@ -29,10 +31,47 @@ import type {
   EntityDefinition,
   StoredEntityRecord,
   SyncState,
+  Triple,
 } from "./types.js";
 
 function createChangeId(): string {
   return globalThis.crypto.randomUUID();
+}
+
+function entityPath(
+  definition: EntityDefinition<unknown>,
+  entityId: string,
+): string {
+  return `${definition.pod.basePath}${entityId}.ttl`;
+}
+
+function inferRootUri(
+  definition: EntityDefinition<unknown>,
+  entityId: string,
+  triples: Triple[],
+  fallback?: string,
+): string {
+  const typedSubject = triples.find(
+    ([subject, predicate, object]) =>
+      predicate.value === rdf.type.value &&
+      isNamedNodeTerm(subject) &&
+      isNamedNodeTerm(object) &&
+      object.value === definition.rdfType.value,
+  )?.[0];
+
+  if (isNamedNodeTerm(typedSubject)) {
+    return typedSubject.value;
+  }
+
+  const firstNamedSubject = triples.find(([subject]) =>
+    isNamedNodeTerm(subject),
+  )?.[0];
+
+  if (isNamedNodeTerm(firstNamedSubject)) {
+    return firstNamedSubject.value;
+  }
+
+  return fallback ?? fallbackRootUri(definition.name, entityId);
 }
 
 async function repairStoredProjection<T>(
@@ -174,6 +213,29 @@ export function createEngine(config: EngineConfig): Engine {
       return storedRecord.projection as T;
     },
 
+    async delete(entityName: string, id: string): Promise<void> {
+      requireEntity(entityName);
+      const previousRecord = await storage.readEntity(entityName, id);
+
+      if (!previousRecord) {
+        return;
+      }
+
+      await storage.transact((transaction) => {
+        transaction.removeEntity(entityName, id);
+        transaction.appendChange({
+          entityName,
+          entityId: id,
+          changeId: createChangeId(),
+          parentChangeId: previousRecord.lastChangeId,
+          assertions: [],
+          retractions: previousRecord.graph,
+          entityProjected: false,
+          logProjected: false,
+        });
+      });
+    },
+
     async get<T>(entityName: string, id: string): Promise<T | null> {
       const definition = requireEntity(entityName) as EntityDefinition<T>;
       const record = await storage.readEntity(definition.name, id);
@@ -224,6 +286,14 @@ export function createEngine(config: EngineConfig): Engine {
         const pendingChanges = storage.listPendingChanges
           ? await storage.listPendingChanges()
           : (await storage.listChanges()).filter(hasPendingSync);
+        const deletedEntities = new Set(
+          pendingChanges
+            .filter(
+              (change) =>
+                change.assertions.length === 0 && change.retractions.length > 0,
+            )
+            .map((change) => `${change.entityName}:${change.entityId}`),
+        );
 
         for (const change of pendingChanges) {
           const definition = requireEntity(change.entityName);
@@ -231,15 +301,34 @@ export function createEngine(config: EngineConfig): Engine {
             change.entityName,
             change.entityId,
           );
+          const isDeletion =
+            change.assertions.length === 0 && change.retractions.length > 0;
 
-          if (!record) {
+          if (!record && !isDeletion) {
+            if (
+              deletedEntities.has(`${change.entityName}:${change.entityId}`)
+            ) {
+              await storage.transact((transaction) => {
+                transaction.markChangeEntityProjected(change.changeId);
+                transaction.markChangeLogProjected(change.changeId);
+              });
+            }
+
             continue;
           }
 
           if (!change.entityProjected) {
-            await config.sync.adapter.applyEntityPatch(
-              createEntityPatchRequest(definition, record, change),
-            );
+            if (isDeletion) {
+              await config.sync.adapter.deleteEntityResource?.({
+                entityName: change.entityName,
+                entityId: change.entityId,
+                path: entityPath(definition, change.entityId),
+              });
+            } else if (record) {
+              await config.sync.adapter.applyEntityPatch(
+                createEntityPatchRequest(definition, record, change),
+              );
+            }
 
             await storage.transact((transaction) => {
               transaction.markChangeEntityProjected(change.changeId);
@@ -247,8 +336,27 @@ export function createEngine(config: EngineConfig): Engine {
           }
 
           if (!change.logProjected) {
+            const rootUri = inferRootUri(
+              definition,
+              change.entityId,
+              change.assertions.length > 0
+                ? change.assertions
+                : change.retractions,
+              record?.rootUri,
+            );
+
             await config.sync.adapter.appendLogEntry(
-              createLogAppendRequest(change, record, requireLogBasePath()),
+              createLogAppendRequest(
+                change,
+                {
+                  rootUri,
+                  graph: [],
+                  projection: null,
+                  lastChangeId: null,
+                  updatedOrder: 0,
+                },
+                requireLogBasePath(),
+              ),
             );
 
             await storage.transact((transaction) => {
@@ -307,25 +415,30 @@ export function createEngine(config: EngineConfig): Engine {
           );
 
           await storage.transact((transaction) => {
-            const updatedOrder = transaction.nextUpdatedOrder();
-            const nextProjection = definition.project(nextPublicGraph, {
-              uri() {
-                return uri(existingRecord?.rootUri ?? entry.rootUri);
-              },
-              child(path) {
-                return uri(
-                  `${existingRecord?.rootUri ?? entry.rootUri}#${path}`,
-                );
-              },
-            });
+            if (nextPublicGraph.length === 0) {
+              transaction.removeEntity(entry.entityName, entry.entityId);
+            } else {
+              const updatedOrder = transaction.nextUpdatedOrder();
+              const nextProjection = definition.project(nextPublicGraph, {
+                uri() {
+                  return uri(existingRecord?.rootUri ?? entry.rootUri);
+                },
+                child(path) {
+                  return uri(
+                    `${existingRecord?.rootUri ?? entry.rootUri}#${path}`,
+                  );
+                },
+              });
 
-            transaction.writeEntity(entry.entityName, entry.entityId, {
-              rootUri: existingRecord?.rootUri ?? entry.rootUri,
-              graph: nextPublicGraph,
-              projection: nextProjection,
-              lastChangeId: entry.changeId,
-              updatedOrder,
-            });
+              transaction.writeEntity(entry.entityName, entry.entityId, {
+                rootUri: existingRecord?.rootUri ?? entry.rootUri,
+                graph: nextPublicGraph,
+                projection: nextProjection,
+                lastChangeId: entry.changeId,
+                updatedOrder,
+              });
+            }
+
             transaction.appendChange({
               entityName: entry.entityName,
               entityId: entry.entityId,

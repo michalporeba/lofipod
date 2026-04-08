@@ -90,6 +90,9 @@ export function createMemoryStorage(): LocalStorageAdapter {
         readEntity(entityName, entityId) {
           return draft.records.get(`${entityName}:${entityId}`) ?? null;
         },
+        removeEntity(entityName, entityId) {
+          draft.records.delete(`${entityName}:${entityId}`);
+        },
         writeEntity(entityName, entityId, record) {
           draft.records.set(
             `${entityName}:${entityId}`,

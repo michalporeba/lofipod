@@ -358,6 +358,10 @@ export function createIndexedDbStorage(
         updatedOrder,
       };
       const writtenEntities = new Set<string>();
+      const removedEntities = new Map<
+        string,
+        [entityName: string, entityId: string]
+      >();
       const appendedChanges: ChangeRow[] = [];
       const entityProjectedChanges = new Set<string>();
       const logProjectedChanges = new Set<string>();
@@ -369,8 +373,15 @@ export function createIndexedDbStorage(
           const row = draft.records.get(`${entityName}:${entityId}`);
           return row ? cloneStoredRecord(hydrateStoredRecord(row)) : null;
         },
+        removeEntity(entityName, entityId) {
+          const key = `${entityName}:${entityId}`;
+          writtenEntities.delete(key);
+          removedEntities.set(key, [entityName, entityId]);
+          draft.records.delete(key);
+        },
         writeEntity(entityName, entityId, record) {
           const key = `${entityName}:${entityId}`;
+          removedEntities.delete(key);
           writtenEntities.add(key);
           draft.records.set(key, {
             entityName,
@@ -423,6 +434,10 @@ export function createIndexedDbStorage(
         if (row) {
           entityStore.put(row);
         }
+      }
+
+      for (const [entityName, entityId] of removedEntities.values()) {
+        entityStore.delete([entityName, entityId]);
       }
 
       for (const change of appendedChanges) {

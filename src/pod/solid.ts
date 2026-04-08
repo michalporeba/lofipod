@@ -473,6 +473,15 @@ export function createSolidPodAdapter(
       );
     },
 
+    async deleteEntityResource(request) {
+      const response = await fetchImpl(joinUrl(podBaseUrl, request.path), {
+        method: "DELETE",
+        headers: authHeaders,
+      });
+
+      await ensureSuccess(response, `Delete entity resource ${request.path}`);
+    },
+
     async appendLogEntry(request: PodLogAppendRequest) {
       await ensureContainers(request.path);
       const body = await serializeLogEntry(request);

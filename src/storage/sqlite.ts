@@ -258,6 +258,10 @@ export function createSqliteStorage(
       last_change_id = excluded.last_change_id,
       updated_order = excluded.updated_order
   `);
+  const removeEntityStatement = database.prepare<[string, string]>(`
+    DELETE FROM entities
+    WHERE entity_name = ? AND entity_id = ?
+  `);
   const appendChangeStatement = database.prepare<
     [string, string, string, string | null, string, string, number, number]
   >(`
@@ -343,6 +347,9 @@ export function createSqliteStorage(
         const transaction: LocalStorageTransaction = {
           readEntity(entityName, entityId) {
             return readStoredRecord(readEntityStatement, entityName, entityId);
+          },
+          removeEntity(entityName, entityId) {
+            removeEntityStatement.run(entityName, entityId);
           },
           writeEntity(entityName, entityId, record) {
             writeEntityStatement.run(

@@ -450,6 +450,48 @@ describe("local persistence", () => {
     await expect(secondEngine.get("event", "ev-123")).resolves.toEqual(input);
   });
 
+  it("deletes a saved entity and removes it from reads, lists, and the local log state", async () => {
+    const { entity } = createEventFixture();
+    const storage = createMemoryStorage();
+    const engine = createEngine({
+      entities: [entity],
+      storage,
+    });
+
+    await engine.save("event", {
+      id: "ev-delete",
+      title: "Gone",
+      time: {
+        year: 2024,
+      },
+    });
+
+    await engine.delete("event", "ev-delete");
+
+    await expect(engine.get("event", "ev-delete")).resolves.toBeNull();
+    await expect(engine.list("event")).resolves.toEqual([]);
+
+    const changes = await storage.listChanges("event", "ev-delete");
+    const deletion = changes.at(-1);
+
+    expect(changes).toHaveLength(2);
+    expect(deletion?.assertions).toEqual([]);
+    expect(deletion?.retractions).toHaveLength(4);
+    await expect(storage.readEntity("event", "ev-delete")).resolves.toBeNull();
+  });
+
+  it("ignores deletion of a non-existent entity", async () => {
+    const { entity } = createEventFixture();
+    const storage = createMemoryStorage();
+    const engine = createEngine({
+      entities: [entity],
+      storage,
+    });
+
+    await expect(engine.delete("event", "missing")).resolves.toBeUndefined();
+    await expect(storage.listChanges("event", "missing")).resolves.toEqual([]);
+  });
+
   it("returns defensive copies from memory storage reads", async () => {
     const { entity } = createEventFixture();
     const storage = createMemoryStorage();
@@ -660,6 +702,9 @@ describe("local persistence", () => {
         const transaction: LocalStorageTransaction = {
           readEntity(entityName, entityId) {
             return draft.records.get(`${entityName}:${entityId}`) ?? null;
+          },
+          removeEntity(entityName, entityId) {
+            draft.records.delete(`${entityName}:${entityId}`);
           },
           writeEntity(entityName, entityId, record) {
             draft.records.set(`${entityName}:${entityId}`, record);
@@ -1169,6 +1214,39 @@ describe("sync state", () => {
     });
   });
 
+  it("reports a pending deletion before sync", async () => {
+    const { entity } = createEventFixture();
+    const engine = createEngine({
+      entities: [entity],
+      pod,
+      sync: {
+        adapter: {
+          async applyEntityPatch() {
+            // no-op
+          },
+          async appendLogEntry() {
+            // no-op
+          },
+        },
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-delete",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+    await engine.delete("event", "ev-delete");
+
+    await expect(engine.sync.state()).resolves.toEqual({
+      status: "pending",
+      configured: true,
+      pendingChanges: 2,
+    });
+  });
+
   it("preserves pending change count across restart", async () => {
     const { entity } = createEventFixture();
     const storage = createMemoryStorage();
@@ -1574,6 +1652,110 @@ describe("mocked entity sync", () => {
     expect(logRequests[0]?.retractions).toHaveLength(0);
   });
 
+  it("deletes the canonical entity resource and appends a retraction log entry", async () => {
+    const { entity } = createEventFixture();
+    const calls: string[] = [];
+    const deletedPaths: string[] = [];
+    const logRequests: Array<{
+      path: string;
+      rootUri: string;
+      assertions: Triple[];
+      retractions: Triple[];
+    }> = [];
+    const engine = createEngine({
+      entities: [entity],
+      pod,
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: {
+          async applyEntityPatch() {
+            calls.push("patch");
+          },
+          async deleteEntityResource(request) {
+            calls.push("delete");
+            deletedPaths.push(request.path);
+          },
+          async appendLogEntry(request) {
+            calls.push("log");
+            logRequests.push({
+              path: request.path,
+              rootUri: request.rootUri,
+              assertions: request.assertions,
+              retractions: request.retractions,
+            });
+          },
+        },
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-delete",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+    await engine.sync.now();
+    calls.length = 0;
+
+    await engine.delete("event", "ev-delete");
+    await engine.sync.now();
+
+    expect(calls).toEqual(["delete", "log"]);
+    expect(deletedPaths).toEqual(["events/ev-delete.ttl"]);
+    expect(logRequests.at(-1)?.assertions).toEqual([]);
+    expect(logRequests.at(-1)?.retractions).toHaveLength(4);
+    expect(logRequests.at(-1)?.rootUri).toBe(
+      "https://example.com/id/event/ev-delete",
+    );
+    await expect(engine.sync.state()).resolves.toEqual({
+      status: "idle",
+      configured: true,
+      pendingChanges: 0,
+    });
+  });
+
+  it("treats earlier unsynced changes as superseded when an entity is deleted before sync", async () => {
+    const { entity } = createEventFixture();
+    const calls: string[] = [];
+    const engine = createEngine({
+      entities: [entity],
+      pod,
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: {
+          async applyEntityPatch() {
+            calls.push("patch");
+          },
+          async deleteEntityResource() {
+            calls.push("delete");
+          },
+          async appendLogEntry() {
+            calls.push("log");
+          },
+        },
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-delete-before-sync",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+    await engine.delete("event", "ev-delete-before-sync");
+
+    await engine.sync.now();
+
+    expect(calls).toEqual(["delete", "log"]);
+    await expect(engine.sync.state()).resolves.toEqual({
+      status: "idle",
+      configured: true,
+      pendingChanges: 0,
+    });
+  });
+
   it("retries remote log append independently after entity projection succeeded", async () => {
     const { entity } = createEventFixture();
     let patchAttempts = 0;
@@ -1735,6 +1917,48 @@ describe("mocked entity sync", () => {
     ]);
     await expect(
       secondStorage.listChanges("event", "ev-123"),
+    ).resolves.toHaveLength(2);
+  });
+
+  it("replays a remote deletion by removing the entity locally", async () => {
+    const { entity } = createEventFixture();
+    const remote = createSharedRemoteAdapter();
+    const firstEngine = createEngine({
+      entities: [entity],
+      pod,
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+    const secondStorage = createMemoryStorage();
+    const secondEngine = createEngine({
+      entities: [entity],
+      pod,
+      storage: secondStorage,
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+
+    await firstEngine.save("event", {
+      id: "ev-delete",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+    await firstEngine.sync.now();
+    await secondEngine.sync.now();
+
+    await firstEngine.delete("event", "ev-delete");
+    await firstEngine.sync.now();
+    await secondEngine.sync.now();
+
+    await expect(secondEngine.get("event", "ev-delete")).resolves.toBeNull();
+    await expect(secondEngine.list("event")).resolves.toEqual([]);
+    await expect(
+      secondStorage.listChanges("event", "ev-delete"),
     ).resolves.toHaveLength(2);
   });
 

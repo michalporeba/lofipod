@@ -47,6 +47,7 @@ The current public surface is still intentionally small and explicit:
 - `engine.save(entityName, entity)`
 - `engine.get(entityName, id)`
 - `engine.list(entityName, options?)`
+- `engine.delete(entityName, id)`
 - `engine.sync.state()`
 - `engine.sync.now()`
 - `engine.sync.bootstrap()`
@@ -135,6 +136,7 @@ Developers should be able to:
 - trigger sync explicitly when needed
 - explicitly bootstrap from canonical remote resources on first attach or
   recovery
+- delete an entity locally and have that deletion replicate through normal sync
 
 Normal save, get, and list flows should work without requiring explicit sync
 operations in the common case.
@@ -227,6 +229,7 @@ await engine.save("event", {
 
 const event = await engine.get("event", "n1");
 const events = await engine.list("event", { limit: 20 });
+await engine.delete("event", "n1");
 
 const syncState = engine.sync.state();
 await engine.sync.now();

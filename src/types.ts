@@ -58,6 +58,7 @@ export type LocalStorageTransaction = {
     entityName: string,
     entityId: string,
   ): StoredEntityRecord<unknown> | null;
+  removeEntity(entityName: string, entityId: string): void;
   writeEntity(
     entityName: string,
     entityId: string,
@@ -96,6 +97,11 @@ export type PodLogAppendRequest = {
 
 export type PodSyncAdapter = {
   applyEntityPatch(request: PodEntityPatchRequest): Promise<void>;
+  deleteEntityResource?(request: {
+    entityName: string;
+    entityId: string;
+    path: string;
+  }): Promise<void>;
   appendLogEntry(request: PodLogAppendRequest): Promise<void>;
   listLogEntries?(): Promise<PodLogAppendRequest[]>;
   listCanonicalEntities?(input: {
@@ -159,6 +165,7 @@ export type Engine = {
   save<T>(entityName: string, entity: T): Promise<T>;
   get<T>(entityName: string, id: string): Promise<T | null>;
   list<T>(entityName: string, options?: { limit?: number }): Promise<T[]>;
+  delete(entityName: string, id: string): Promise<void>;
   sync: {
     state(): Promise<SyncState>;
     now(): Promise<void>;

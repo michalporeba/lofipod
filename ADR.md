@@ -93,6 +93,9 @@ and known boundaries for the project.
   local entity graph state, and the local read model before remote sync.
 - Remote sync should project local changes to canonical entity resources first
   and then append the same logical changes to the Pod replication log.
+- Entity deletions should remove the canonical Pod resource with HTTP `DELETE`
+  and still append a retraction-only replication log entry so other devices can
+  replay the deletion locally.
 - First attach to an existing Pod should support explicit bootstrap import from
   canonical entity directories.
 - Bootstrap import should be additive by default:
