@@ -47,6 +47,11 @@ const EventEntity = defineEntity<Event>({
   },
   rdfType: ex.Event,
   id: (event) => event.id,
+  uri: (event) =>
+    ex.uri({
+      entityName: "event",
+      id: event.id,
+    }),
 
   toRdf(event, { uri, child }) {
     const subject = uri(event);
@@ -65,7 +70,7 @@ const EventEntity = defineEntity<Event>({
     const time = child("time");
 
     return {
-      id: idFromUri(subject.value),
+      id: subject.value.split("/").at(-1) ?? "",
       title: stringValue(graph, subject, ex.title),
       time: {
         year: numberValue(graph, time, ex.year),
@@ -95,7 +100,7 @@ Expanded sketch:
 
 ```ts
 type Triple = [
-  subject: NamedNode,
+  subject: NamedNode | BlankNode,
   predicate: NamedNode,
   object: RdfTerm | string | number | boolean,
 ];
@@ -123,5 +128,6 @@ type ProjectionHelpers = {
   canonical state and the object is a projection.
 - `rdfType` belongs on the entity definition, not on each entity instance, for
   the simple single-class case.
-- The exact shape of helper functions such as `idFromUri(...)`,
-  `objectOf(...)`, and `numberObjectOf(...)` is still open.
+- Public helper values such as `uri(...)`, `literal(...)`, `objectOf(...)`,
+  `stringValue(...)`, and `numberValue(...)` are part of the current API
+  surface.

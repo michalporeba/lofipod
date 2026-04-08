@@ -24,8 +24,10 @@ The current public API direction is:
 - application-owned TypeScript types for entity payloads
 - a thin model layer rather than a rich field-schema DSL
 - per-entity RDF codecs as the main mapping mechanism
+- typed RDF vocabulary and helper values at the public API boundary
 - per-entity Pod base paths under a configured app root
-- local persistence based on serialized JSON plus library-managed metadata
+- adapter-driven local persistence for projected entities, canonical graphs, and
+  sync metadata
 - sync exposed through a small status and trigger surface without making normal
   CRUD feel sync-driven
 
@@ -51,6 +53,8 @@ The current public surface is still intentionally small and explicit:
 - `engine.sync.state()`
 - `engine.sync.now()`
 - `engine.sync.bootstrap()`
+- RDF helpers such as `uri(...)`, `literal(...)`, `objectOf(...)`,
+  `stringValue(...)`, `numberValue(...)`, and `booleanValue(...)`
 
 There is currently no `engine.connection.state()` API and no general
 observation/subscription API yet.
@@ -114,8 +118,9 @@ configured roots so the sync model remains coherent.
 
 The first local persistence approach should stay simple:
 
-- store the serialized entity object as JSON
-- store sync and identity metadata in dedicated library-managed fields
+- keep local persistence adapter-driven and library-managed
+- persist enough structured graph and metadata state for reliable restart and
+  sync recovery
 - keep local layout internal to the library
 
 The first listing API should also stay intentionally narrow:
@@ -146,6 +151,8 @@ operations in the common case.
 ```ts
 import {
   createEngine,
+  createIndexedDbStorage,
+  createSolidPodAdapter,
   defineEntity,
   defineVocabulary,
   numberValue,
@@ -181,6 +188,11 @@ const eventEntity = defineEntity<Event>({
   },
   rdfType: ex.Event,
   id: (event) => event.id,
+  uri: (event) =>
+    ex.uri({
+      entityName: "event",
+      id: event.id,
+    }),
 
   toRdf(event, { uri, child }) {
     const subject = uri(event);
@@ -199,7 +211,7 @@ const eventEntity = defineEntity<Event>({
     const time = child("time");
 
     return {
-      id: idFromUri(subject.value),
+      id: subject.value.split("/").at(-1) ?? "",
       title: stringValue(graph, subject, ex.title),
       time: {
         year: numberValue(graph, time, ex.year),
@@ -208,14 +220,14 @@ const eventEntity = defineEntity<Event>({
   },
 });
 
-const engine = await createEngine({
+const engine = createEngine({
   pod: {
     logBasePath: "apps/my-journal/log/",
   },
   entities: [eventEntity],
   storage: createIndexedDbStorage(),
   sync: {
-    adapter: createSolidPodAdapter({ podBaseUrl, authHeaders }),
+    adapter: createSolidPodAdapter({ podBaseUrl, authorization }),
   },
 });
 
@@ -231,7 +243,7 @@ const event = await engine.get("event", "n1");
 const events = await engine.list("event", { limit: 20 });
 await engine.delete("event", "n1");
 
-const syncState = engine.sync.state();
+const syncState = await engine.sync.state();
 await engine.sync.now();
 await engine.sync.bootstrap();
 ```
@@ -242,6 +254,7 @@ Current defaults:
 
 - identity is part of the entity object
 - per-entity RDF codecs are the default mapping mechanism
+- public vocabulary terms and URI helpers are `NamedNode`-based
 - per-entity Pod base paths are supported
 - local persistence is adapter-driven, with in-memory, IndexedDB, and SQLite
   storage currently available

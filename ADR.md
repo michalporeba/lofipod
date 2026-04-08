@@ -32,6 +32,9 @@ and known boundaries for the project.
 
 - The supported model is intentionally narrow.
 - Entities are shallow objects.
+- The public RDF-facing API should use typed RDF terms rather than plain
+  strings for vocabulary values and helper-generated URIs, while still allowing
+  convenient scalar literal values in triple objects.
 - Supported property kinds are:
   - primitive scalar values
   - opaque atomic values for nested objects or small collections
@@ -151,7 +154,6 @@ and known boundaries for the project.
 
 ## Open questions
 
-- What exact RDF representation should a replication log entry use in the Pod?
 - What minimal metadata is required for bucket discovery and log replay?
 - How should canonical reconciliation work after first bootstrap when other
   applications can edit canonical resources directly?

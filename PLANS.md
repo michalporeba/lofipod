@@ -149,4 +149,20 @@ This should prove:
 - real file layout compatibility
 - real authentication and resource update flow
 
+## Implemented since the initial roadmap
+
+The codebase now also includes:
+
+- SQLite storage alongside memory and IndexedDB adapters
+- typed RDF terms and helper exports at the public API boundary
+- canonical bootstrap import from entity directories
+- N-Triples replication log parsing and serialization
+- entity deletion with Pod-side HTTP `DELETE` plus retraction-only log replay
+- internal refactors that keep the public engine and Pod entrypoints thin and
+  easier to read
+
 ## Next roadmap
+
+- clarify the minimal metadata shape for remote log discovery
+- decide how branch and conflict state should surface publicly
+- design the first framework-agnostic observation API
