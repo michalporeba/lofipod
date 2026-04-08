@@ -11,6 +11,10 @@ import {
   projectStoredRecord,
 } from "./graph.js";
 import {
+  publicTriplesToRdfTriples,
+  rdfTriplesToPublicTriples,
+} from "./rdf.js";
+import {
   createEntityPatchRequest,
   createLogAppendRequest,
   hasPendingSync,
@@ -119,14 +123,26 @@ export function createEngine(config: EngineConfig): Engine {
         entityId,
       );
       const graph = definition.toRdf(entity, createToRdfHelpers(rootUri));
+      const internalGraph = publicTriplesToRdfTriples(graph, {
+        rdfType: definition.rdfType,
+      });
+      const previousGraph = previousRecord
+        ? publicTriplesToRdfTriples(previousRecord.graph, {
+            rdfType: definition.rdfType,
+          })
+        : [];
       const { assertions, retractions } = diffTriples(
-        previousRecord?.graph ?? [],
-        graph,
+        previousGraph,
+        internalGraph,
       );
 
       if (assertions.length === 0 && retractions.length === 0) {
         return (previousRecord?.projection as T) ?? entity;
       }
+
+      const storedGraph = rdfTriplesToPublicTriples(internalGraph);
+      const storedAssertions = rdfTriplesToPublicTriples(assertions);
+      const storedRetractions = rdfTriplesToPublicTriples(retractions);
 
       const changeId = createChangeId(definition.name, entityId);
 
@@ -135,7 +151,7 @@ export function createEngine(config: EngineConfig): Engine {
         const nextRecord = createStoredRecord(
           definition,
           entity,
-          graph,
+          storedGraph,
           changeId,
           updatedOrder,
         );
@@ -146,8 +162,8 @@ export function createEngine(config: EngineConfig): Engine {
           entityId,
           changeId,
           parentChangeId: previousRecord?.lastChangeId ?? null,
-          assertions,
-          retractions,
+          assertions: storedAssertions,
+          retractions: storedRetractions,
           entityProjected: false,
           logProjected: false,
         });
@@ -265,14 +281,34 @@ export function createEngine(config: EngineConfig): Engine {
             entry.entityName,
             entry.entityId,
           );
-          const nextGraph = applyTripleDelta(existingRecord?.graph ?? [], {
-            assertions: entry.assertions,
-            retractions: entry.retractions,
-          });
+          const nextGraph = applyTripleDelta(
+            publicTriplesToRdfTriples(existingRecord?.graph ?? [], {
+              rdfType: definition.rdfType,
+            }),
+            {
+              assertions: publicTriplesToRdfTriples(entry.assertions, {
+                rdfType: definition.rdfType,
+              }),
+              retractions: publicTriplesToRdfTriples(entry.retractions, {
+                rdfType: definition.rdfType,
+              }),
+            },
+          );
+          const nextPublicGraph = rdfTriplesToPublicTriples(nextGraph);
+          const entryAssertions = rdfTriplesToPublicTriples(
+            publicTriplesToRdfTriples(entry.assertions, {
+              rdfType: definition.rdfType,
+            }),
+          );
+          const entryRetractions = rdfTriplesToPublicTriples(
+            publicTriplesToRdfTriples(entry.retractions, {
+              rdfType: definition.rdfType,
+            }),
+          );
 
           await storage.transact((transaction) => {
             const updatedOrder = transaction.nextUpdatedOrder();
-            const nextProjection = definition.project(nextGraph, {
+            const nextProjection = definition.project(nextPublicGraph, {
               uri() {
                 return existingRecord?.rootUri ?? entry.rootUri;
               },
@@ -283,7 +319,7 @@ export function createEngine(config: EngineConfig): Engine {
 
             transaction.writeEntity(entry.entityName, entry.entityId, {
               rootUri: existingRecord?.rootUri ?? entry.rootUri,
-              graph: nextGraph,
+              graph: nextPublicGraph,
               projection: nextProjection,
               lastChangeId: entry.changeId,
               updatedOrder,
@@ -293,8 +329,8 @@ export function createEngine(config: EngineConfig): Engine {
               entityId: entry.entityId,
               changeId: entry.changeId,
               parentChangeId: entry.parentChangeId,
-              assertions: entry.assertions,
-              retractions: entry.retractions,
+              assertions: entryAssertions,
+              retractions: entryRetractions,
               entityProjected: true,
               logProjected: true,
             });

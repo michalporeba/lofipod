@@ -6,6 +6,7 @@ import type {
   StoredEntityRecord,
   SyncMetadata,
 } from "../types.js";
+import { decodeStoredTriples, encodeStoredTriples } from "../rdf.js";
 import {
   cloneLocalChange,
   cloneStoredRecord,
@@ -16,7 +17,8 @@ type IndexedDbStorageOptions = {
   databaseName: string;
 };
 
-type StoredRecordRow = StoredEntityRecord<unknown> & {
+type StoredRecordRow = Omit<StoredEntityRecord<unknown>, "graph"> & {
+  graph: unknown;
   entityName: string;
   entityId: string;
 };
@@ -26,7 +28,9 @@ type MetaRow = {
   value: number | SyncMetadata;
 };
 
-type ChangeRow = LocalChange & {
+type ChangeRow = Omit<LocalChange, "assertions" | "retractions"> & {
+  assertions: unknown;
+  retractions: unknown;
   key: string;
   pendingEntityProjected?: 0 | 1;
   pendingLogProjected?: 0 | 1;
@@ -100,6 +104,33 @@ function normalizeChangeRow(row: ChangeRow): ChangeRow {
   };
 }
 
+function hydrateStoredRecord(row: StoredRecordRow): StoredEntityRecord<unknown> {
+  return {
+    rootUri: row.rootUri,
+    graph: decodeStoredTriples(row.graph as Parameters<typeof decodeStoredTriples>[0]),
+    projection: row.projection,
+    lastChangeId: row.lastChangeId,
+    updatedOrder: row.updatedOrder,
+  };
+}
+
+function hydrateChange(row: ChangeRow): LocalChange {
+  return {
+    entityName: row.entityName,
+    entityId: row.entityId,
+    changeId: row.changeId,
+    parentChangeId: row.parentChangeId,
+    assertions: decodeStoredTriples(
+      row.assertions as Parameters<typeof decodeStoredTriples>[0],
+    ),
+    retractions: decodeStoredTriples(
+      row.retractions as Parameters<typeof decodeStoredTriples>[0],
+    ),
+    entityProjected: row.entityProjected,
+    logProjected: row.logProjected,
+  };
+}
+
 function openDatabase(databaseName: string): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(databaseName, DATABASE_VERSION);
@@ -155,7 +186,7 @@ function cloneStoredRecordRow(row: StoredRecordRow): StoredRecordRow {
   return {
     entityName: row.entityName,
     entityId: row.entityId,
-    ...cloneStoredRecord(row),
+    ...cloneStoredRecord(hydrateStoredRecord(row)),
   };
 }
 
@@ -209,7 +240,7 @@ export function createIndexedDbStorage(
       )) as StoredRecordRow | undefined;
 
       await promisifyTransaction(transaction);
-      return row ? cloneStoredRecord(row) : null;
+      return row ? cloneStoredRecord(hydrateStoredRecord(row)) : null;
     },
 
     async listEntities(entityName) {
@@ -227,7 +258,7 @@ export function createIndexedDbStorage(
         .map(
           (row): ListedEntityRecord => ({
             entityId: row.entityId,
-            record: cloneStoredRecord(row),
+            record: cloneStoredRecord(hydrateStoredRecord(row)),
           }),
         )
         .sort(
@@ -260,7 +291,7 @@ export function createIndexedDbStorage(
             (entityName ? change.entityName === entityName : true) &&
             (entityId ? change.entityId === entityId : true),
         )
-        .map(cloneLocalChange);
+        .map((change) => cloneLocalChange(hydrateChange(change)));
     },
 
     async listPendingChanges() {
@@ -286,7 +317,9 @@ export function createIndexedDbStorage(
         deduped.set(change.key, change);
       }
 
-      return Array.from(deduped.values()).map(cloneLocalChange);
+      return Array.from(deduped.values()).map((change) =>
+        cloneLocalChange(hydrateChange(change)),
+      );
     },
 
     async readSyncMetadata() {
@@ -320,7 +353,7 @@ export function createIndexedDbStorage(
       const scopedTransaction: LocalStorageTransaction = {
         readEntity(entityName, entityId) {
           const row = draft.records.get(`${entityName}:${entityId}`);
-          return row ? cloneStoredRecord(row) : null;
+          return row ? cloneStoredRecord(hydrateStoredRecord(row)) : null;
         },
         writeEntity(entityName, entityId, record) {
           const key = `${entityName}:${entityId}`;
@@ -329,12 +362,15 @@ export function createIndexedDbStorage(
             entityName,
             entityId,
             ...cloneStoredRecord(record),
+            graph: encodeStoredTriples(record.graph),
           });
         },
         appendChange(change) {
           appendedChanges.push({
             key: createChangeKey(change),
             ...cloneLocalChange(change),
+            assertions: encodeStoredTriples(change.assertions),
+            retractions: encodeStoredTriples(change.retractions),
           });
         },
         markChangeEntityProjected(changeId) {

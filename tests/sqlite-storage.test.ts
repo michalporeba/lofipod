@@ -2,9 +2,17 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
+import { DataFactory } from "n3";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { createEngine, createSqliteStorage } from "../src/index.js";
+import {
+  createEngine,
+  createSqliteStorage,
+  defineEntity,
+  defineVocabulary,
+  rdf,
+  type Triple,
+} from "../src/index.js";
 import { createEventFixture } from "./support/eventFixture.js";
 
 describe("createSqliteStorage", () => {
@@ -149,6 +157,84 @@ describe("createSqliteStorage", () => {
           year: 2024,
         },
       },
+    });
+  });
+
+  it("preserves typed literal values that look like IRIs across restart", async () => {
+    const ex = defineVocabulary({
+      base: "https://example.com/",
+      terms: {
+        Bookmark: "ns#Bookmark",
+        url: "ns#url",
+      },
+      uri({ base, entityName, id }) {
+        return `${base}id/${entityName}/${id}`;
+      },
+    });
+    const bookmarkEntity = defineEntity<{
+      id: string;
+      url: string;
+    }>({
+      name: "bookmark",
+      pod: {
+        basePath: "bookmarks/",
+      },
+      rdfType: ex.Bookmark,
+      id: (bookmark) => bookmark.id,
+      uri: (bookmark) =>
+        ex.uri({
+          entityName: "bookmark",
+          id: bookmark.id,
+        }),
+      toRdf(bookmark, { uri }) {
+        const subject = uri(bookmark);
+
+        return [
+          [subject, rdf.type, ex.Bookmark],
+          [
+            subject,
+            ex.url,
+            DataFactory.literal(bookmark.url) as unknown as string,
+          ],
+        ] satisfies Triple[];
+      },
+      project(graph, { uri }) {
+        const subject = uri();
+        const url = graph.find(
+          ([subjectTerm, predicateTerm]) =>
+            subjectTerm === subject && predicateTerm === ex.url,
+        )?.[2];
+
+        return {
+          id: subject.split("/").at(-1) ?? "",
+          url: String(url ?? ""),
+        };
+      },
+    });
+
+    const filePath = await createStorageFilePath();
+    const firstEngine = createEngine({
+      entities: [bookmarkEntity],
+      storage: createSqliteStorage({
+        filePath,
+      }),
+    });
+
+    await firstEngine.save("bookmark", {
+      id: "bookmark-1",
+      url: "https://literal.example/resource",
+    });
+
+    const secondEngine = createEngine({
+      entities: [bookmarkEntity],
+      storage: createSqliteStorage({
+        filePath,
+      }),
+    });
+
+    await expect(secondEngine.get("bookmark", "bookmark-1")).resolves.toEqual({
+      id: "bookmark-1",
+      url: "https://literal.example/resource",
     });
   });
 });

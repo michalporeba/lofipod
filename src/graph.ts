@@ -5,6 +5,8 @@ import type {
   ToRdfHelpers,
   Triple,
 } from "./types.js";
+import type { RdfTriple } from "./rdf.js";
+import { publicTriplesToRdfTriples, rdfTripleKey } from "./rdf.js";
 
 export function fallbackRootUri(entityName: string, id: string): string {
   return `lofipod://entity/${entityName}/${id}`;
@@ -75,39 +77,38 @@ export function projectionsMatch(current: unknown, next: unknown): boolean {
 }
 
 export function graphsMatch(current: Triple[], next: Triple[]): boolean {
-  const diff = diffTriples(current, next);
+  const diff = diffTriples(
+    publicTriplesToRdfTriples(current),
+    publicTriplesToRdfTriples(next),
+  );
   return diff.assertions.length === 0 && diff.retractions.length === 0;
 }
 
-function tripleKey([subject, predicate, object]: Triple): string {
-  return JSON.stringify([subject, predicate, object]);
-}
-
-export function diffTriples(previous: Triple[], next: Triple[]) {
-  const previousKeys = new Set(previous.map(tripleKey));
-  const nextKeys = new Set(next.map(tripleKey));
+export function diffTriples(previous: RdfTriple[], next: RdfTriple[]) {
+  const previousKeys = new Set(previous.map(rdfTripleKey));
+  const nextKeys = new Set(next.map(rdfTripleKey));
 
   return {
-    assertions: next.filter((triple) => !previousKeys.has(tripleKey(triple))),
-    retractions: previous.filter((triple) => !nextKeys.has(tripleKey(triple))),
+    assertions: next.filter((triple) => !previousKeys.has(rdfTripleKey(triple))),
+    retractions: previous.filter((triple) => !nextKeys.has(rdfTripleKey(triple))),
   };
 }
 
 export function applyTripleDelta(
-  current: Triple[],
+  current: RdfTriple[],
   input: {
-    assertions: Triple[];
-    retractions: Triple[];
+    assertions: RdfTriple[];
+    retractions: RdfTriple[];
   },
-): Triple[] {
-  const next = new Map(current.map((triple) => [tripleKey(triple), triple]));
+): RdfTriple[] {
+  const next = new Map(current.map((triple) => [rdfTripleKey(triple), triple]));
 
   for (const triple of input.retractions) {
-    next.delete(tripleKey(triple));
+    next.delete(rdfTripleKey(triple));
   }
 
   for (const triple of input.assertions) {
-    next.set(tripleKey(triple), triple);
+    next.set(rdfTripleKey(triple), triple);
   }
 
   return Array.from(next.values());

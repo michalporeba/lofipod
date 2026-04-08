@@ -3,6 +3,7 @@ import type {
   PodLogAppendRequest,
   PodSyncAdapter,
 } from "../types.js";
+import { publicTriplesToRdfTriples, rdfTermToN3 } from "../rdf.js";
 
 type SolidPodAdapterOptions = {
   podBaseUrl: string;
@@ -29,30 +30,14 @@ function parentContainerPaths(path: string): string[] {
     .map((_, index) => `${segments.slice(0, index + 1).join("/")}/`);
 }
 
-function termToTurtle(term: string | number | boolean): string {
-  if (typeof term === "number" || typeof term === "boolean") {
-    return String(term);
-  }
-
-  if (
-    term.startsWith("http://") ||
-    term.startsWith("https://") ||
-    term.startsWith("urn:") ||
-    term.startsWith("lofipod://")
-  ) {
-    return `<${term}>`;
-  }
-
-  return JSON.stringify(term);
-}
-
 function serializeTriples(
   triples: PodEntityPatchRequest["assertions"],
+  options: { rdfType?: string } = {},
 ): string {
-  return triples
+  return publicTriplesToRdfTriples(triples, options)
     .map(
       ([subject, predicate, object]) =>
-        `${termToTurtle(subject)} ${termToTurtle(predicate)} ${termToTurtle(object)} .`,
+        `${rdfTermToN3(subject)} ${rdfTermToN3(predicate)} ${rdfTermToN3(object)} .`,
     )
     .join("\n");
 }

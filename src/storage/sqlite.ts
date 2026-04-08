@@ -12,6 +12,7 @@ import type {
   SyncMetadata,
   Triple,
 } from "../types.js";
+import { decodeStoredTriples, encodeStoredTriples } from "../rdf.js";
 import {
   cloneLocalChange,
   cloneStoredRecord,
@@ -65,7 +66,7 @@ function serializeJson(value: unknown): string {
 function hydrateStoredRecord(row: EntityRow): StoredEntityRecord<unknown> {
   return {
     rootUri: row.root_uri,
-    graph: parseJson<Triple[]>(row.graph),
+    graph: decodeStoredTriples(parseJson(row.graph)),
     projection: parseJson<unknown>(row.projection),
     lastChangeId: row.last_change_id,
     updatedOrder: row.updated_order,
@@ -85,8 +86,8 @@ function hydrateLocalChange(row: ChangeRow): LocalChange {
     entityId: row.entity_id,
     changeId: row.change_id,
     parentChangeId: row.parent_change_id,
-    assertions: parseJson<Triple[]>(row.assertions),
-    retractions: parseJson<Triple[]>(row.retractions),
+    assertions: decodeStoredTriples(parseJson(row.assertions)),
+    retractions: decodeStoredTriples(parseJson(row.retractions)),
     entityProjected: Boolean(row.entity_projected),
     logProjected: Boolean(row.log_projected),
   };
@@ -349,7 +350,7 @@ export function createSqliteStorage(
               entityName,
               entityId,
               record.rootUri,
-              serializeJson(record.graph),
+              serializeJson(encodeStoredTriples(record.graph)),
               serializeJson(record.projection),
               record.lastChangeId,
               record.updatedOrder,
@@ -361,8 +362,8 @@ export function createSqliteStorage(
               change.entityName,
               change.entityId,
               change.parentChangeId,
-              serializeJson(change.assertions),
-              serializeJson(change.retractions),
+              serializeJson(encodeStoredTriples(change.assertions)),
+              serializeJson(encodeStoredTriples(change.retractions)),
               change.entityProjected ? 1 : 0,
               change.logProjected ? 1 : 0,
             );

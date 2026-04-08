@@ -6,8 +6,8 @@ import type {
   PodLogAppendRequest,
   StoredEntityRecord,
   SyncState,
-  Triple,
 } from "./types.js";
+import { publicTriplesToRdfTriples, rdfTermToN3 } from "./rdf.js";
 
 export function hasPendingSync(change: LocalChange): boolean {
   return !change.entityProjected || !change.logProjected;
@@ -38,28 +38,14 @@ export async function readSyncState(
   };
 }
 
-function termToN3(term: Triple[number]): string {
-  if (typeof term === "number" || typeof term === "boolean") {
-    return String(term);
-  }
-
-  if (
-    term.startsWith("http://") ||
-    term.startsWith("https://") ||
-    term.startsWith("urn:") ||
-    term.startsWith("lofipod://")
-  ) {
-    return `<${term}>`;
-  }
-
-  return JSON.stringify(term);
-}
-
-function triplesToN3(triples: Triple[]): string {
-  return triples
+function triplesToN3(
+  triples: LocalChange["assertions"],
+  options: { rdfType?: string } = {},
+): string {
+  return publicTriplesToRdfTriples(triples, options)
     .map(
       ([subject, predicate, object]) =>
-        `  ${termToN3(subject)} ${termToN3(predicate)} ${termToN3(object)} .`,
+        `  ${rdfTermToN3(subject)} ${rdfTermToN3(predicate)} ${rdfTermToN3(object)} .`,
     )
     .join("\n");
 }
@@ -82,15 +68,27 @@ export function createEntityPatchRequest(
   ];
 
   if (change.assertions.length > 0) {
-    fields.push(`  solid:inserts {\n${triplesToN3(change.assertions)}\n  };`);
+    fields.push(
+      `  solid:inserts {\n${triplesToN3(change.assertions, {
+        rdfType: definition.rdfType,
+      })}\n  };`,
+    );
   }
 
   if (change.retractions.length > 0) {
-    fields.push(`  solid:deletes {\n${triplesToN3(change.retractions)}\n  };`);
+    fields.push(
+      `  solid:deletes {\n${triplesToN3(change.retractions, {
+        rdfType: definition.rdfType,
+      })}\n  };`,
+    );
   }
 
   if (change.retractions.length > 0) {
-    fields.push(`  solid:where {\n${triplesToN3(change.retractions)}\n  }.`);
+    fields.push(
+      `  solid:where {\n${triplesToN3(change.retractions, {
+        rdfType: definition.rdfType,
+      })}\n  }.`,
+    );
   } else {
     fields.push("  solid:where {}.");
   }

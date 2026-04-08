@@ -5,17 +5,14 @@ import type {
   SyncMetadata,
   Triple,
 } from "../types.js";
+import { clonePublicTriples } from "../rdf.js";
 
 function cloneValue<T>(value: T): T {
   return structuredClone(value);
 }
 
-function cloneTriple([subject, predicate, object]: Triple): Triple {
-  return [subject, predicate, object];
-}
-
 export function cloneTriples(triples: Triple[]): Triple[] {
-  return triples.map(cloneTriple);
+  return clonePublicTriples(triples);
 }
 
 export function cloneStoredRecord(
