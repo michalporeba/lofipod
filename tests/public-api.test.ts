@@ -2152,6 +2152,7 @@ describe("mocked entity sync", () => {
     const canonicalContainerVersions = new Map<string, string>();
     const canonicalChecks: string[] = [];
     const subscriptions = new Map<string, Array<() => void>>();
+    const subscriptionCalls: string[] = [];
     let nextCanonicalVersion = 0;
 
     const bumpCanonicalVersion = (entityName: string) => {
@@ -2323,6 +2324,7 @@ describe("mocked entity sync", () => {
           containerPath: string,
           onNotification: () => void,
         ) {
+          subscriptionCalls.push(containerPath);
           const existing = subscriptions.get(containerPath) ?? [];
           existing.push(onNotification);
           subscriptions.set(containerPath, existing);
@@ -2342,6 +2344,7 @@ describe("mocked entity sync", () => {
       canonicalEntities,
       canonicalChecks,
       subscriptions,
+      subscriptionCalls,
       upsertCanonicalEntity,
       removeCanonicalEntity,
       async notify(containerPath: string) {
@@ -2353,6 +2356,233 @@ describe("mocked entity sync", () => {
       },
     };
   };
+
+  it("polls for remote log changes at the configured interval without manual sync", async () => {
+    const { entity } = createEventFixture();
+    const remote = createSharedRemoteAdapter();
+    vi.useFakeTimers();
+    const engine = createEngine({
+      entities: [entity],
+      pod,
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: {
+          ...remote.adapter,
+          subscribeToContainer: undefined,
+        },
+        pollIntervalMs: 100,
+      },
+    });
+
+    try {
+      remote.logEntries.push({
+        entityName: "event",
+        entityId: "ev-polled",
+        changeId: "remote-polled-1",
+        parentChangeId: null,
+        timestamp: "2026-04-09T12:00:00.000Z",
+        path: "apps/my-journal/log/event/remote-polled-1.nt",
+        rootUri: "https://example.com/id/event/ev-polled",
+        assertions: eventGraph("ev-polled", "Polled remote", 2028),
+        retractions: [],
+      });
+
+      await vi.advanceTimersByTimeAsync(100);
+
+      await expect(engine.get("event", "ev-polled")).resolves.toEqual({
+        id: "ev-polled",
+        title: "Polled remote",
+        time: {
+          year: 2028,
+        },
+      });
+    } finally {
+      vi.useRealTimers();
+      await engine.dispose();
+    }
+  });
+
+  it("backs off polling after consecutive failures and resets after a successful sync", async () => {
+    const { entity } = createEventFixture();
+    let attempts = 0;
+    let shouldFail = true;
+    vi.useFakeTimers();
+    const engine = createEngine({
+      entities: [entity],
+      pod,
+      sync: {
+        adapter: {
+          async applyEntityPatch() {
+            // no-op
+          },
+          async appendLogEntry() {
+            // no-op
+          },
+          async listLogEntries() {
+            attempts += 1;
+
+            if (shouldFail) {
+              throw new Error("temporary network failure");
+            }
+
+            return [];
+          },
+          subscribeToContainer: undefined,
+        },
+        pollIntervalMs: 100,
+      },
+    });
+
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(attempts).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(99);
+      expect(attempts).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(attempts).toBe(2);
+
+      await vi.advanceTimersByTimeAsync(200);
+      expect(attempts).toBe(3);
+
+      shouldFail = false;
+
+      await vi.advanceTimersByTimeAsync(400);
+      const attemptsAfterRecovery = attempts;
+
+      expect(attemptsAfterRecovery).toBeGreaterThan(3);
+
+      await vi.advanceTimersByTimeAsync(100);
+      expect(attempts).toBeGreaterThan(attemptsAfterRecovery);
+    } finally {
+      vi.useRealTimers();
+      await engine.dispose();
+    }
+  });
+
+  it("stops the polling loop on detach and dispose", async () => {
+    const { entity } = createEventFixture();
+    let syncAttempts = 0;
+    vi.useFakeTimers();
+    const engine = createEngine({
+      entities: [entity],
+      pod,
+      sync: {
+        adapter: {
+          async applyEntityPatch() {
+            // no-op
+          },
+          async appendLogEntry() {
+            // no-op
+          },
+          async listLogEntries() {
+            syncAttempts += 1;
+            return [];
+          },
+          subscribeToContainer: undefined,
+        },
+        pollIntervalMs: 100,
+      },
+    });
+
+    try {
+      await engine.save("event", {
+        id: "ev-stop-poll",
+        title: "Hello",
+        time: {
+          year: 2024,
+        },
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+      const attemptsBeforeDetach = syncAttempts;
+
+      expect(attemptsBeforeDetach).toBeGreaterThan(0);
+
+      await engine.sync.detach();
+      await vi.advanceTimersByTimeAsync(500);
+      expect(syncAttempts).toBe(attemptsBeforeDetach);
+
+      await engine.sync.attach({
+        adapter: {
+          async applyEntityPatch() {
+            // no-op
+          },
+          async appendLogEntry() {
+            // no-op
+          },
+          async listLogEntries() {
+            syncAttempts += 1;
+            return [];
+          },
+          subscribeToContainer: undefined,
+        },
+        podBaseUrl: "https://pod.example/",
+        logBasePath: "apps/my-journal/log/",
+        pollIntervalMs: 100,
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+      const attemptsAfterReattach = syncAttempts;
+
+      expect(attemptsAfterReattach).toBeGreaterThan(attemptsBeforeDetach);
+
+      await engine.dispose();
+      await vi.advanceTimersByTimeAsync(500);
+      expect(syncAttempts).toBe(attemptsAfterReattach);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("re-establishes notification subscriptions after polling succeeds following a failure", async () => {
+    const { entity } = createEventFixture();
+    const remote = createSharedRemoteAdapter();
+    let shouldFail = true;
+    vi.useFakeTimers();
+    const engine = createEngine({
+      entities: [entity],
+      pod,
+      sync: {
+        adapter: {
+          ...remote.adapter,
+          async applyEntityPatch(request) {
+            if (shouldFail) {
+              throw new Error("temporary network failure");
+            }
+
+            return remote.adapter.applyEntityPatch(request);
+          },
+        },
+        pollIntervalMs: 100,
+      },
+    });
+
+    try {
+      await engine.save("event", {
+        id: "ev-resubscribe",
+        title: "Hello",
+        time: {
+          year: 2024,
+        },
+      });
+
+      await Promise.resolve();
+      expect(remote.subscriptionCalls).toHaveLength(2);
+
+      await vi.advanceTimersByTimeAsync(100);
+      expect(remote.subscriptionCalls).toHaveLength(2);
+
+      shouldFail = false;
+
+      await vi.advanceTimersByTimeAsync(200);
+      expect(remote.subscriptionCalls).toHaveLength(4);
+    } finally {
+      vi.useRealTimers();
+      await engine.dispose();
+    }
+  });
 
   it("replays remote log entries when the log container subscription fires", async () => {
     const { entity } = createEventFixture();

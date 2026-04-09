@@ -160,4 +160,51 @@ describe("Community Solid Server auto sync", () => {
       });
     });
   }, 30_000);
+
+  it("polls for remote changes without notifications or manual sync.now()", async () => {
+    const entityId = `ev-polled-${runId}`;
+    const basePath = `events-polled-${runId}/`;
+    const logBasePath = `apps/polled-${runId}/log/`;
+    const entity = createScopedEntity(basePath);
+    const producer = createEngine({
+      entities: [entity],
+      pod: {
+        logBasePath,
+      },
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: createPollingOnlyAdapter(),
+      },
+    });
+    const consumer = createEngine({
+      entities: [entity],
+      pod: {
+        logBasePath,
+      },
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: createPollingOnlyAdapter(),
+        pollIntervalMs: 250,
+      },
+    });
+
+    await producer.save("event", {
+      id: entityId,
+      title: "Polled from Pod",
+      time: {
+        year: 2028,
+      },
+    });
+    await producer.sync.now();
+
+    await waitForExpectation(async () => {
+      await expect(consumer.get("event", entityId)).resolves.toEqual({
+        id: entityId,
+        title: "Polled from Pod",
+        time: {
+          year: 2028,
+        },
+      });
+    }, 15_000);
+  }, 30_000);
 });

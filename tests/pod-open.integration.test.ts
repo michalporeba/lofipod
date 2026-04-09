@@ -18,6 +18,26 @@ describe("Community Solid Server open write path", () => {
     await waitForSolidServer(solidOpenBaseUrl);
   }, 30_000);
 
+  async function waitForExpectation(
+    check: () => Promise<void> | void,
+    timeoutMs = 15_000,
+  ): Promise<void> {
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < timeoutMs) {
+      try {
+        await check();
+        return;
+      } catch {
+        await new Promise((resolve) => {
+          setTimeout(resolve, 50);
+        });
+      }
+    }
+
+    await check();
+  }
+
   it("saves and syncs one entity to canonical and log resources", async () => {
     const entityId = `ev-123-${runId}`;
     const { entity } = createEventFixture();
@@ -51,28 +71,33 @@ describe("Community Solid Server open write path", () => {
         year: 2024,
       },
     });
-    await engine.sync.now();
 
-    const canonicalResponse = await fetch(
-      new URL(`events/${entityId}.ttl`, solidOpenBaseUrl),
-    );
-    const canonicalBody = await canonicalResponse.text();
+    await waitForExpectation(async () => {
+      const canonicalResponse = await fetch(
+        new URL(`events/${entityId}.ttl`, solidOpenBaseUrl),
+      );
+      const canonicalBody = await canonicalResponse.text();
 
-    expect(canonicalResponse.ok).toBe(true);
-    expect(canonicalBody).toContain("https://example.com/ns#title");
-    expect(canonicalBody).toContain("Hello");
+      expect(canonicalResponse.ok).toBe(true);
+      expect(canonicalBody).toContain("https://example.com/ns#title");
+      expect(canonicalBody).toContain("Hello");
+    });
 
-    expect(appendedPaths).toHaveLength(1);
-    expect(appendedPaths[0]).toMatch(/\.nt$/);
+    await waitForExpectation(() => {
+      expect(appendedPaths).toHaveLength(1);
+      expect(appendedPaths[0]).toMatch(/\.nt$/);
+    });
 
-    const logResponse = await fetch(
-      new URL(appendedPaths[0]!, solidOpenBaseUrl),
-    );
-    const logBody = await logResponse.text();
+    await waitForExpectation(async () => {
+      const logResponse = await fetch(
+        new URL(appendedPaths[0]!, solidOpenBaseUrl),
+      );
+      const logBody = await logResponse.text();
 
-    expect(logResponse.ok).toBe(true);
-    expect(logBody).toContain("<urn:lofipod:log:Change>");
-    expect(logBody).toContain(`"${entityId}"`);
+      expect(logResponse.ok).toBe(true);
+      expect(logBody).toContain("<urn:lofipod:log:Change>");
+      expect(logBody).toContain(`"${entityId}"`);
+    });
   }, 30_000);
 
   it("applies a real N3 Patch update to an existing canonical resource", async () => {
@@ -98,7 +123,16 @@ describe("Community Solid Server open write path", () => {
         year: 2024,
       },
     });
-    await engine.sync.now();
+
+    await waitForExpectation(async () => {
+      const response = await fetch(
+        new URL(`events/${entityId}.ttl`, solidOpenBaseUrl),
+      );
+      const body = await response.text();
+
+      expect(response.ok).toBe(true);
+      expect(body).toContain("First");
+    });
 
     await engine.save("event", {
       id: entityId,
@@ -107,16 +141,17 @@ describe("Community Solid Server open write path", () => {
         year: 2025,
       },
     });
-    await engine.sync.now();
 
-    const response = await fetch(
-      new URL(`events/${entityId}.ttl`, solidOpenBaseUrl),
-    );
-    const body = await response.text();
+    await waitForExpectation(async () => {
+      const response = await fetch(
+        new URL(`events/${entityId}.ttl`, solidOpenBaseUrl),
+      );
+      const body = await response.text();
 
-    expect(response.ok).toBe(true);
-    expect(body).toContain("Updated");
-    expect(body).toContain("2025");
-    expect(body).not.toContain("First");
+      expect(response.ok).toBe(true);
+      expect(body).toContain("Updated");
+      expect(body).toContain("2025");
+      expect(body).not.toContain("First");
+    });
   }, 30_000);
 });

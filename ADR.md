@@ -95,6 +95,8 @@ and known boundaries for the project.
   background sync cycle after the local transaction commits.
 - The engine should support attaching and detaching a Pod sync adapter at
   runtime without rebuilding local state.
+- Attached sync should run a cancellable periodic poll loop with a configurable
+  interval, defaulting to 30 seconds.
 - Solid notifications are an enhancement path, not a baseline dependency.
 - Notification subscriptions should stay adapter-driven. The engine may ask an
   adapter to subscribe to canonical and log containers, but correctness must
@@ -140,6 +142,9 @@ and known boundaries for the project.
 - Attaching sync at startup or runtime should also queue a background sync
   cycle so remote log replay and canonical reconciliation happen without an
   explicit `sync.now()`.
+- Periodic polling should remain the reliability backstop for remote discovery,
+  using exponential backoff after consecutive sync failures and resetting to
+  the normal interval after a successful cycle.
 - Realtime collaborative editing is out of scope.
 
 ### Local-first query model

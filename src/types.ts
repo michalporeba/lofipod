@@ -171,6 +171,7 @@ export type EngineConfig = {
   };
   sync?: {
     adapter: PodSyncAdapter;
+    pollIntervalMs?: number;
   };
 };
 
@@ -178,6 +179,7 @@ export type SyncAttachConfig = {
   adapter: PodSyncAdapter;
   podBaseUrl: string;
   logBasePath: string;
+  pollIntervalMs?: number;
 };
 
 export type SyncState = {

@@ -142,6 +142,8 @@ Developers should be able to:
 - trigger sync explicitly when needed
 - rely on attached sync to run automatically after save/delete and after
   initial attach
+- configure an optional `pollIntervalMs` for attached sync when they want a
+  faster or slower polling cadence
 - explicitly bootstrap from canonical remote resources on first attach or
   recovery
 - delete an entity locally and have that deletion replicate through normal sync
@@ -150,6 +152,8 @@ Developers should be able to:
 
 Normal save, get, and list flows should work without requiring explicit sync
 operations in the common case.
+When omitted, the current default polling interval is 30 seconds, with
+exponential backoff after consecutive sync failures.
 
 ## Example
 

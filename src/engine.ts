@@ -15,6 +15,7 @@ import {
   saveEntity,
 } from "./engine/local.js";
 import { createNotificationManager } from "./engine/notifications.js";
+import { createPollingManager } from "./engine/polling.js";
 import { bootstrapFromCanonicalResources, syncNow } from "./engine/remote.js";
 import {
   requireEntityDefinition,
@@ -39,22 +40,24 @@ export function createEngine(config: EngineConfig): Engine {
     sync: currentSyncConfig,
   });
 
-  const runSyncNow = (suppressErrors: boolean): Promise<void> => {
+  const enqueueSyncCycle = (): Promise<void> => {
     const task = queuedSync
       .catch(() => {
         // Continue processing later sync attempts after an earlier failure.
       })
       .then(() => syncNow(storage, entities, runtimeConfig()));
 
-    queuedSync = suppressErrors
-      ? task.catch(() => {
-          // Notification-triggered sync should not surface background failures.
-        })
-      : task;
+    queuedSync = task;
+
+    return task;
+  };
+
+  const runSyncNow = (suppressErrors: boolean): Promise<void> => {
+    const task = enqueueSyncCycle();
 
     return suppressErrors
       ? task.catch(() => {
-          // Notification-triggered sync should not surface background failures.
+          // Background-triggered sync should not surface failures directly.
         })
       : task;
   };
@@ -70,9 +73,15 @@ export function createEngine(config: EngineConfig): Engine {
     getConfig: runtimeConfig,
     runSyncNow,
   });
+  const polling = createPollingManager({
+    getConfig: runtimeConfig,
+    runSyncCycle: enqueueSyncCycle,
+    refreshNotifications: notifications.start,
+  });
 
   if (currentSyncConfig && currentPodConfig?.logBasePath) {
     void notifications.start();
+    polling.start();
     queueBackgroundSync();
   }
 
@@ -95,6 +104,7 @@ export function createEngine(config: EngineConfig): Engine {
     },
 
     async dispose(): Promise<void> {
+      polling.stop();
       await notifications.stop();
     },
 
@@ -125,6 +135,7 @@ export function createEngine(config: EngineConfig): Engine {
         };
         currentSyncConfig = {
           adapter: syncConfig.adapter,
+          pollIntervalMs: syncConfig.pollIntervalMs,
         };
 
         await storage.transact((transaction) => {
@@ -140,10 +151,12 @@ export function createEngine(config: EngineConfig): Engine {
         });
 
         await notifications.start();
+        polling.start();
         queueBackgroundSync();
       },
 
       async detach(): Promise<void> {
+        polling.stop();
         await notifications.stop();
         currentPodConfig = undefined;
         currentSyncConfig = undefined;
