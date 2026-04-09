@@ -50,6 +50,9 @@ and known boundaries for the project.
   on every access.
 - Saves should compare against the current local entity graph and emit graph
   delta assertions and retractions into the transaction log.
+- Reads may repair stale stored projections or canonical graphs when the
+  current entity definition implies a different canonicalization; graph repairs
+  should be recorded as normal local changes so they sync like any other delta.
 
 ### SOLID Pod backing
 

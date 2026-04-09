@@ -3,13 +3,17 @@ import { describe, expect, it } from "vitest";
 import {
   createEngine,
   createMemoryStorage,
+  defineEntity,
   defineVocabulary,
+  numberValue,
   packageVersion,
   rdf,
+  stringValue,
   uri,
   type LocalChange,
   type LocalStorageAdapter,
   type LocalStorageTransaction,
+  type EntityDefinition,
   type Triple,
 } from "../src/index.js";
 import {
@@ -55,6 +59,90 @@ function eventGraph(entityId: string, title: string, year: number): Triple[] {
     [subject, uri("https://example.com/ns#time"), time],
     [time, uri("https://example.com/ns#year"), year],
   ] satisfies Triple[];
+}
+
+function createRecanonicalizedEventFixtures(): {
+  legacyEntity: EntityDefinition<Event>;
+  currentEntity: EntityDefinition<Event>;
+  aliasPredicate: ReturnType<typeof uri>;
+} {
+  const ex = defineVocabulary({
+    base: "https://example.com/",
+    terms: {
+      Event: "ns#Event",
+      title: "ns#title",
+      titleAlias: "ns#titleAlias",
+      time: "ns#time",
+      year: "ns#year",
+    },
+    uri({ base, entityName, id }) {
+      return `${base}id/${entityName}/${id}`;
+    },
+  });
+
+  const project: EntityDefinition<Event>["project"] = (
+    graph,
+    { uri, child },
+  ) => {
+    const subject = uri();
+    const time = child("time");
+
+    return {
+      id: subject.value.split("/").at(-1) ?? "",
+      title: stringValue(graph, subject, ex.title),
+      time: {
+        year: numberValue(graph, time, ex.year),
+      },
+    };
+  };
+
+  const legacyEntity = defineEntity<Event>({
+    name: "event",
+    pod: {
+      basePath: "events/",
+    },
+    rdfType: ex.Event,
+    id: (event) => event.id,
+    uri: (event) =>
+      ex.uri({
+        entityName: "event",
+        id: event.id,
+      }),
+    toRdf(event, { uri, child }) {
+      const subject = uri(event);
+      const time = child("time");
+
+      return [
+        [subject, rdf.type, ex.Event],
+        [subject, ex.title, event.title],
+        [subject, ex.time, time],
+        [time, ex.year, event.time.year],
+      ];
+    },
+    project,
+  });
+
+  const currentEntity = defineEntity<Event>({
+    ...legacyEntity,
+    toRdf(event, { uri, child }) {
+      const subject = uri(event);
+      const time = child("time");
+
+      return [
+        [subject, rdf.type, ex.Event],
+        [subject, ex.title, event.title],
+        [subject, ex.titleAlias, event.title],
+        [subject, ex.time, time],
+        [time, ex.year, event.time.year],
+      ];
+    },
+  });
+
+  return {
+    legacyEntity,
+    currentEntity,
+    aliasPredicate: ex.titleAlias,
+  };
 }
 
 describe("public API scaffold", () => {
@@ -625,6 +713,89 @@ describe("local persistence", () => {
         },
       },
     });
+  });
+
+  it("re-canonicalizes the stored graph when the current entity definition adds triples", async () => {
+    const { legacyEntity, currentEntity, aliasPredicate } =
+      createRecanonicalizedEventFixtures();
+    const storage = createMemoryStorage();
+
+    const firstEngine = createEngine({
+      entities: [legacyEntity],
+      storage,
+    });
+
+    await firstEngine.save("event", {
+      id: "ev-123",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+
+    const secondEngine = createEngine({
+      entities: [currentEntity],
+      storage,
+    });
+
+    await expect(secondEngine.get("event", "ev-123")).resolves.toEqual({
+      id: "ev-123",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+
+    const stored = await storage.readEntity("event", "ev-123");
+    const changes = await storage.listChanges("event", "ev-123");
+    const repairChange = changes.at(-1);
+
+    expect(stored?.graph).toHaveLength(5);
+    expect(
+      stored?.graph.some(
+        ([subject, predicate, object]) =>
+          subject.value === "https://example.com/id/event/ev-123" &&
+          predicate.value === aliasPredicate.value &&
+          object === "Hello",
+      ),
+    ).toBe(true);
+    expect(changes).toHaveLength(2);
+    expect(repairChange?.assertions).toHaveLength(1);
+    expect(repairChange?.assertions[0]?.[1].value).toBe(aliasPredicate.value);
+    expect(repairChange?.retractions).toEqual([]);
+  });
+
+  it("does not emit repeated graph repairs once the stored entity has been re-canonicalized", async () => {
+    const { legacyEntity, currentEntity } =
+      createRecanonicalizedEventFixtures();
+    const storage = createMemoryStorage();
+
+    const firstEngine = createEngine({
+      entities: [legacyEntity],
+      storage,
+    });
+
+    await firstEngine.save("event", {
+      id: "ev-123",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+
+    const secondEngine = createEngine({
+      entities: [currentEntity],
+      storage,
+    });
+
+    await secondEngine.get("event", "ev-123");
+    const afterFirstGet = await storage.listChanges("event", "ev-123");
+
+    await secondEngine.get("event", "ev-123");
+    const afterSecondGet = await storage.listChanges("event", "ev-123");
+
+    expect(afterFirstGet).toHaveLength(2);
+    expect(afterSecondGet).toHaveLength(2);
   });
 
   it("rolls back local writes when a storage transaction fails", async () => {
@@ -1510,6 +1681,63 @@ describe("mocked entity sync", () => {
     expect(requests[0]?.patch).toContain("solid:inserts {");
     expect(requests[0]?.patch).toContain(
       '<https://example.com/id/event/ev-123> <https://example.com/ns#title> "Hello" .',
+    );
+  });
+
+  it("syncs graph repairs triggered by updated entity definitions", async () => {
+    const { legacyEntity, currentEntity } =
+      createRecanonicalizedEventFixtures();
+    const storage = createMemoryStorage();
+    const requests: Array<{
+      path: string;
+      patch: string;
+      assertions: Triple[];
+      retractions: Triple[];
+    }> = [];
+
+    const firstEngine = createEngine({
+      entities: [legacyEntity],
+      storage,
+    });
+
+    await firstEngine.save("event", {
+      id: "ev-123",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+
+    const secondEngine = createEngine({
+      entities: [currentEntity],
+      storage,
+      pod,
+      sync: {
+        adapter: {
+          async applyEntityPatch(request) {
+            requests.push({
+              path: request.path,
+              patch: request.patch,
+              assertions: request.assertions,
+              retractions: request.retractions,
+            });
+          },
+          async appendLogEntry() {
+            // no-op
+          },
+        },
+      },
+    });
+
+    await secondEngine.get("event", "ev-123");
+    await secondEngine.sync.now();
+
+    expect(requests).toHaveLength(2);
+    expect(requests.at(-1)?.path).toBe("events/ev-123.ttl");
+    expect(requests.at(-1)?.assertions).toHaveLength(1);
+    expect(requests.at(-1)?.retractions).toEqual([]);
+    expect(requests.at(-1)?.patch).toContain(
+      '<https://example.com/id/event/ev-123> <https://example.com/ns#titleAlias> "Hello" .',
     );
   });
 

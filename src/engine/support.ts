@@ -1,10 +1,17 @@
 import {
+  createToRdfHelpers,
   createProjectionHelpers,
+  diffTriples,
   fallbackRootUri,
   projectionsMatch,
   projectStoredRecord,
 } from "../graph.js";
-import { isNamedNodeTerm, uri } from "../rdf.js";
+import {
+  isNamedNodeTerm,
+  publicTriplesToRdfTriples,
+  rdfTriplesToPublicTriples,
+  uri,
+} from "../rdf.js";
 import { normalizeLogBasePath } from "../sync.js";
 import { rdf } from "../vocabulary.js";
 import type {
@@ -110,9 +117,9 @@ export async function repairStoredProjection<T>(
   entityId: string,
   record: StoredEntityRecord<unknown>,
 ): Promise<T> {
-  const projected = projectStoredRecord(definition, record);
+  const repair = createStoredEntityRepair(definition, record);
 
-  if (!projectionsMatch(record.projection, projected)) {
+  if (repair.assertions.length > 0 || repair.retractions.length > 0) {
     await storage.transact((transaction) => {
       const latest = transaction.readEntity(definition.name, entityId);
 
@@ -120,14 +127,91 @@ export async function repairStoredProjection<T>(
         return;
       }
 
+      const latestRepair = createStoredEntityRepair(definition, latest);
+
+      if (
+        latestRepair.assertions.length === 0 &&
+        latestRepair.retractions.length === 0
+      ) {
+        if (!projectionsMatch(latest.projection, latestRepair.projection)) {
+          transaction.writeEntity(definition.name, entityId, {
+            ...latest,
+            projection: latestRepair.projection,
+          });
+        }
+
+        return;
+      }
+
+      const changeId = createChangeId();
+
       transaction.writeEntity(definition.name, entityId, {
         ...latest,
-        projection: projected,
+        rootUri: latestRepair.rootUri,
+        graph: latestRepair.graph,
+        projection: latestRepair.projection,
+        lastChangeId: changeId,
+      });
+      transaction.appendChange({
+        entityName: definition.name,
+        entityId,
+        changeId,
+        parentChangeId: latest.lastChangeId,
+        assertions: latestRepair.assertions,
+        retractions: latestRepair.retractions,
+        entityProjected: false,
+        logProjected: false,
+      });
+    });
+
+    return repair.projection;
+  }
+
+  if (!projectionsMatch(record.projection, repair.projection)) {
+    await storage.transact((transaction) => {
+      const latest = transaction.readEntity(definition.name, entityId);
+
+      if (!latest) {
+        return;
+      }
+
+      const latestRepair = createStoredEntityRepair(definition, latest);
+
+      if (
+        latestRepair.assertions.length > 0 ||
+        latestRepair.retractions.length > 0
+      ) {
+        const changeId = createChangeId();
+
+        transaction.writeEntity(definition.name, entityId, {
+          ...latest,
+          rootUri: latestRepair.rootUri,
+          graph: latestRepair.graph,
+          projection: latestRepair.projection,
+          lastChangeId: changeId,
+        });
+        transaction.appendChange({
+          entityName: definition.name,
+          entityId,
+          changeId,
+          parentChangeId: latest.lastChangeId,
+          assertions: latestRepair.assertions,
+          retractions: latestRepair.retractions,
+          entityProjected: false,
+          logProjected: false,
+        });
+        return;
+      }
+
+      transaction.writeEntity(definition.name, entityId, {
+        ...latest,
+        rootUri: latestRepair.rootUri,
+        projection: latestRepair.projection,
       });
     });
   }
 
-  return projected;
+  return repair.projection;
 }
 
 export function createRemoteProjectionHelpers(rootUri: string) {
@@ -143,4 +227,45 @@ export function fallbackEntityRootUri(
 
 export function rootUriTerm(value: string) {
   return uri(value);
+}
+
+function createStoredEntityRepair<T>(
+  definition: EntityDefinition<T>,
+  record: StoredEntityRecord<unknown>,
+): {
+  rootUri: string;
+  projection: T;
+  graph: Triple[];
+  assertions: Triple[];
+  retractions: Triple[];
+} {
+  const projected = projectStoredRecord(definition, record);
+  const entityId = definition.id(projected);
+  const rootUri =
+    definition.uri?.(projected)?.value ??
+    fallbackEntityRootUri(definition, entityId);
+  const nextGraph = definition.toRdf(projected, createToRdfHelpers(rootUri));
+  const currentInternalGraph = publicTriplesToRdfTriples(record.graph, {
+    rdfType: definition.rdfType,
+  });
+  const nextInternalGraph = publicTriplesToRdfTriples(nextGraph, {
+    rdfType: definition.rdfType,
+  });
+  const { assertions, retractions } = diffTriples(
+    currentInternalGraph,
+    nextInternalGraph,
+  );
+  const graph = rdfTriplesToPublicTriples(nextInternalGraph);
+  const projection = definition.project(
+    graph,
+    createProjectionHelpers(rootUri),
+  );
+
+  return {
+    rootUri,
+    projection,
+    graph,
+    assertions: rdfTriplesToPublicTriples(assertions),
+    retractions: rdfTriplesToPublicTriples(retractions),
+  };
 }
