@@ -110,6 +110,10 @@ and known boundaries for the project.
   - report differing entities as collisions rather than overwriting either side
 - Sequential replay of app-private logs is an acceleration path, not the only
   valid remote discovery mechanism.
+- When remote replay reveals concurrent branches for the same entity, the
+  engine should reconcile them locally by merging non-conflicting triple-level
+  edits and resolving true conflicts deterministically by timestamp, then
+  lexicographic `changeId`.
 - Realtime collaborative editing is out of scope.
 
 ### Local-first query model

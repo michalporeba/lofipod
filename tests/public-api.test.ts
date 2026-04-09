@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   createEngine,
@@ -2198,6 +2198,456 @@ describe("mocked entity sync", () => {
     await expect(
       secondStorage.listChanges("event", "ev-delete"),
     ).resolves.toHaveLength(2);
+  });
+
+  it("auto-merges non-conflicting concurrent edits and syncs the merge on the next sync", async () => {
+    const { entity } = createEventFixture();
+    const remote = createSharedRemoteAdapter();
+    const firstStorage = createMemoryStorage();
+    const secondStorage = createMemoryStorage();
+    const firstEngine = createEngine({
+      entities: [entity],
+      pod,
+      storage: firstStorage,
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+    const secondEngine = createEngine({
+      entities: [entity],
+      pod,
+      storage: secondStorage,
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+
+    vi.useFakeTimers();
+
+    try {
+      vi.setSystemTime(new Date("2026-04-09T10:00:00.000Z"));
+
+      await firstEngine.save("event", {
+        id: "ev-fork",
+        title: "Base",
+        time: {
+          year: 2024,
+        },
+      });
+      await firstEngine.sync.now();
+      await secondEngine.sync.now();
+
+      vi.setSystemTime(new Date("2026-04-09T10:01:00.000Z"));
+      await firstEngine.save("event", {
+        id: "ev-fork",
+        title: "A",
+        time: {
+          year: 2024,
+        },
+      });
+
+      vi.setSystemTime(new Date("2026-04-09T10:02:00.000Z"));
+      await secondEngine.save("event", {
+        id: "ev-fork",
+        title: "Base",
+        time: {
+          year: 2025,
+        },
+      });
+
+      await firstEngine.sync.now();
+      await secondEngine.sync.now();
+
+      await expect(secondEngine.get("event", "ev-fork")).resolves.toEqual({
+        id: "ev-fork",
+        title: "A",
+        time: {
+          year: 2025,
+        },
+      });
+      await expect(secondEngine.sync.state()).resolves.toEqual({
+        status: "idle",
+        configured: true,
+        pendingChanges: 0,
+      });
+
+      await secondEngine.sync.now();
+      await firstEngine.sync.now();
+
+      await expect(firstEngine.get("event", "ev-fork")).resolves.toEqual({
+        id: "ev-fork",
+        title: "A",
+        time: {
+          year: 2025,
+        },
+      });
+      await expect(secondEngine.sync.state()).resolves.toEqual({
+        status: "idle",
+        configured: true,
+        pendingChanges: 0,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("resolves conflicting concurrent edits by most recent timestamp", async () => {
+    const { entity } = createEventFixture();
+    const remote = createSharedRemoteAdapter();
+    const firstEngine = createEngine({
+      entities: [entity],
+      pod,
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+    const secondStorage = createMemoryStorage();
+    const secondEngine = createEngine({
+      entities: [entity],
+      pod,
+      storage: secondStorage,
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+
+    vi.useFakeTimers();
+
+    try {
+      vi.setSystemTime(new Date("2026-04-09T11:00:00.000Z"));
+
+      await firstEngine.save("event", {
+        id: "ev-conflict",
+        title: "Base",
+        time: {
+          year: 2024,
+        },
+      });
+      await firstEngine.sync.now();
+      await secondEngine.sync.now();
+
+      vi.setSystemTime(new Date("2026-04-09T11:01:00.000Z"));
+      await firstEngine.save("event", {
+        id: "ev-conflict",
+        title: "First wins?",
+        time: {
+          year: 2024,
+        },
+      });
+
+      vi.setSystemTime(new Date("2026-04-09T11:02:00.000Z"));
+      await secondEngine.save("event", {
+        id: "ev-conflict",
+        title: "Second wins",
+        time: {
+          year: 2024,
+        },
+      });
+
+      await firstEngine.sync.now();
+      await secondEngine.sync.now();
+
+      await expect(secondEngine.sync.state()).resolves.toEqual({
+        status: "pending",
+        configured: true,
+        pendingChanges: 1,
+      });
+
+      const mergedChange = (
+        await secondStorage.listChanges("event", "ev-conflict")
+      ).at(-1);
+
+      expect(mergedChange?.assertions).toEqual([]);
+      expect(mergedChange?.retractions).toEqual([
+        [
+          uri("https://example.com/id/event/ev-conflict"),
+          uri("https://example.com/ns#title"),
+          "First wins?",
+        ],
+      ]);
+
+      await secondEngine.sync.now();
+      await firstEngine.sync.now();
+
+      await expect(firstEngine.get("event", "ev-conflict")).resolves.toEqual({
+        id: "ev-conflict",
+        title: "Second wins",
+        time: {
+          year: 2024,
+        },
+      });
+      await expect(secondEngine.get("event", "ev-conflict")).resolves.toEqual({
+        id: "ev-conflict",
+        title: "Second wins",
+        time: {
+          year: 2024,
+        },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("falls back to lexicographic change IDs when conflicting timestamps are equal", async () => {
+    const { entity } = createEventFixture();
+    const remote = createSharedRemoteAdapter();
+    const firstEngine = createEngine({
+      entities: [entity],
+      pod,
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+    const secondEngine = createEngine({
+      entities: [entity],
+      pod,
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+    const idSpy = vi
+      .spyOn(globalThis.crypto, "randomUUID")
+      .mockImplementationOnce(() => "00000000-0000-0000-0000-000000000001")
+      .mockImplementationOnce(() => "00000000-0000-0000-0000-000000000002")
+      .mockImplementationOnce(() => "00000000-0000-0000-0000-000000000009")
+      .mockImplementationOnce(() => "00000000-0000-0000-0000-000000000003")
+      .mockImplementationOnce(() => "00000000-0000-0000-0000-000000000010");
+
+    vi.useFakeTimers();
+
+    try {
+      vi.setSystemTime(new Date("2026-04-09T12:00:00.000Z"));
+
+      await firstEngine.save("event", {
+        id: "ev-fallback",
+        title: "Base",
+        time: {
+          year: 2024,
+        },
+      });
+      await firstEngine.sync.now();
+      await secondEngine.sync.now();
+
+      vi.setSystemTime(new Date("2026-04-09T12:01:00.000Z"));
+      await firstEngine.save("event", {
+        id: "ev-fallback",
+        title: "Alpha",
+        time: {
+          year: 2024,
+        },
+      });
+
+      vi.setSystemTime(new Date("2026-04-09T12:01:00.000Z"));
+      await secondEngine.save("event", {
+        id: "ev-fallback",
+        title: "Zulu",
+        time: {
+          year: 2024,
+        },
+      });
+
+      await firstEngine.sync.now();
+      await secondEngine.sync.now();
+      await secondEngine.sync.now();
+      await firstEngine.sync.now();
+
+      await expect(firstEngine.get("event", "ev-fallback")).resolves.toEqual({
+        id: "ev-fallback",
+        title: "Zulu",
+        time: {
+          year: 2024,
+        },
+      });
+      await expect(secondEngine.get("event", "ev-fallback")).resolves.toEqual({
+        id: "ev-fallback",
+        title: "Zulu",
+        time: {
+          year: 2024,
+        },
+      });
+    } finally {
+      idSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not create duplicate merge changes when the same fork is replayed repeatedly", async () => {
+    const { entity } = createEventFixture();
+    const remote = createSharedRemoteAdapter();
+    const firstEngine = createEngine({
+      entities: [entity],
+      pod,
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+    const secondStorage = createMemoryStorage();
+    const secondEngine = createEngine({
+      entities: [entity],
+      pod,
+      storage: secondStorage,
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+
+    vi.useFakeTimers();
+
+    try {
+      vi.setSystemTime(new Date("2026-04-09T13:00:00.000Z"));
+
+      await firstEngine.save("event", {
+        id: "ev-idempotent",
+        title: "Base",
+        time: {
+          year: 2024,
+        },
+      });
+      await firstEngine.sync.now();
+      await secondEngine.sync.now();
+
+      vi.setSystemTime(new Date("2026-04-09T13:01:00.000Z"));
+      await firstEngine.save("event", {
+        id: "ev-idempotent",
+        title: "Remote",
+        time: {
+          year: 2024,
+        },
+      });
+
+      vi.setSystemTime(new Date("2026-04-09T13:02:00.000Z"));
+      await secondEngine.save("event", {
+        id: "ev-idempotent",
+        title: "Base",
+        time: {
+          year: 2025,
+        },
+      });
+
+      await firstEngine.sync.now();
+      await secondEngine.sync.now();
+
+      const afterFirstMerge = await secondStorage.listChanges(
+        "event",
+        "ev-idempotent",
+      );
+
+      await secondEngine.sync.now();
+      await secondEngine.sync.now();
+
+      const afterRepeatedReplay = await secondStorage.listChanges(
+        "event",
+        "ev-idempotent",
+      );
+
+      expect(afterFirstMerge).toHaveLength(afterRepeatedReplay.length);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("merges a three-way fork by combining non-conflicting edits and resolving conflicting ones deterministically", async () => {
+    const { entity } = createEventFixture();
+    const remote = createSharedRemoteAdapter();
+    const firstEngine = createEngine({
+      entities: [entity],
+      pod,
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+    const secondEngine = createEngine({
+      entities: [entity],
+      pod,
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+    const thirdEngine = createEngine({
+      entities: [entity],
+      pod,
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+
+    vi.useFakeTimers();
+
+    try {
+      vi.setSystemTime(new Date("2026-04-09T14:00:00.000Z"));
+
+      await firstEngine.save("event", {
+        id: "ev-three-way",
+        title: "Base",
+        time: {
+          year: 2024,
+        },
+      });
+      await firstEngine.sync.now();
+      await secondEngine.sync.now();
+      await thirdEngine.sync.now();
+
+      vi.setSystemTime(new Date("2026-04-09T14:01:00.000Z"));
+      await firstEngine.save("event", {
+        id: "ev-three-way",
+        title: "Alpha",
+        time: {
+          year: 2024,
+        },
+      });
+
+      vi.setSystemTime(new Date("2026-04-09T14:02:00.000Z"));
+      await secondEngine.save("event", {
+        id: "ev-three-way",
+        title: "Base",
+        time: {
+          year: 2025,
+        },
+      });
+
+      vi.setSystemTime(new Date("2026-04-09T14:03:00.000Z"));
+      await thirdEngine.save("event", {
+        id: "ev-three-way",
+        title: "Zulu",
+        time: {
+          year: 2024,
+        },
+      });
+
+      await firstEngine.sync.now();
+      await secondEngine.sync.now();
+      await thirdEngine.sync.now();
+      await thirdEngine.sync.now();
+      await firstEngine.sync.now();
+      await secondEngine.sync.now();
+
+      const expected = {
+        id: "ev-three-way",
+        title: "Zulu",
+        time: {
+          year: 2025,
+        },
+      };
+
+      await expect(firstEngine.get("event", "ev-three-way")).resolves.toEqual(
+        expected,
+      );
+      await expect(secondEngine.get("event", "ev-three-way")).resolves.toEqual(
+        expected,
+      );
+      await expect(thirdEngine.get("event", "ev-three-way")).resolves.toEqual(
+        expected,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("bootstraps missing local entities from canonical remote resources", async () => {

@@ -4,6 +4,7 @@ import {
   rdfTriplesToPublicTriples,
 } from "../rdf.js";
 import type { EngineConfig, EntityDefinition } from "../types.js";
+import { reconcileForksAfterPull } from "./remote-merge.js";
 import type { EngineStorage } from "./support.js";
 import {
   createRemoteProjectionHelpers,
@@ -26,6 +27,7 @@ export async function replayRemoteLogEntries(
   const knownChangeIds = new Set(
     (await storage.listChanges()).map((change) => change.changeId),
   );
+  const touchedEntities = new Set<string>();
 
   for (const entry of remoteEntries) {
     if (
@@ -100,5 +102,8 @@ export async function replayRemoteLogEntries(
     });
 
     knownChangeIds.add(entry.changeId);
+    touchedEntities.add(`${entry.entityName}:${entry.entityId}`);
   }
+
+  await reconcileForksAfterPull(storage, entities, touchedEntities);
 }
