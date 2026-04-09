@@ -131,10 +131,14 @@ and known boundaries for the project.
   - `entityId`
   - `changeId`
   - optional `parentChangeId`
+  - creation timestamp
   - assertions
   - retractions
 - Assertions and retractions should use RDF triple semantics.
 - Triple deletion should be recorded per triple, not per node.
+- Forks are identified when multiple changes for the same entity share the same
+  `parentChangeId`; detection is metadata only and does not yet change sync
+  behaviour.
 
 ### Reliability and testing
 

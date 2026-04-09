@@ -1,3 +1,4 @@
+import { normalizeChangeTimestamp } from "../change-log.js";
 import type {
   ListedEntityRecord,
   LocalChange,
@@ -36,7 +37,7 @@ export type TransactionDraft = {
   updatedOrder: number;
 };
 
-export const DATABASE_VERSION = 2;
+export const DATABASE_VERSION = 3;
 export const ENTITY_STORE = "entities";
 export const CHANGE_STORE = "changes";
 export const META_STORE = "meta";
@@ -129,6 +130,7 @@ export function hydrateChange(row: ChangeRow): LocalChange {
     entityId: row.entityId,
     changeId: row.changeId,
     parentChangeId: row.parentChangeId,
+    timestamp: normalizeChangeTimestamp(row.timestamp),
     assertions: decodeStoredTriples(
       row.assertions as Parameters<typeof decodeStoredTriples>[0],
     ),
@@ -240,7 +242,7 @@ export function openDatabase(databaseName: string): Promise<IDBDatabase> {
       }
 
       if (
-        event.oldVersion < 2 &&
+        event.oldVersion < 3 &&
         database.objectStoreNames.contains(CHANGE_STORE)
       ) {
         const cursorRequest = changeStore.openCursor();

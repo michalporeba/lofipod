@@ -151,6 +151,7 @@ describe("Solid pod adapter", () => {
       entityId: "ev-123",
       changeId: "change-1",
       parentChangeId: "change-0",
+      timestamp: "2026-04-09T12:00:00.000Z",
       path: "apps/my-journal/log/event/change-1.nt",
       rootUri: "https://example.com/id/event/ev-123",
       assertions: [
@@ -195,6 +196,7 @@ describe("Solid pod adapter", () => {
       entityId: request.entityId,
       changeId: request.changeId,
       parentChangeId: request.parentChangeId,
+      timestamp: request.timestamp,
       path: request.path,
       rootUri: request.rootUri,
     });

@@ -11,6 +11,7 @@ import type { EntityDefinition } from "../types.js";
 import type { EngineStorage } from "./support.js";
 import {
   createChangeId,
+  createTimestamp,
   fallbackEntityRootUri,
   repairStoredProjection,
   rootUriTerm,
@@ -62,6 +63,7 @@ export async function saveEntity<T>(
       entityId,
       changeId,
       parentChangeId: previousRecord?.lastChangeId ?? null,
+      timestamp: createTimestamp(),
       assertions: storedAssertions,
       retractions: storedRetractions,
       entityProjected: false,
@@ -92,6 +94,7 @@ export async function deleteEntity(
       entityId,
       changeId: createChangeId(),
       parentChangeId: previousRecord.lastChangeId,
+      timestamp: createTimestamp(),
       assertions: [],
       retractions: previousRecord.graph,
       entityProjected: false,

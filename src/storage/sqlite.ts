@@ -1,3 +1,7 @@
+import {
+  DEFAULT_CHANGE_TIMESTAMP,
+  normalizeChangeTimestamp,
+} from "../change-log.js";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
@@ -37,6 +41,7 @@ type ChangeRow = {
   entity_name: string;
   entity_id: string;
   parent_change_id: string | null;
+  timestamp: string | null;
   assertions: string;
   retractions: string;
   entity_projected: number;
@@ -85,6 +90,7 @@ function hydrateLocalChange(row: ChangeRow): LocalChange {
     entityId: row.entity_id,
     changeId: row.change_id,
     parentChangeId: row.parent_change_id,
+    timestamp: normalizeChangeTimestamp(row.timestamp),
     assertions: decodeStoredTriples(parseJson(row.assertions)),
     retractions: decodeStoredTriples(parseJson(row.retractions)),
     entityProjected: Boolean(row.entity_projected),
@@ -133,6 +139,7 @@ export function createSqliteStorage(
       entity_name TEXT NOT NULL,
       entity_id TEXT NOT NULL,
       parent_change_id TEXT,
+      timestamp TEXT NOT NULL DEFAULT '${DEFAULT_CHANGE_TIMESTAMP}',
       assertions TEXT NOT NULL,
       retractions TEXT NOT NULL,
       entity_projected INTEGER NOT NULL DEFAULT 0,
@@ -150,6 +157,28 @@ export function createSqliteStorage(
       value TEXT NOT NULL
     );
   `);
+
+  const hasTimestampColumn = database
+    .prepare<[], { name: string }>(`PRAGMA table_info(changes)`)
+    .all()
+    .some((column) => column.name === "timestamp");
+
+  if (!hasTimestampColumn) {
+    database.exec(`
+      ALTER TABLE changes
+      ADD COLUMN timestamp TEXT NOT NULL DEFAULT '${DEFAULT_CHANGE_TIMESTAMP}'
+    `);
+  }
+
+  database
+    .prepare<[string]>(
+      `
+      UPDATE changes
+      SET timestamp = ?
+      WHERE timestamp IS NULL OR timestamp = ''
+    `,
+    )
+    .run(DEFAULT_CHANGE_TIMESTAMP);
 
   const readEntityStatement = database.prepare<[string, string], EntityRow>(`
     SELECT
@@ -182,6 +211,7 @@ export function createSqliteStorage(
       entity_name,
       entity_id,
       parent_change_id,
+      timestamp,
       assertions,
       retractions,
       entity_projected,
@@ -195,6 +225,7 @@ export function createSqliteStorage(
       entity_name,
       entity_id,
       parent_change_id,
+      timestamp,
       assertions,
       retractions,
       entity_projected,
@@ -209,6 +240,7 @@ export function createSqliteStorage(
       entity_name,
       entity_id,
       parent_change_id,
+      timestamp,
       assertions,
       retractions,
       entity_projected,
@@ -226,6 +258,7 @@ export function createSqliteStorage(
       entity_name,
       entity_id,
       parent_change_id,
+      timestamp,
       assertions,
       retractions,
       entity_projected,
@@ -263,18 +296,29 @@ export function createSqliteStorage(
     WHERE entity_name = ? AND entity_id = ?
   `);
   const appendChangeStatement = database.prepare<
-    [string, string, string, string | null, string, string, number, number]
+    [
+      string,
+      string,
+      string,
+      string | null,
+      string,
+      string,
+      string,
+      number,
+      number,
+    ]
   >(`
     INSERT INTO changes (
       change_id,
       entity_name,
       entity_id,
       parent_change_id,
+      timestamp,
       assertions,
       retractions,
       entity_projected,
       log_projected
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const markChangeEntityProjectedStatement = database.prepare<[string]>(`
     UPDATE changes
@@ -368,6 +412,7 @@ export function createSqliteStorage(
               change.entityName,
               change.entityId,
               change.parentChangeId,
+              change.timestamp,
               serializeJson(encodeStoredTriples(change.assertions)),
               serializeJson(encodeStoredTriples(change.retractions)),
               change.entityProjected ? 1 : 0,

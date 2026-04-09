@@ -1,3 +1,4 @@
+import { createChangeTimestamp } from "../change-log.js";
 import {
   createToRdfHelpers,
   createProjectionHelpers,
@@ -25,6 +26,10 @@ export type EngineStorage = NonNullable<EngineConfig["storage"]>;
 
 export function createChangeId(): string {
   return globalThis.crypto.randomUUID();
+}
+
+export function createTimestamp(): string {
+  return createChangeTimestamp();
 }
 
 export function entityPath(
@@ -157,6 +162,7 @@ export async function repairStoredProjection<T>(
         entityId,
         changeId,
         parentChangeId: latest.lastChangeId,
+        timestamp: createTimestamp(),
         assertions: latestRepair.assertions,
         retractions: latestRepair.retractions,
         entityProjected: false,
@@ -195,6 +201,7 @@ export async function repairStoredProjection<T>(
           entityId,
           changeId,
           parentChangeId: latest.lastChangeId,
+          timestamp: createTimestamp(),
           assertions: latestRepair.assertions,
           retractions: latestRepair.retractions,
           entityProjected: false,

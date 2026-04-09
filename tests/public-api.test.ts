@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createEngine,
   createMemoryStorage,
+  detectForks,
   defineEntity,
   defineVocabulary,
   numberValue,
@@ -23,6 +24,8 @@ import {
 } from "./support/eventFixture.js";
 import { createNoteFixture, type Note } from "./support/noteFixture.js";
 import { createTaggableNoteFixture } from "./support/taggableNoteFixture.js";
+
+const ISO_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
 function comparableTerm(term: Triple[number]): string | number | boolean {
   if (
@@ -473,6 +476,7 @@ describe("local persistence", () => {
     expect(stored?.lastChangeId).toBeTypeOf("string");
     expect(stored?.rootUri).toBe("https://example.com/id/event/ev-123");
     expect(changes).toHaveLength(1);
+    expect(changes[0]?.timestamp).toMatch(ISO_TIMESTAMP_PATTERN);
     expect(changes[0]?.assertions).toHaveLength(4);
     expect(changes[0]?.retractions).toHaveLength(0);
   });
@@ -1564,6 +1568,7 @@ describe("mocked entity sync", () => {
       entityId: string;
       changeId: string;
       parentChangeId: string | null;
+      timestamp: string;
       path: string;
       rootUri: string;
       assertions: Triple[];
@@ -1588,6 +1593,7 @@ describe("mocked entity sync", () => {
           entityId: string;
           changeId: string;
           parentChangeId: string | null;
+          timestamp: string;
           path: string;
           rootUri: string;
           assertions: Triple[];
@@ -1834,6 +1840,7 @@ describe("mocked entity sync", () => {
     const calls: string[] = [];
     const logRequests: Array<{
       path: string;
+      timestamp: string;
       assertions: Triple[];
       retractions: Triple[];
     }> = [];
@@ -1849,6 +1856,7 @@ describe("mocked entity sync", () => {
             calls.push("log");
             logRequests.push({
               path: request.path,
+              timestamp: request.timestamp,
               assertions: request.assertions,
               retractions: request.retractions,
             });
@@ -1871,6 +1879,7 @@ describe("mocked entity sync", () => {
     expect(logRequests).toHaveLength(1);
     expect(logRequests[0]?.path).toContain("apps/my-journal/log/event/");
     expect(logRequests[0]?.path).toMatch(/\.nt$/);
+    expect(logRequests[0]?.timestamp).toMatch(ISO_TIMESTAMP_PATTERN);
     expect(logRequests[0]?.assertions).toHaveLength(4);
     expect(logRequests[0]?.retractions).toHaveLength(0);
   });
@@ -2070,9 +2079,15 @@ describe("mocked entity sync", () => {
         year: 2024,
       },
     });
-    await expect(
-      secondStorage.listChanges("event", "ev-123"),
-    ).resolves.toHaveLength(1);
+    const remoteTimestamp = remote.logEntries[0]?.timestamp;
+
+    await expect(secondStorage.listChanges("event", "ev-123")).resolves.toEqual(
+      [
+        expect.objectContaining({
+          timestamp: remoteTimestamp,
+        }),
+      ],
+    );
     await expect(secondEngine.sync.state()).resolves.toEqual({
       status: "idle",
       configured: true,
@@ -2235,6 +2250,7 @@ describe("mocked entity sync", () => {
       entityId: "ev-remote",
       changeId: "remote-1",
       parentChangeId: null,
+      timestamp: "2026-04-09T12:00:00.000Z",
       path: "apps/my-journal/log/event/remote-1.nt",
       rootUri: "https://example.com/id/event/ev-remote",
       assertions: [
@@ -2252,10 +2268,11 @@ describe("mocked entity sync", () => {
         ],
       ],
     });
+    const storage = createMemoryStorage();
     const engine = createEngine({
       entities: [entity],
       pod,
-      storage: createMemoryStorage(),
+      storage,
       sync: {
         adapter: remote.adapter,
       },
@@ -2263,6 +2280,10 @@ describe("mocked entity sync", () => {
 
     await engine.sync.bootstrap();
     await engine.sync.now();
+
+    const changes = await remote.adapter.listLogEntries?.();
+
+    expect(changes?.[0]?.timestamp).toBe("2026-04-09T12:00:00.000Z");
 
     await expect(engine.get("event", "ev-remote")).resolves.toEqual({
       id: "ev-remote",
@@ -2327,6 +2348,141 @@ describe("mocked entity sync", () => {
     });
     await expect(storage.listChanges("event", "ev-123")).resolves.toHaveLength(
       1,
+    );
+  });
+});
+
+describe("detectForks", () => {
+  it("returns an empty array when there are no forks", () => {
+    expect(
+      detectForks([
+        {
+          entityName: "event",
+          entityId: "ev-1",
+          changeId: "change-1",
+          parentChangeId: null,
+          timestamp: "2026-04-09T10:00:00.000Z",
+          assertions: [],
+          retractions: [],
+          entityProjected: false,
+          logProjected: false,
+        },
+        {
+          entityName: "event",
+          entityId: "ev-1",
+          changeId: "change-2",
+          parentChangeId: "change-1",
+          timestamp: "2026-04-09T10:01:00.000Z",
+          assertions: [],
+          retractions: [],
+          entityProjected: false,
+          logProjected: false,
+        },
+      ]),
+    ).toEqual([]);
+  });
+
+  it("identifies a fork when two changes share the same parent for one entity", () => {
+    const forks = detectForks([
+      {
+        entityName: "event",
+        entityId: "ev-1",
+        changeId: "change-2a",
+        parentChangeId: "change-1",
+        timestamp: "2026-04-09T10:01:00.000Z",
+        assertions: [],
+        retractions: [],
+        entityProjected: false,
+        logProjected: false,
+      },
+      {
+        entityName: "event",
+        entityId: "ev-1",
+        changeId: "change-2b",
+        parentChangeId: "change-1",
+        timestamp: "2026-04-09T10:02:00.000Z",
+        assertions: [],
+        retractions: [],
+        entityProjected: false,
+        logProjected: false,
+      },
+    ]);
+
+    expect(forks).toEqual([
+      {
+        entityName: "event",
+        entityId: "ev-1",
+        parentChangeId: "change-1",
+        branches: expect.arrayContaining([
+          expect.objectContaining({ changeId: "change-2a" }),
+          expect.objectContaining({ changeId: "change-2b" }),
+        ]),
+      },
+    ]);
+  });
+
+  it("handles multiple independent forks across different entities", () => {
+    const forks = detectForks([
+      {
+        entityName: "event",
+        entityId: "ev-1",
+        changeId: "ev-1-a",
+        parentChangeId: "base-1",
+        timestamp: "2026-04-09T10:01:00.000Z",
+        assertions: [],
+        retractions: [],
+        entityProjected: false,
+        logProjected: false,
+      },
+      {
+        entityName: "event",
+        entityId: "ev-1",
+        changeId: "ev-1-b",
+        parentChangeId: "base-1",
+        timestamp: "2026-04-09T10:02:00.000Z",
+        assertions: [],
+        retractions: [],
+        entityProjected: false,
+        logProjected: false,
+      },
+      {
+        entityName: "note",
+        entityId: "note-1",
+        changeId: "note-1-a",
+        parentChangeId: "base-2",
+        timestamp: "2026-04-09T10:03:00.000Z",
+        assertions: [],
+        retractions: [],
+        entityProjected: false,
+        logProjected: false,
+      },
+      {
+        entityName: "note",
+        entityId: "note-1",
+        changeId: "note-1-b",
+        parentChangeId: "base-2",
+        timestamp: "2026-04-09T10:04:00.000Z",
+        assertions: [],
+        retractions: [],
+        entityProjected: false,
+        logProjected: false,
+      },
+    ]);
+
+    expect(forks).toHaveLength(2);
+    expect(forks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          entityName: "event",
+          entityId: "ev-1",
+          parentChangeId: "base-1",
+        }),
+        expect.objectContaining({
+          entityName: "note",
+          entityId: "note-1",
+          parentChangeId: "base-2",
+        }),
+      ]),
     );
   });
 });

@@ -20,6 +20,7 @@ const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 const LOG_CHANGE = "urn:lofipod:log:Change";
 const LOG_CHANGE_ID = "urn:lofipod:log:changeId";
 const LOG_PARENT_CHANGE_ID = "urn:lofipod:log:parentChangeId";
+const LOG_TIMESTAMP = "urn:lofipod:log:timestamp";
 const LOG_ENTITY_NAME = "urn:lofipod:log:entityName";
 const LOG_ENTITY_ID = "urn:lofipod:log:entityId";
 const LOG_ROOT_URI = "urn:lofipod:log:rootUri";
@@ -94,6 +95,7 @@ export function serializeLogEntry(
     add(changeNode, LOG_CHANGE_ID, n3ObjectLiteral(request.changeId));
     add(changeNode, LOG_ENTITY_NAME, n3ObjectLiteral(request.entityName));
     add(changeNode, LOG_ENTITY_ID, n3ObjectLiteral(request.entityId));
+    add(changeNode, LOG_TIMESTAMP, n3ObjectLiteral(request.timestamp));
     add(changeNode, LOG_ROOT_URI, uri(request.rootUri));
 
     if (request.parentChangeId) {
@@ -152,6 +154,7 @@ export function parseLogEntryNTriples(
 
   const changeId = readObject(quads, changeNode, LOG_CHANGE_ID);
   const parentChangeId = readObject(quads, changeNode, LOG_PARENT_CHANGE_ID);
+  const timestamp = readObject(quads, changeNode, LOG_TIMESTAMP);
   const entityName = readObject(quads, changeNode, LOG_ENTITY_NAME);
   const entityId = readObject(quads, changeNode, LOG_ENTITY_ID);
   const rootUri = readObject(quads, changeNode, LOG_ROOT_URI);
@@ -159,6 +162,7 @@ export function parseLogEntryNTriples(
   if (
     changeId?.termType !== "Literal" ||
     (parentChangeId && parentChangeId.termType !== "Literal") ||
+    timestamp?.termType !== "Literal" ||
     entityName?.termType !== "Literal" ||
     entityId?.termType !== "Literal" ||
     rootUri?.termType !== "NamedNode"
@@ -172,6 +176,7 @@ export function parseLogEntryNTriples(
     changeId: changeId.value,
     parentChangeId:
       parentChangeId?.termType === "Literal" ? parentChangeId.value : null,
+    timestamp: timestamp.value,
     path,
     rootUri: rootUri.value,
     assertions: parseLogStatements(quads, changeNode, LOG_ASSERTS),

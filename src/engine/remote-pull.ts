@@ -91,6 +91,7 @@ export async function replayRemoteLogEntries(
         entityId: entry.entityId,
         changeId: entry.changeId,
         parentChangeId: entry.parentChangeId,
+        timestamp: entry.timestamp,
         assertions: entryAssertions,
         retractions: entryRetractions,
         entityProjected: true,

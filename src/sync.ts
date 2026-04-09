@@ -120,6 +120,7 @@ export function createLogAppendRequest(
     entityId: change.entityId,
     changeId: change.changeId,
     parentChangeId: change.parentChangeId,
+    timestamp: change.timestamp,
     path: `${normalizeLogBasePath(logBasePath)}${change.entityName}/${change.changeId}.nt`,
     rootUri: record.rootUri,
     assertions: change.assertions,

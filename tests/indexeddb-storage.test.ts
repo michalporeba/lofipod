@@ -264,6 +264,7 @@ describe("createIndexedDbStorage", () => {
           entityId: "ev-123",
           changeId: "change-1",
           parentChangeId: null,
+          timestamp: "1970-01-01T00:00:00.000Z",
           assertions: [],
           retractions: [],
           entityProjected: false,

@@ -34,6 +34,7 @@ export type LocalChange = {
   entityId: string;
   changeId: string;
   parentChangeId: string | null;
+  timestamp: string;
   assertions: Triple[];
   retractions: Triple[];
   entityProjected: boolean;
@@ -89,6 +90,7 @@ export type PodLogAppendRequest = {
   entityId: string;
   changeId: string;
   parentChangeId: string | null;
+  timestamp: string;
   path: string;
   rootUri: string;
   assertions: Triple[];

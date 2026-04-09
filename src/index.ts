@@ -1,4 +1,9 @@
 export { defineEntity } from "./entity.js";
+export {
+  createChangeTimestamp,
+  DEFAULT_CHANGE_TIMESTAMP,
+  detectForks,
+} from "./change-log.js";
 export { createEngine } from "./engine.js";
 export { createSolidPodAdapter } from "./pod/solid.js";
 export {
@@ -37,3 +42,4 @@ export type {
   ToRdfHelpers,
   Triple,
 } from "./types.js";
+export type { Fork } from "./change-log.js";
