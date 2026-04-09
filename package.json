@@ -62,7 +62,7 @@
     "access": "public"
   },
   "devDependencies": {
-    "@eslint/js": "^9.23.0",
+    "@eslint/js": "^10.0.1",
     "@inrupt/solid-client-authn-node": "^4.0.0",
     "@types/node": "^25.5.0",
     "@types/ws": "^8.18.1",
