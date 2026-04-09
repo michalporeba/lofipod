@@ -140,6 +140,8 @@ Developers should be able to:
 - determine whether remote sync is configured at all
 - inspect overall sync status
 - trigger sync explicitly when needed
+- rely on attached sync to run automatically after save/delete and after
+  initial attach
 - explicitly bootstrap from canonical remote resources on first attach or
   recovery
 - delete an entity locally and have that deletion replicate through normal sync

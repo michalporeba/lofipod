@@ -58,6 +58,13 @@ export function createEngine(config: EngineConfig): Engine {
         })
       : task;
   };
+  const queueBackgroundSync = (): void => {
+    if (!currentSyncConfig || !currentPodConfig?.logBasePath) {
+      return;
+    }
+
+    void runSyncNow(true);
+  };
   const notifications = createNotificationManager({
     entities,
     getConfig: runtimeConfig,
@@ -66,19 +73,25 @@ export function createEngine(config: EngineConfig): Engine {
 
   if (currentSyncConfig && currentPodConfig?.logBasePath) {
     void notifications.start();
+    queueBackgroundSync();
   }
 
   return {
     async save<T>(entityName: string, entity: T): Promise<T> {
-      return saveEntity(
+      const saved = await saveEntity(
         storage,
         requireEntity(entityName) as EntityDefinition<T>,
         entity,
       );
+
+      queueBackgroundSync();
+
+      return saved;
     },
 
     async delete(entityName: string, id: string): Promise<void> {
-      return deleteEntity(storage, requireEntity(entityName), id);
+      await deleteEntity(storage, requireEntity(entityName), id);
+      queueBackgroundSync();
     },
 
     async dispose(): Promise<void> {
@@ -127,6 +140,7 @@ export function createEngine(config: EngineConfig): Engine {
         });
 
         await notifications.start();
+        queueBackgroundSync();
       },
 
       async detach(): Promise<void> {

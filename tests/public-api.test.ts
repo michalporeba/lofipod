@@ -97,6 +97,21 @@ async function waitForExpectation(
   await check();
 }
 
+function createDeferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+
+  return {
+    promise,
+    resolve,
+    reject,
+  };
+}
+
 function eventGraph(entityId: string, title: string, year: number): Triple[] {
   const subject = uri(`https://example.com/id/event/${entityId}`);
   const time = uri(`https://example.com/id/event/${entityId}#time`);
@@ -1696,6 +1711,45 @@ describe("sync state", () => {
     });
   });
 
+  it("pushes pending local changes automatically after attach", async () => {
+    const { entity } = createEventFixture();
+    const pushed: string[] = [];
+    const engine = createEngine({
+      entities: [entity],
+      storage: createMemoryStorage(),
+    });
+
+    await engine.save("event", {
+      id: "ev-auto-attach",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+
+    await engine.sync.attach({
+      adapter: {
+        async applyEntityPatch(request: PodEntityPatchRequest) {
+          pushed.push(request.path);
+        },
+        async appendLogEntry() {
+          // no-op
+        },
+      },
+      podBaseUrl: "https://pod.example/",
+      logBasePath: "apps/my-journal/log/",
+    });
+
+    await waitForExpectation(() => {
+      expect(pushed).toEqual(["events/ev-auto-attach.ttl"]);
+    });
+    await expect(engine.sync.state()).resolves.toEqual({
+      status: "idle",
+      configured: true,
+      pendingChanges: 0,
+    });
+  });
+
   it("detaches sync, leaves new changes local-only, and can reattach later", async () => {
     const { entity } = createEventFixture();
     const firstAdapterPaths: string[] = [];
@@ -1829,6 +1883,53 @@ describe("sync state", () => {
     await expect(engine.sync.persistedConfig()).resolves.toEqual({
       podBaseUrl: "https://pod-two.example/",
       logBasePath: "apps/two/log/",
+    });
+  });
+
+  it("pulls remote changes automatically after attach", async () => {
+    const { entity } = createEventFixture();
+    const remoteLog = [
+      {
+        entityName: "event",
+        entityId: "ev-auto-pull",
+        changeId: "remote-1",
+        parentChangeId: null,
+        timestamp: "2026-04-09T12:00:00.000Z",
+        path: "apps/my-journal/log/event/remote-1.nt",
+        rootUri: "https://example.com/id/event/ev-auto-pull",
+        assertions: eventGraph("ev-auto-pull", "Remote", 2026),
+        retractions: [],
+      },
+    ];
+    const secondEngine = createEngine({
+      entities: [entity],
+      storage: createMemoryStorage(),
+    });
+
+    await secondEngine.sync.attach({
+      adapter: {
+        async applyEntityPatch(request) {
+          void request;
+        },
+        async appendLogEntry() {
+          // no-op
+        },
+        async listLogEntries() {
+          return remoteLog;
+        },
+      },
+      podBaseUrl: "https://pod.example/",
+      logBasePath: "apps/my-journal/log/",
+    });
+
+    await waitForExpectation(async () => {
+      await expect(secondEngine.get("event", "ev-auto-pull")).resolves.toEqual({
+        id: "ev-auto-pull",
+        title: "Remote",
+        time: {
+          year: 2026,
+        },
+      });
     });
   });
 
@@ -2438,6 +2539,87 @@ describe("mocked entity sync", () => {
     );
   });
 
+  it("pushes local changes automatically after save without calling sync.now()", async () => {
+    const { entity } = createEventFixture();
+    const requests: string[] = [];
+    const engine = createEngine({
+      entities: [entity],
+      pod,
+      sync: {
+        adapter: {
+          async applyEntityPatch(request) {
+            requests.push(request.path);
+          },
+          async appendLogEntry() {
+            // no-op
+          },
+        },
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-auto-save",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+
+    await waitForExpectation(() => {
+      expect(requests).toEqual(["events/ev-auto-save.ttl"]);
+    });
+    await expect(engine.sync.state()).resolves.toEqual({
+      status: "idle",
+      configured: true,
+      pendingChanges: 0,
+    });
+  });
+
+  it("does not wait for background sync before resolving save", async () => {
+    const { entity } = createEventFixture();
+    const patchGate = createDeferred<void>();
+    const engine = createEngine({
+      entities: [entity],
+      pod,
+      sync: {
+        adapter: {
+          async applyEntityPatch() {
+            await patchGate.promise;
+          },
+          async appendLogEntry() {
+            // no-op
+          },
+        },
+      },
+    });
+
+    await expect(
+      Promise.race([
+        engine
+          .save("event", {
+            id: "ev-background",
+            title: "Hello",
+            time: {
+              year: 2024,
+            },
+          })
+          .then(() => "saved"),
+        new Promise<string>((resolve) => {
+          setTimeout(() => resolve("timeout"), 50);
+        }),
+      ]),
+    ).resolves.toBe("saved");
+
+    patchGate.resolve();
+    await waitForExpectation(async () => {
+      await expect(engine.sync.state()).resolves.toEqual({
+        status: "idle",
+        configured: true,
+        pendingChanges: 0,
+      });
+    });
+  });
+
   it("syncs graph repairs triggered by updated entity definitions", async () => {
     const { legacyEntity, currentEntity } =
       createRecanonicalizedEventFixtures();
@@ -2525,15 +2707,136 @@ describe("mocked entity sync", () => {
       },
     });
 
-    await expect(engine.sync.now()).rejects.toThrow("temporary failure");
-    await expect(engine.sync.state()).resolves.toEqual({
-      status: "pending",
-      configured: true,
-      pendingChanges: 1,
+    await waitForExpectation(async () => {
+      await expect(engine.sync.state()).resolves.toEqual({
+        status: "pending",
+        configured: true,
+        pendingChanges: 1,
+      });
     });
 
     await expect(engine.sync.now()).resolves.toBeUndefined();
     expect(attempts).toBe(2);
+    await expect(engine.sync.state()).resolves.toEqual({
+      status: "idle",
+      configured: true,
+      pendingChanges: 0,
+    });
+  });
+
+  it("retries failed background sync on the next automatic trigger", async () => {
+    const { entity } = createEventFixture();
+    let attempts = 0;
+    const pushed: string[] = [];
+    const engine = createEngine({
+      entities: [entity],
+      pod,
+      sync: {
+        adapter: {
+          async applyEntityPatch(request) {
+            attempts += 1;
+
+            if (attempts === 1) {
+              throw new Error("temporary failure");
+            }
+
+            pushed.push(request.path);
+          },
+          async appendLogEntry() {
+            // no-op
+          },
+        },
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-retry-1",
+      title: "First",
+      time: {
+        year: 2024,
+      },
+    });
+
+    await waitForExpectation(async () => {
+      await expect(engine.sync.state()).resolves.toEqual({
+        status: "pending",
+        configured: true,
+        pendingChanges: 1,
+      });
+    });
+
+    await engine.save("event", {
+      id: "ev-retry-2",
+      title: "Second",
+      time: {
+        year: 2025,
+      },
+    });
+
+    await waitForExpectation(() => {
+      expect(pushed).toEqual([
+        "events/ev-retry-1.ttl",
+        "events/ev-retry-2.ttl",
+      ]);
+    });
+    await expect(engine.sync.state()).resolves.toEqual({
+      status: "idle",
+      configured: true,
+      pendingChanges: 0,
+    });
+  });
+
+  it("serializes automatic sync cycles when multiple saves happen close together", async () => {
+    const { entity } = createEventFixture();
+    let activeSyncs = 0;
+    let maxConcurrentSyncs = 0;
+    const pushed: string[] = [];
+    const firstPatchStarted = createDeferred<void>();
+    const allowPatchesToFinish = createDeferred<void>();
+    const engine = createEngine({
+      entities: [entity],
+      pod,
+      sync: {
+        adapter: {
+          async applyEntityPatch(request) {
+            activeSyncs += 1;
+            maxConcurrentSyncs = Math.max(maxConcurrentSyncs, activeSyncs);
+            if (activeSyncs === 1 && pushed.length === 0) {
+              firstPatchStarted.resolve();
+            }
+            await allowPatchesToFinish.promise;
+            pushed.push(request.path);
+            activeSyncs -= 1;
+          },
+          async appendLogEntry() {
+            // no-op
+          },
+        },
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-queued-1",
+      title: "First",
+      time: {
+        year: 2024,
+      },
+    });
+    await firstPatchStarted.promise;
+    await engine.save("event", {
+      id: "ev-queued-2",
+      title: "Second",
+      time: {
+        year: 2025,
+      },
+    });
+    allowPatchesToFinish.resolve();
+
+    await waitForExpectation(() => {
+      expect(pushed).toHaveLength(2);
+    });
+
+    expect(maxConcurrentSyncs).toBe(1);
     await expect(engine.sync.state()).resolves.toEqual({
       status: "idle",
       configured: true,
@@ -2772,13 +3075,14 @@ describe("mocked entity sync", () => {
       },
     });
 
-    await expect(engine.sync.now()).rejects.toThrow("log failure");
-    expect(patchAttempts).toBe(1);
-    expect(logAttempts).toBe(1);
-    await expect(engine.sync.state()).resolves.toEqual({
-      status: "pending",
-      configured: true,
-      pendingChanges: 1,
+    await waitForExpectation(async () => {
+      expect(patchAttempts).toBe(1);
+      expect(logAttempts).toBe(1);
+      await expect(engine.sync.state()).resolves.toEqual({
+        status: "pending",
+        configured: true,
+        pendingChanges: 1,
+      });
     });
 
     await expect(engine.sync.now()).resolves.toBeUndefined();
@@ -3094,14 +3398,14 @@ describe("mocked entity sync", () => {
       graph: eventGraph("ev-imported", "Imported", 2027),
     });
 
-    await engine.sync.now();
-
-    await expect(engine.get("event", "ev-imported")).resolves.toEqual({
-      id: "ev-imported",
-      title: "Imported",
-      time: {
-        year: 2027,
-      },
+    await waitForExpectation(async () => {
+      await expect(engine.get("event", "ev-imported")).resolves.toEqual({
+        id: "ev-imported",
+        title: "Imported",
+        time: {
+          year: 2027,
+        },
+      });
     });
 
     const changes = await storage.listChanges("event", "ev-imported");
@@ -3262,19 +3566,10 @@ describe("mocked entity sync", () => {
   it("resolves conflicting concurrent edits by most recent timestamp", async () => {
     const { entity } = createEventFixture();
     const remote = createSharedRemoteAdapter();
-    const firstEngine = createEngine({
+    const engine = createEngine({
       entities: [entity],
       pod,
       storage: createMemoryStorage(),
-      sync: {
-        adapter: remote.adapter,
-      },
-    });
-    const secondStorage = createMemoryStorage();
-    const secondEngine = createEngine({
-      entities: [entity],
-      pod,
-      storage: secondStorage,
       sync: {
         adapter: remote.adapter,
       },
@@ -3285,67 +3580,68 @@ describe("mocked entity sync", () => {
     try {
       vi.setSystemTime(new Date("2026-04-09T11:00:00.000Z"));
 
-      await firstEngine.save("event", {
+      await engine.save("event", {
         id: "ev-conflict",
         title: "Base",
         time: {
           year: 2024,
         },
       });
-      await firstEngine.sync.now();
-      await secondEngine.sync.now();
+      await engine.sync.now();
+      const baseChangeId = remote.logEntries.at(-1)?.changeId;
 
-      vi.setSystemTime(new Date("2026-04-09T11:01:00.000Z"));
-      await firstEngine.save("event", {
-        id: "ev-conflict",
-        title: "First wins?",
-        time: {
-          year: 2024,
-        },
-      });
+      expect(baseChangeId).toBeTruthy();
 
-      vi.setSystemTime(new Date("2026-04-09T11:02:00.000Z"));
-      await secondEngine.save("event", {
-        id: "ev-conflict",
-        title: "Second wins",
-        time: {
-          year: 2024,
-        },
-      });
-
-      await firstEngine.sync.now();
-      await secondEngine.sync.now();
-
-      await expect(secondEngine.sync.state()).resolves.toEqual({
-        status: "pending",
-        configured: true,
-        pendingChanges: 1,
-      });
-
-      const mergedChange = (
-        await secondStorage.listChanges("event", "ev-conflict")
-      ).at(-1);
-
-      expect(mergedChange?.assertions).toEqual([]);
-      expect(mergedChange?.retractions).toEqual([
-        [
-          uri("https://example.com/id/event/ev-conflict"),
-          uri("https://example.com/ns#title"),
-          "First wins?",
+      remote.logEntries.push({
+        entityName: "event",
+        entityId: "ev-conflict",
+        changeId: "remote-conflict-a",
+        parentChangeId: baseChangeId ?? null,
+        timestamp: "2026-04-09T11:01:00.000Z",
+        path: "apps/my-journal/log/event/remote-conflict-a.nt",
+        rootUri: "https://example.com/id/event/ev-conflict",
+        assertions: [
+          [
+            uri("https://example.com/id/event/ev-conflict"),
+            uri("https://example.com/ns#title"),
+            "First wins?",
+          ],
         ],
-      ]);
-
-      await secondEngine.sync.now();
-      await firstEngine.sync.now();
-
-      await expect(firstEngine.get("event", "ev-conflict")).resolves.toEqual({
-        id: "ev-conflict",
-        title: "Second wins",
-        time: {
-          year: 2024,
-        },
+        retractions: [
+          [
+            uri("https://example.com/id/event/ev-conflict"),
+            uri("https://example.com/ns#title"),
+            "Base",
+          ],
+        ],
       });
-      await expect(secondEngine.get("event", "ev-conflict")).resolves.toEqual({
+      remote.logEntries.push({
+        entityName: "event",
+        entityId: "ev-conflict",
+        changeId: "remote-conflict-b",
+        parentChangeId: baseChangeId ?? null,
+        timestamp: "2026-04-09T11:02:00.000Z",
+        path: "apps/my-journal/log/event/remote-conflict-b.nt",
+        rootUri: "https://example.com/id/event/ev-conflict",
+        assertions: [
+          [
+            uri("https://example.com/id/event/ev-conflict"),
+            uri("https://example.com/ns#title"),
+            "Second wins",
+          ],
+        ],
+        retractions: [
+          [
+            uri("https://example.com/id/event/ev-conflict"),
+            uri("https://example.com/ns#title"),
+            "Base",
+          ],
+        ],
+      });
+
+      await engine.sync.now();
+
+      await expect(engine.get("event", "ev-conflict")).resolves.toEqual({
         id: "ev-conflict",
         title: "Second wins",
         time: {
@@ -3364,17 +3660,11 @@ describe("mocked entity sync", () => {
       entities: [entity],
       pod,
       storage: createMemoryStorage(),
-      sync: {
-        adapter: remote.adapter,
-      },
     });
     const secondEngine = createEngine({
       entities: [entity],
       pod,
       storage: createMemoryStorage(),
-      sync: {
-        adapter: remote.adapter,
-      },
     });
     const idSpy = vi
       .spyOn(globalThis.crypto, "randomUUID")
@@ -3396,8 +3686,20 @@ describe("mocked entity sync", () => {
           year: 2024,
         },
       });
+      await firstEngine.sync.attach({
+        adapter: remote.adapter,
+        podBaseUrl: "https://pod.example/",
+        logBasePath: "apps/my-journal/log/",
+      });
       await firstEngine.sync.now();
+      await secondEngine.sync.attach({
+        adapter: remote.adapter,
+        podBaseUrl: "https://pod.example/",
+        logBasePath: "apps/my-journal/log/",
+      });
       await secondEngine.sync.now();
+      await firstEngine.sync.detach();
+      await secondEngine.sync.detach();
 
       vi.setSystemTime(new Date("2026-04-09T12:01:00.000Z"));
       await firstEngine.save("event", {
@@ -3406,6 +3708,11 @@ describe("mocked entity sync", () => {
         time: {
           year: 2024,
         },
+      });
+      await firstEngine.sync.attach({
+        adapter: remote.adapter,
+        podBaseUrl: "https://pod.example/",
+        logBasePath: "apps/my-journal/log/",
       });
 
       vi.setSystemTime(new Date("2026-04-09T12:01:00.000Z"));
@@ -3416,9 +3723,11 @@ describe("mocked entity sync", () => {
           year: 2024,
         },
       });
-
-      await firstEngine.sync.now();
-      await secondEngine.sync.now();
+      await secondEngine.sync.attach({
+        adapter: remote.adapter,
+        podBaseUrl: "https://pod.example/",
+        logBasePath: "apps/my-journal/log/",
+      });
       await secondEngine.sync.now();
       await firstEngine.sync.now();
 
@@ -3521,23 +3830,7 @@ describe("mocked entity sync", () => {
   it("merges a three-way fork by combining non-conflicting edits and resolving conflicting ones deterministically", async () => {
     const { entity } = createEventFixture();
     const remote = createSharedRemoteAdapter();
-    const firstEngine = createEngine({
-      entities: [entity],
-      pod,
-      storage: createMemoryStorage(),
-      sync: {
-        adapter: remote.adapter,
-      },
-    });
-    const secondEngine = createEngine({
-      entities: [entity],
-      pod,
-      storage: createMemoryStorage(),
-      sync: {
-        adapter: remote.adapter,
-      },
-    });
-    const thirdEngine = createEngine({
+    const engine = createEngine({
       entities: [entity],
       pod,
       storage: createMemoryStorage(),
@@ -3551,50 +3844,89 @@ describe("mocked entity sync", () => {
     try {
       vi.setSystemTime(new Date("2026-04-09T14:00:00.000Z"));
 
-      await firstEngine.save("event", {
+      await engine.save("event", {
         id: "ev-three-way",
         title: "Base",
         time: {
           year: 2024,
         },
       });
-      await firstEngine.sync.now();
-      await secondEngine.sync.now();
-      await thirdEngine.sync.now();
+      await engine.sync.now();
+      const baseChangeId = remote.logEntries.at(-1)?.changeId;
 
-      vi.setSystemTime(new Date("2026-04-09T14:01:00.000Z"));
-      await firstEngine.save("event", {
-        id: "ev-three-way",
-        title: "Alpha",
-        time: {
-          year: 2024,
-        },
+      expect(baseChangeId).toBeTruthy();
+
+      remote.logEntries.push({
+        entityName: "event",
+        entityId: "ev-three-way",
+        changeId: "remote-three-way-a",
+        parentChangeId: baseChangeId ?? null,
+        timestamp: "2026-04-09T14:01:00.000Z",
+        path: "apps/my-journal/log/event/remote-three-way-a.nt",
+        rootUri: "https://example.com/id/event/ev-three-way",
+        assertions: [
+          [
+            uri("https://example.com/id/event/ev-three-way"),
+            uri("https://example.com/ns#title"),
+            "Alpha",
+          ],
+        ],
+        retractions: [
+          [
+            uri("https://example.com/id/event/ev-three-way"),
+            uri("https://example.com/ns#title"),
+            "Base",
+          ],
+        ],
+      });
+      remote.logEntries.push({
+        entityName: "event",
+        entityId: "ev-three-way",
+        changeId: "remote-three-way-b",
+        parentChangeId: baseChangeId ?? null,
+        timestamp: "2026-04-09T14:02:00.000Z",
+        path: "apps/my-journal/log/event/remote-three-way-b.nt",
+        rootUri: "https://example.com/id/event/ev-three-way",
+        assertions: [
+          [
+            uri("https://example.com/id/event/ev-three-way#time"),
+            uri("https://example.com/ns#year"),
+            2025,
+          ],
+        ],
+        retractions: [
+          [
+            uri("https://example.com/id/event/ev-three-way#time"),
+            uri("https://example.com/ns#year"),
+            2024,
+          ],
+        ],
+      });
+      remote.logEntries.push({
+        entityName: "event",
+        entityId: "ev-three-way",
+        changeId: "remote-three-way-c",
+        parentChangeId: baseChangeId ?? null,
+        timestamp: "2026-04-09T14:03:00.000Z",
+        path: "apps/my-journal/log/event/remote-three-way-c.nt",
+        rootUri: "https://example.com/id/event/ev-three-way",
+        assertions: [
+          [
+            uri("https://example.com/id/event/ev-three-way"),
+            uri("https://example.com/ns#title"),
+            "Zulu",
+          ],
+        ],
+        retractions: [
+          [
+            uri("https://example.com/id/event/ev-three-way"),
+            uri("https://example.com/ns#title"),
+            "Base",
+          ],
+        ],
       });
 
-      vi.setSystemTime(new Date("2026-04-09T14:02:00.000Z"));
-      await secondEngine.save("event", {
-        id: "ev-three-way",
-        title: "Base",
-        time: {
-          year: 2025,
-        },
-      });
-
-      vi.setSystemTime(new Date("2026-04-09T14:03:00.000Z"));
-      await thirdEngine.save("event", {
-        id: "ev-three-way",
-        title: "Zulu",
-        time: {
-          year: 2024,
-        },
-      });
-
-      await firstEngine.sync.now();
-      await secondEngine.sync.now();
-      await thirdEngine.sync.now();
-      await thirdEngine.sync.now();
-      await firstEngine.sync.now();
-      await secondEngine.sync.now();
+      await engine.sync.now();
 
       const expected = {
         id: "ev-three-way",
@@ -3604,13 +3936,7 @@ describe("mocked entity sync", () => {
         },
       };
 
-      await expect(firstEngine.get("event", "ev-three-way")).resolves.toEqual(
-        expected,
-      );
-      await expect(secondEngine.get("event", "ev-three-way")).resolves.toEqual(
-        expected,
-      );
-      await expect(thirdEngine.get("event", "ev-three-way")).resolves.toEqual(
+      await expect(engine.get("event", "ev-three-way")).resolves.toEqual(
         expected,
       );
     } finally {
@@ -3691,12 +4017,37 @@ describe("mocked entity sync", () => {
       entities: [entity],
       pod,
       storage,
-      sync: {
-        adapter: remote.adapter,
-      },
     });
+    let listLogEntriesCallCount = 0;
+    let allowCanonicalPolling = false;
 
+    await engine.sync.attach({
+      adapter: {
+        ...remote.adapter,
+        async listLogEntries() {
+          listLogEntriesCallCount += 1;
+
+          return listLogEntriesCallCount === 1
+            ? []
+            : ((await remote.adapter.listLogEntries?.()) ?? []);
+        },
+        async checkCanonicalResources(input) {
+          if (!allowCanonicalPolling) {
+            return {
+              version: input.previousVersion,
+              changed: false,
+              entities: [],
+            };
+          }
+
+          return remote.adapter.checkCanonicalResources!(input);
+        },
+      },
+      podBaseUrl: "https://pod.example/",
+      logBasePath: "apps/my-journal/log/",
+    });
     await engine.sync.bootstrap();
+    allowCanonicalPolling = true;
     await engine.sync.now();
 
     const changes = await remote.adapter.listLogEntries?.();

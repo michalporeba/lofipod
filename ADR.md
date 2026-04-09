@@ -91,6 +91,8 @@ and known boundaries for the project.
 - Background sync should be expected on save, startup, focus, reconnect, and
   periodic polling.
 - Manual sync should not be required for normal operation.
+- When a sync adapter is attached, local saves and deletes should queue a
+  background sync cycle after the local transaction commits.
 - The engine should support attaching and detaching a Pod sync adapter at
   runtime without rebuilding local state.
 - Solid notifications are an enhancement path, not a baseline dependency.
@@ -135,6 +137,9 @@ and known boundaries for the project.
   paths earlier. Notification-triggered sync should be serialized with manual
   sync and should fall back silently to polling when subscriptions fail or
   disconnect.
+- Attaching sync at startup or runtime should also queue a background sync
+  cycle so remote log replay and canonical reconciliation happen without an
+  explicit `sync.now()`.
 - Realtime collaborative editing is out of scope.
 
 ### Local-first query model
