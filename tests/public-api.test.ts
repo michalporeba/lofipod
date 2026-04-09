@@ -1695,15 +1695,9 @@ describe("sync state", () => {
       podBaseUrl: "https://pod.example/",
       logBasePath: "apps/my-journal/log/",
     });
-    await expect(engine.sync.state()).resolves.toEqual({
-      status: "pending",
-      configured: true,
-      pendingChanges: 1,
+    await waitForExpectation(() => {
+      expect(pushed).toEqual(["events/ev-attach.ttl"]);
     });
-
-    await engine.sync.now();
-
-    expect(pushed).toEqual(["events/ev-attach.ttl"]);
     await expect(engine.sync.state()).resolves.toEqual({
       status: "idle",
       configured: true,
