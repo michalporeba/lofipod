@@ -94,6 +94,10 @@ and known boundaries for the project.
 - The engine should support attaching and detaching a Pod sync adapter at
   runtime without rebuilding local state.
 - Solid notifications are an enhancement path, not a baseline dependency.
+- Notification subscriptions should stay adapter-driven. The engine may ask an
+  adapter to subscribe to canonical and log containers, but correctness must
+  still rely on ordinary pull-based sync when subscriptions are unavailable or
+  fail.
 - Concurrent branches should be preserved rather than discarded.
 - One branch may be chosen as current automatically for normal reads.
 - Initial replication should be sequential rather than priority-driven.
@@ -126,6 +130,11 @@ and known boundaries for the project.
 - Canonical reconciliation should ignore entities that still have pending local
   changes so remote polling does not trample unsynced local work or merge
   results.
+- When adapter-driven container notifications are available, the engine should
+  subscribe on attach and use notifications only to wake the existing sync
+  paths earlier. Notification-triggered sync should be serialized with manual
+  sync and should fall back silently to polling when subscriptions fail or
+  disconnect.
 - Realtime collaborative editing is out of scope.
 
 ### Local-first query model

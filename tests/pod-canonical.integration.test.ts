@@ -126,6 +126,9 @@ describe("Community Solid Server canonical reconciliation", () => {
     const { entity } = createEventFixture();
     const basePath = `events-${runId}/`;
     const logBasePath = `apps/my-journal-${runId}/log/`;
+    const realAdapter = createSolidPodAdapter({
+      podBaseUrl: solidOpenBaseUrl,
+    });
     const scopedEntity = {
       ...entity,
       pod: {
@@ -141,9 +144,10 @@ describe("Community Solid Server canonical reconciliation", () => {
         },
         storage: createMemoryStorage(),
         sync: {
-          adapter: createSolidPodAdapter({
-            podBaseUrl: solidOpenBaseUrl,
-          }),
+          adapter: {
+            ...realAdapter,
+            subscribeToContainer: undefined,
+          },
         },
       }),
       pod: {

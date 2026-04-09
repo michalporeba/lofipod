@@ -229,6 +229,8 @@ export async function runCli(
       error instanceof Error ? error.message : "Unexpected CLI error.";
     output.stderr(message);
     return 1;
+  } finally {
+    await app.close();
   }
 }
 

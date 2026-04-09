@@ -140,6 +140,12 @@ export type PodSyncAdapter = {
       graph: Triple[];
     }[];
   }>;
+  subscribeToContainer?(
+    containerPath: string,
+    onNotification: () => void,
+  ): Promise<{
+    unsubscribe: () => Promise<void> | void;
+  }>;
 };
 
 export type LocalStorageAdapter = {
@@ -197,6 +203,7 @@ export type Engine = {
   get<T>(entityName: string, id: string): Promise<T | null>;
   list<T>(entityName: string, options?: { limit?: number }): Promise<T[]>;
   delete(entityName: string, id: string): Promise<void>;
+  dispose(): Promise<void>;
   sync: {
     attach(config: SyncAttachConfig): Promise<void>;
     detach(): Promise<void>;

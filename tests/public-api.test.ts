@@ -77,6 +77,26 @@ function applyPublicTripleDelta(
   return Array.from(next.values());
 }
 
+async function waitForExpectation(
+  check: () => Promise<void> | void,
+  timeoutMs = 2_000,
+): Promise<void> {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      await check();
+      return;
+    } catch {
+      await new Promise((resolve) => {
+        setTimeout(resolve, 10);
+      });
+    }
+  }
+
+  await check();
+}
+
 function eventGraph(entityId: string, title: string, year: number): Triple[] {
   const subject = uri(`https://example.com/id/event/${entityId}`);
   const time = uri(`https://example.com/id/event/${entityId}#time`);
@@ -1890,6 +1910,118 @@ describe("sync state", () => {
       "Sync adapter is not attached.",
     );
   });
+
+  it("falls back silently when the adapter does not support subscriptions", async () => {
+    const { entity } = createEventFixture();
+    const pushed: string[] = [];
+    const engine = createEngine({
+      entities: [entity],
+      pod: {
+        logBasePath: "apps/my-journal/log/",
+      },
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: {
+          async applyEntityPatch(request) {
+            pushed.push(request.path);
+          },
+          async appendLogEntry() {
+            // no-op
+          },
+        },
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-no-subscribe",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+    await engine.sync.now();
+
+    expect(pushed).toEqual(["events/ev-no-subscribe.ttl"]);
+  });
+
+  it("cleans up notification subscriptions on detach and dispose", async () => {
+    const { entity } = createEventFixture();
+    const subscribed: string[] = [];
+    const unsubscribed: string[] = [];
+    const engine = createEngine({
+      entities: [entity],
+      pod: {
+        logBasePath: "apps/my-journal/log/",
+      },
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: {
+          async applyEntityPatch() {
+            // no-op
+          },
+          async appendLogEntry() {
+            // no-op
+          },
+          async subscribeToContainer(containerPath) {
+            subscribed.push(containerPath);
+            return {
+              unsubscribe() {
+                unsubscribed.push(containerPath);
+              },
+            };
+          },
+        },
+      },
+    });
+
+    await waitForExpectation(() => {
+      expect(unsubscribed).toEqual([]);
+    });
+
+    await engine.sync.detach();
+
+    expect(unsubscribed.sort()).toEqual([
+      "apps/my-journal/log/event/",
+      "events/",
+    ]);
+
+    const engineWithSync = createEngine({
+      entities: [entity],
+      pod: {
+        logBasePath: "apps/my-journal/log/",
+      },
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: {
+          async applyEntityPatch() {
+            // no-op
+          },
+          async appendLogEntry() {
+            // no-op
+          },
+          async subscribeToContainer(containerPath) {
+            subscribed.push(`dispose:${containerPath}`);
+            return {
+              unsubscribe() {
+                unsubscribed.push(`dispose:${containerPath}`);
+              },
+            };
+          },
+        },
+      },
+    });
+
+    await waitForExpectation(() => {
+      expect(subscribed).toContain("dispose:events/");
+      expect(subscribed).toContain("dispose:apps/my-journal/log/event/");
+    });
+    await engineWithSync.dispose();
+
+    await waitForExpectation(() => {
+      expect(unsubscribed).toContain("dispose:events/");
+      expect(unsubscribed).toContain("dispose:apps/my-journal/log/event/");
+    });
+  });
 });
 
 describe("mocked entity sync", () => {
@@ -1918,6 +2050,7 @@ describe("mocked entity sync", () => {
     }> = [];
     const canonicalContainerVersions = new Map<string, string>();
     const canonicalChecks: string[] = [];
+    const subscriptions = new Map<string, Array<() => void>>();
     let nextCanonicalVersion = 0;
 
     const bumpCanonicalVersion = (entityName: string) => {
@@ -2085,14 +2218,177 @@ describe("mocked entity sync", () => {
               graph: [...entity.graph],
             }));
         },
+        async subscribeToContainer(
+          containerPath: string,
+          onNotification: () => void,
+        ) {
+          const existing = subscriptions.get(containerPath) ?? [];
+          existing.push(onNotification);
+          subscriptions.set(containerPath, existing);
+
+          return {
+            unsubscribe() {
+              const current = subscriptions.get(containerPath) ?? [];
+              subscriptions.set(
+                containerPath,
+                current.filter((callback) => callback !== onNotification),
+              );
+            },
+          };
+        },
       },
       logEntries,
       canonicalEntities,
       canonicalChecks,
+      subscriptions,
       upsertCanonicalEntity,
       removeCanonicalEntity,
+      async notify(containerPath: string) {
+        for (const callback of subscriptions.get(containerPath) ?? []) {
+          callback();
+        }
+
+        await Promise.resolve();
+      },
     };
   };
+
+  it("replays remote log entries when the log container subscription fires", async () => {
+    const { entity } = createEventFixture();
+    const remote = createSharedRemoteAdapter();
+    const engine = createEngine({
+      entities: [entity],
+      pod,
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+
+    await waitForExpectation(() => {
+      expect(
+        remote.subscriptions.get("apps/my-journal/log/event/"),
+      ).toHaveLength(1);
+    });
+
+    remote.logEntries.push({
+      entityName: "event",
+      entityId: "ev-notified-log",
+      changeId: "remote-notified-1",
+      parentChangeId: null,
+      timestamp: "2026-04-09T12:00:00.000Z",
+      path: "apps/my-journal/log/event/remote-notified-1.nt",
+      rootUri: "https://example.com/id/event/ev-notified-log",
+      assertions: eventGraph(
+        "ev-notified-log",
+        "Remote via notification",
+        2026,
+      ),
+      retractions: [],
+    });
+
+    await remote.notify("apps/my-journal/log/event/");
+
+    await waitForExpectation(async () => {
+      await expect(engine.get("event", "ev-notified-log")).resolves.toEqual({
+        id: "ev-notified-log",
+        title: "Remote via notification",
+        time: {
+          year: 2026,
+        },
+      });
+    });
+  });
+
+  it("reconciles external canonical edits when the entity container subscription fires", async () => {
+    const { entity } = createEventFixture();
+    const remote = createSharedRemoteAdapter();
+    const engine = createEngine({
+      entities: [entity],
+      pod,
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-notified-canonical",
+      title: "Local",
+      time: {
+        year: 2024,
+      },
+    });
+    await engine.sync.now();
+
+    await waitForExpectation(() => {
+      expect(remote.subscriptions.get("events/")).toHaveLength(1);
+    });
+
+    remote.upsertCanonicalEntity({
+      entityName: "event",
+      entityId: "ev-notified-canonical",
+      path: "events/ev-notified-canonical.ttl",
+      rootUri: "https://example.com/id/event/ev-notified-canonical",
+      rdfType: entity.rdfType,
+      graph: eventGraph(
+        "ev-notified-canonical",
+        "External via notification",
+        2027,
+      ),
+    });
+
+    await remote.notify("events/");
+
+    await waitForExpectation(async () => {
+      await expect(
+        engine.get("event", "ev-notified-canonical"),
+      ).resolves.toEqual({
+        id: "ev-notified-canonical",
+        title: "External via notification",
+        time: {
+          year: 2027,
+        },
+      });
+    });
+  });
+
+  it("does not create duplicate local changes when notifications fire for lofipod's own push", async () => {
+    const { entity } = createEventFixture();
+    const remote = createSharedRemoteAdapter();
+    const storage = createMemoryStorage();
+    const engine = createEngine({
+      entities: [entity],
+      pod,
+      storage,
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-own-notification",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+    await engine.sync.now();
+
+    await remote.notify("events/");
+    await remote.notify("apps/my-journal/log/event/");
+
+    await waitForExpectation(async () => {
+      await expect(
+        storage.listChanges("event", "ev-own-notification"),
+      ).resolves.toHaveLength(1);
+    });
+    await expect(engine.sync.state()).resolves.toEqual({
+      status: "idle",
+      configured: true,
+      pendingChanges: 0,
+    });
+  });
 
   it("projects local changes into canonical entity file patches", async () => {
     const { entity } = createEventFixture();

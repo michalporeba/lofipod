@@ -50,6 +50,7 @@ The current public surface is still intentionally small and explicit:
 - `engine.get(entityName, id)`
 - `engine.list(entityName, options?)`
 - `engine.delete(entityName, id)`
+- `engine.dispose()`
 - `engine.sync.state()`
 - `engine.sync.now()`
 - `engine.sync.bootstrap()`
@@ -142,6 +143,8 @@ Developers should be able to:
 - explicitly bootstrap from canonical remote resources on first attach or
   recovery
 - delete an entity locally and have that deletion replicate through normal sync
+- let optional adapter-level notifications wake remote sync earlier without
+  changing correctness or requiring a subscription API in application code
 
 Normal save, get, and list flows should work without requiring explicit sync
 operations in the common case.

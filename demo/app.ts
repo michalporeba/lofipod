@@ -31,6 +31,7 @@ type CreateDemoAppOptions = {
 export type DemoApp = {
   engine: Engine;
   dataDir: string;
+  close(): Promise<void>;
   addTask(input: { id?: string; title: string; due?: string }): Promise<Task>;
   listTasks(): Promise<Task[]>;
   completeTask(id: string): Promise<Task>;
@@ -93,6 +94,10 @@ export function createDemoApp(options: CreateDemoAppOptions = {}): DemoApp {
   return {
     engine,
     dataDir,
+
+    async close() {
+      await engine.dispose();
+    },
 
     async addTask(input) {
       const timestamp = now();

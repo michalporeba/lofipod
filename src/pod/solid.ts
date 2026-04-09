@@ -6,6 +6,7 @@ import type {
 } from "../types.js";
 import { isNamedNodeTerm } from "../rdf.js";
 import { createSolidHttpClient } from "./solid-http.js";
+import { subscribeToSolidContainer } from "./solid-notifications.js";
 import {
   findRdfType,
   parseCanonicalTriples,
@@ -249,6 +250,17 @@ export function createSolidPodAdapter(
         changed: true,
         entities: await listCanonicalEntities(input),
       };
+    },
+
+    async subscribeToContainer(containerPath, onNotification) {
+      return subscribeToSolidContainer(
+        {
+          authHeaders: http.authHeaders,
+          fetchImpl,
+        },
+        http.joinUrl(containerPath),
+        onNotification,
+      );
     },
   };
 }

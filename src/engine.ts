@@ -14,6 +14,7 @@ import {
   listEntities,
   saveEntity,
 } from "./engine/local.js";
+import { createNotificationManager } from "./engine/notifications.js";
 import { bootstrapFromCanonicalResources, syncNow } from "./engine/remote.js";
 import {
   requireEntityDefinition,
@@ -27,6 +28,7 @@ export function createEngine(config: EngineConfig): Engine {
   const storage = (config.storage ?? createMemoryStorage()) as EngineStorage;
   let currentPodConfig = createRuntimePodConfig(config.pod);
   let currentSyncConfig = config.sync;
+  let queuedSync = Promise.resolve();
 
   const requireEntity = (entityName: string): EntityDefinition<unknown> =>
     requireEntityDefinition(entities, entityName);
@@ -36,6 +38,35 @@ export function createEngine(config: EngineConfig): Engine {
     pod: currentPodConfig,
     sync: currentSyncConfig,
   });
+
+  const runSyncNow = (suppressErrors: boolean): Promise<void> => {
+    const task = queuedSync
+      .catch(() => {
+        // Continue processing later sync attempts after an earlier failure.
+      })
+      .then(() => syncNow(storage, entities, runtimeConfig()));
+
+    queuedSync = suppressErrors
+      ? task.catch(() => {
+          // Notification-triggered sync should not surface background failures.
+        })
+      : task;
+
+    return suppressErrors
+      ? task.catch(() => {
+          // Notification-triggered sync should not surface background failures.
+        })
+      : task;
+  };
+  const notifications = createNotificationManager({
+    entities,
+    getConfig: runtimeConfig,
+    runSyncNow,
+  });
+
+  if (currentSyncConfig && currentPodConfig?.logBasePath) {
+    void notifications.start();
+  }
 
   return {
     async save<T>(entityName: string, entity: T): Promise<T> {
@@ -48,6 +79,10 @@ export function createEngine(config: EngineConfig): Engine {
 
     async delete(entityName: string, id: string): Promise<void> {
       return deleteEntity(storage, requireEntity(entityName), id);
+    },
+
+    async dispose(): Promise<void> {
+      await notifications.stop();
     },
 
     async get<T>(entityName: string, id: string): Promise<T | null> {
@@ -90,9 +125,12 @@ export function createEngine(config: EngineConfig): Engine {
             },
           });
         });
+
+        await notifications.start();
       },
 
       async detach(): Promise<void> {
+        await notifications.stop();
         currentPodConfig = undefined;
         currentSyncConfig = undefined;
 
@@ -116,7 +154,7 @@ export function createEngine(config: EngineConfig): Engine {
       },
 
       async now(): Promise<void> {
-        return syncNow(storage, entities, runtimeConfig());
+        return runSyncNow(false);
       },
 
       async bootstrap(): Promise<BootstrapResult> {
