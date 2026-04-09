@@ -6,7 +6,6 @@ import {
   defineEntity,
   defineVocabulary,
   numberValue,
-  packageVersion,
   rdf,
   stringValue,
   uri,
@@ -146,10 +145,6 @@ function createRecanonicalizedEventFixtures(): {
 }
 
 describe("public API scaffold", () => {
-  it("exposes the initial package version", () => {
-    expect(packageVersion).toBe("0.1.0");
-  });
-
   it("provides standard RDF terms", () => {
     expect(rdf.type.value).toBe(
       "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",

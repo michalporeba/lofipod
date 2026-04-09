@@ -1,5 +1,3 @@
-export const packageVersion = "0.1.0";
-
 export { defineEntity } from "./entity.js";
 export { createEngine } from "./engine.js";
 export { createSolidPodAdapter } from "./pod/solid.js";
