@@ -117,4 +117,4 @@ console.log(events);
 
 - see [API.md](API.md) for the broader API direction
 - see [ADR.md](ADR.md) for architectural decisions
-- swap `createMemoryStorage()` for `createIndexedDbStorage(...)` in browser use
+- swap `createMemoryStorage()` for `createIndexedDbStorage(...)` from `lofipod/browser` in browser use

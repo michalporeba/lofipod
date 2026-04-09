@@ -17,9 +17,9 @@ It is for applications that want:
 
 The project currently includes:
 
-- a small public API for defining entities and vocabularies
+- a core public API for defining entities and vocabularies
 - typed RDF terms and helper exports for entity mapping
-- local persistence with in-memory, IndexedDB, and SQLite adapters
+- environment-specific entrypoints for browser and Node adapters
 - canonical graph projection and rehydration
 - mocked sync coverage for canonical Pod files and replication logs
 - explicit bootstrap import from canonical Pod resources on first attach
@@ -53,6 +53,12 @@ The intended flow is:
 ```bash
 npm install lofipod
 ```
+
+Current entrypoints:
+
+- `lofipod`: framework-agnostic core
+- `lofipod/browser`: browser-specific adapters such as IndexedDB
+- `lofipod/node`: Node-specific adapters such as SQLite and the Solid adapter
 
 Node.js `24+` is the current supported runtime target for development and CI.
 

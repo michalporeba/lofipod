@@ -2,7 +2,7 @@ import "fake-indexeddb/auto";
 
 import { describe, expect, it } from "vitest";
 
-import { createEngine, createIndexedDbStorage, uri } from "../src/index.js";
+import { createEngine, createIndexedDbStorage, uri } from "../src/browser.js";
 import { createEventFixture } from "./support/eventFixture.js";
 
 describe("createIndexedDbStorage", () => {

@@ -25,6 +25,9 @@ and known boundaries for the project.
 - The published package should be consumable from plain JavaScript projects.
 - Types are part of the developer experience, but not required of consumers.
 - The framework-agnostic core should remain in the `lofipod` package.
+- The top-level `lofipod` entrypoint should stay environment-neutral.
+- Node- and browser-specific adapters may be exposed from separate entrypoints
+  or packages rather than from the core entrypoint.
 - Future framework bindings should be published as separate packages in the
   same repository rather than folded into the core package.
 

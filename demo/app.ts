@@ -8,7 +8,7 @@ import {
   createSqliteStorage,
   type Engine,
   type SyncState,
-} from "../src/index.js";
+} from "../src/node.js";
 import {
   demoEntities,
   JournalEntryEntity,

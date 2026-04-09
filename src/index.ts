@@ -5,7 +5,6 @@ export {
   detectForks,
 } from "./change-log.js";
 export { createEngine } from "./engine.js";
-export { createSolidPodAdapter } from "./pod/solid.js";
 export {
   blankNode,
   booleanValue,
@@ -17,9 +16,7 @@ export {
   stringValue,
   uri,
 } from "./rdf.js";
-export { createIndexedDbStorage } from "./storage/indexeddb.js";
 export { createMemoryStorage } from "./storage/memory.js";
-export { createSqliteStorage } from "./storage/sqlite.js";
 export { defineVocabulary, rdf } from "./vocabulary.js";
 export type {
   BootstrapCollision,

@@ -1,6 +1,6 @@
 {
   "name": "lofipod",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Local-first library for building privacy-first applications with RDF data and SOLID Pod sync.",
   "license": "MIT",
   "author": "Michał Poręba <michalporeba@gmail.com>",
@@ -14,6 +14,16 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./node": {
+      "types": "./dist/node.d.ts",
+      "import": "./dist/node.js",
+      "require": "./dist/node.cjs"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "import": "./dist/browser.js",
+      "require": "./dist/browser.cjs"
     }
   },
   "files": [
@@ -25,7 +35,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --dts --clean --external better-sqlite3",
+    "build": "tsup src/index.ts src/node.ts src/browser.ts --format esm,cjs --dts --clean --external better-sqlite3",
     "check": "tsc --noEmit",
     "demo": "node --import ./scripts/register-ts-node.mjs demo/cli.ts",
     "lint": "eslint .",

@@ -14,7 +14,7 @@ import {
   stringValue,
   uri,
   type Triple,
-} from "../src/index.js";
+} from "../src/node.js";
 import { createEventFixture } from "./support/eventFixture.js";
 
 describe("createSqliteStorage", () => {

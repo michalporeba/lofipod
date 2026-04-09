@@ -43,9 +43,9 @@ The current public surface is still intentionally small and explicit:
 - `defineEntity<T>(...)`
 - `createEngine(...)`
 - `createMemoryStorage(...)`
-- `createIndexedDbStorage(...)`
-- `createSqliteStorage(...)`
-- `createSolidPodAdapter(...)`
+- `createIndexedDbStorage(...)` from `lofipod/browser`
+- `createSqliteStorage(...)` from `lofipod/node`
+- `createSolidPodAdapter(...)` from `lofipod/node` or `lofipod/browser`
 - `engine.save(entityName, entity)`
 - `engine.get(entityName, id)`
 - `engine.list(entityName, options?)`
@@ -160,14 +160,13 @@ exponential backoff after consecutive sync failures.
 ```ts
 import {
   createEngine,
-  createIndexedDbStorage,
-  createSolidPodAdapter,
   defineEntity,
   defineVocabulary,
   numberValue,
   rdf,
   stringValue,
 } from "lofipod";
+import { createIndexedDbStorage, createSolidPodAdapter } from "lofipod/browser";
 
 const ex = defineVocabulary({
   base: "https://example.com/",
@@ -266,7 +265,7 @@ Current defaults:
 - public vocabulary terms and URI helpers are `NamedNode`-based
 - per-entity Pod base paths are supported
 - local persistence is adapter-driven, with in-memory, IndexedDB, and SQLite
-  storage currently available
+  storage currently available through core, browser, and Node entrypoints
 - sync state is inspectable, but CRUD should remain the primary experience
 - bootstrap from canonical Pod resources is explicit rather than automatic
 

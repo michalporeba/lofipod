@@ -4,7 +4,7 @@ import {
   createEngine,
   createMemoryStorage,
   createSolidPodAdapter,
-} from "../src/index.js";
+} from "../src/node.js";
 import { createEventFixture } from "./support/eventFixture.js";
 import { waitForSolidServer } from "./support/solidServer.js";
 
