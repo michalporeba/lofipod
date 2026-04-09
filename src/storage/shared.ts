@@ -46,6 +46,9 @@ export function cloneSyncMetadata(metadata: SyncMetadata): SyncMetadata {
           logBasePath: metadata.persistedPodConfig.logBasePath,
         }
       : null,
+    canonicalContainerVersions: {
+      ...(metadata.canonicalContainerVersions ?? {}),
+    },
   };
 }
 

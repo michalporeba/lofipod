@@ -1,3 +1,4 @@
+import type { NamedNode } from "n3";
 import type {
   PodEntityPatchRequest,
   PodLogAppendRequest,
@@ -20,6 +21,8 @@ type SolidPodAdapterOptions = {
 };
 
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+const MISSING_CONTAINER_VERSION = "urn:lofipod:container:missing";
+const NO_VALIDATOR_CONTAINER_VERSION = "urn:lofipod:container:no-validator";
 
 export { parseCanonicalTriples, parseLogEntryNTriples } from "./solid-rdf.js";
 
@@ -27,6 +30,119 @@ export function createSolidPodAdapter(
   options: SolidPodAdapterOptions,
 ): PodSyncAdapter {
   const http = createSolidHttpClient(options);
+  const fetchImpl = options.fetch ?? fetch;
+
+  const readContainerVersion = async (
+    basePath: string,
+    entityName: string,
+  ): Promise<{
+    exists: boolean;
+    version: string | null;
+  }> => {
+    const response = await fetchImpl(http.joinUrl(basePath), {
+      method: "HEAD",
+      headers: http.authHeaders,
+    });
+
+    if (response.status === 404) {
+      return {
+        exists: false,
+        version: null,
+      };
+    }
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(
+        `Check canonical container for ${entityName} failed with ${response.status}${body ? `: ${body}` : ""}`,
+      );
+    }
+
+    return {
+      exists: true,
+      version:
+        response.headers.get("etag") ?? response.headers.get("last-modified"),
+    };
+  };
+
+  const listCanonicalEntities = async (input: {
+    entityName: string;
+    basePath: string;
+    rdfType: NamedNode;
+  }) => {
+    const containerPath = input.basePath;
+    const containerUrl = http.joinUrl(containerPath);
+    const containerResponse = await fetchImpl(containerUrl, {
+      headers: {
+        ...http.authHeaders,
+        Accept: "text/turtle",
+      },
+    });
+
+    if (containerResponse.status === 404) {
+      return [];
+    }
+
+    if (!containerResponse.ok) {
+      const body = await containerResponse.text().catch(() => "");
+      throw new Error(
+        `List canonical entities for ${input.entityName} failed with ${containerResponse.status}${body ? `: ${body}` : ""}`,
+      );
+    }
+
+    const containerBody = await containerResponse.text();
+    const resourcePaths = parseContainedResourcePaths(
+      containerBody,
+      containerUrl,
+    )
+      .filter((path) => path.startsWith(input.basePath))
+      .filter((path) => path.endsWith(".ttl"));
+    const results: {
+      entityId: string;
+      path: string;
+      rootUri: string;
+      graph: PodEntityPatchRequest["assertions"];
+    }[] = [];
+
+    for (const path of resourcePaths) {
+      const body = await http.readText(
+        path,
+        {
+          headers: {
+            ...http.authHeaders,
+            Accept: "text/turtle",
+          },
+        },
+        `Read canonical entity ${path}`,
+      );
+      const graph = parseCanonicalTriples(body, {
+        baseIRI: http.joinUrl(path),
+      });
+      const rootUri = graph.find(
+        ([, predicate, object]) =>
+          predicate.value === RDF_TYPE &&
+          isNamedNodeTerm(object) &&
+          object.value === input.rdfType.value,
+      )?.[0];
+
+      if (!isNamedNodeTerm(rootUri)) {
+        continue;
+      }
+
+      results.push({
+        entityId:
+          path
+            .split("/")
+            .at(-1)
+            ?.replace(/\.ttl$/, "") ?? "",
+        path,
+        rootUri: rootUri.value,
+        graph,
+      });
+    }
+
+    return results;
+  };
 
   return {
     async applyEntityPatch(request: PodEntityPatchRequest) {
@@ -105,78 +221,34 @@ export function createSolidPodAdapter(
     },
 
     async listCanonicalEntities(input) {
-      const containerPath = input.basePath;
-      const containerUrl = http.joinUrl(containerPath);
-      const containerResponse = await (options.fetch ?? fetch)(containerUrl, {
-        headers: {
-          ...http.authHeaders,
-          Accept: "text/turtle",
-        },
-      });
+      return listCanonicalEntities(input);
+    },
 
-      if (containerResponse.status === 404) {
-        return [];
+    async checkCanonicalResources(input) {
+      const container = await readContainerVersion(
+        input.basePath,
+        input.entityName,
+      );
+      const version = !container.exists
+        ? MISSING_CONTAINER_VERSION
+        : (container.version ?? NO_VALIDATOR_CONTAINER_VERSION);
+      const unchanged =
+        version !== NO_VALIDATOR_CONTAINER_VERSION &&
+        version === input.previousVersion;
+
+      if (unchanged) {
+        return {
+          version,
+          changed: false,
+          entities: [],
+        };
       }
 
-      if (!containerResponse.ok) {
-        const body = await containerResponse.text().catch(() => "");
-        throw new Error(
-          `List canonical entities for ${input.entityName} failed with ${containerResponse.status}${body ? `: ${body}` : ""}`,
-        );
-      }
-
-      const containerBody = await containerResponse.text();
-      const resourcePaths = parseContainedResourcePaths(
-        containerBody,
-        containerUrl,
-      )
-        .filter((path) => path.startsWith(input.basePath))
-        .filter((path) => path.endsWith(".ttl"));
-      const results: {
-        entityId: string;
-        path: string;
-        rootUri: string;
-        graph: PodEntityPatchRequest["assertions"];
-      }[] = [];
-
-      for (const path of resourcePaths) {
-        const body = await http.readText(
-          path,
-          {
-            headers: {
-              ...http.authHeaders,
-              Accept: "text/turtle",
-            },
-          },
-          `Read canonical entity ${path}`,
-        );
-        const graph = parseCanonicalTriples(body, {
-          baseIRI: http.joinUrl(path),
-        });
-        const rootUri = graph.find(
-          ([, predicate, object]) =>
-            predicate.value === RDF_TYPE &&
-            isNamedNodeTerm(object) &&
-            object.value === input.rdfType.value,
-        )?.[0];
-
-        if (!isNamedNodeTerm(rootUri)) {
-          continue;
-        }
-
-        results.push({
-          entityId:
-            path
-              .split("/")
-              .at(-1)
-              ?.replace(/\.ttl$/, "") ?? "",
-          path,
-          rootUri: rootUri.value,
-          graph,
-        });
-      }
-
-      return results;
+      return {
+        version,
+        changed: true,
+        entities: await listCanonicalEntities(input),
+      };
     },
   };
 }

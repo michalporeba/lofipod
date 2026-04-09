@@ -1,5 +1,6 @@
 import type { EngineConfig, EntityDefinition } from "../types.js";
 import type { EngineStorage } from "./support.js";
+import { reconcileCanonicalResources } from "./remote-canonical.js";
 import { replayRemoteLogEntries } from "./remote-pull.js";
 import { syncPendingChanges } from "./remote-push.js";
 
@@ -16,4 +17,5 @@ export async function syncNow(
 
   await syncPendingChanges(storage, entities, config);
   await replayRemoteLogEntries(storage, entities, config);
+  await reconcileCanonicalResources(storage, entities, config);
 }

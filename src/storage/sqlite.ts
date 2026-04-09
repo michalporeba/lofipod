@@ -111,6 +111,7 @@ function createDefaultSyncMetadata(): SyncMetadata {
   return {
     observedRemoteChangeIds: [],
     persistedPodConfig: null,
+    canonicalContainerVersions: {},
   };
 }
 

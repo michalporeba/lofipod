@@ -22,13 +22,13 @@ async function projectPendingChange(
   config: EngineConfig,
   definition: EntityDefinition<unknown>,
   change: Awaited<ReturnType<EngineStorage["listChanges"]>>[number],
+  record: Awaited<ReturnType<EngineStorage["readEntity"]>>,
 ): Promise<void> {
   if (!config.sync) {
     return;
   }
 
-  const record = await storage.readEntity(change.entityName, change.entityId);
-  const deletion = isDeletionChange(change);
+  const deletion = !record && isDeletionChange(change);
 
   if (!record && !deletion) {
     return;
@@ -86,11 +86,19 @@ export async function syncPendingChanges(
   const pendingChanges = storage.listPendingChanges
     ? await storage.listPendingChanges()
     : (await storage.listChanges()).filter(hasPendingSync);
-  const deletedEntities = new Set(
-    pendingChanges
-      .filter(isDeletionChange)
-      .map((change) => `${change.entityName}:${change.entityId}`),
-  );
+  const deletedEntities = new Set<string>();
+
+  for (const change of pendingChanges) {
+    if (!isDeletionChange(change)) {
+      continue;
+    }
+
+    const record = await storage.readEntity(change.entityName, change.entityId);
+
+    if (!record) {
+      deletedEntities.add(`${change.entityName}:${change.entityId}`);
+    }
+  }
 
   for (const change of pendingChanges) {
     const definition = requireEntityDefinition(entities, change.entityName);
@@ -104,6 +112,6 @@ export async function syncPendingChanges(
       continue;
     }
 
-    await projectPendingChange(storage, config, definition, change);
+    await projectPendingChange(storage, config, definition, change, record);
   }
 }

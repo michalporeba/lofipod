@@ -11,6 +11,7 @@ export type PersistedPodConfig = {
 export type SyncMetadata = {
   observedRemoteChangeIds: string[];
   persistedPodConfig: PersistedPodConfig | null;
+  canonicalContainerVersions: Record<string, string>;
 };
 
 export type ToRdfHelpers<T> = {
@@ -124,6 +125,21 @@ export type PodSyncAdapter = {
       graph: Triple[];
     }[]
   >;
+  checkCanonicalResources?(input: {
+    entityName: string;
+    basePath: string;
+    rdfType: NamedNode;
+    previousVersion: string | null;
+  }): Promise<{
+    version: string | null;
+    changed: boolean;
+    entities: {
+      entityId: string;
+      path: string;
+      rootUri: string;
+      graph: Triple[];
+    }[];
+  }>;
 };
 
 export type LocalStorageAdapter = {

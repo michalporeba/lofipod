@@ -40,6 +40,7 @@ export function createMemoryStorage(): LocalStorageAdapter {
     syncMetadata: {
       observedRemoteChangeIds: [],
       persistedPodConfig: null,
+      canonicalContainerVersions: {},
     },
     updatedOrder: 0,
   };

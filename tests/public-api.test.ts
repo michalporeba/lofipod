@@ -14,6 +14,7 @@ import {
   type LocalStorageAdapter,
   type LocalStorageTransaction,
   type EntityDefinition,
+  type PodEntityPatchRequest,
   type Triple,
   type SyncMetadata,
 } from "../src/index.js";
@@ -46,6 +47,34 @@ function comparableTriples(triples: Triple[]) {
     comparableTerm(predicate),
     comparableTerm(object),
   ]);
+}
+
+function tripleKey(triple: Triple): string {
+  return JSON.stringify([
+    comparableTerm(triple[0]),
+    comparableTerm(triple[1]),
+    comparableTerm(triple[2]),
+  ]);
+}
+
+function applyPublicTripleDelta(
+  current: Triple[],
+  input: {
+    assertions: Triple[];
+    retractions: Triple[];
+  },
+): Triple[] {
+  const next = new Map(current.map((triple) => [tripleKey(triple), triple]));
+
+  for (const triple of input.retractions) {
+    next.delete(tripleKey(triple));
+  }
+
+  for (const triple of input.assertions) {
+    next.set(tripleKey(triple), triple);
+  }
+
+  return Array.from(next.values());
 }
 
 function eventGraph(entityId: string, title: string, year: number): Triple[] {
@@ -816,6 +845,7 @@ describe("local persistence", () => {
       syncMetadata: {
         observedRemoteChangeIds: [] as string[],
         persistedPodConfig: null,
+        canonicalContainerVersions: {},
       } as SyncMetadata,
       updatedOrder: 0,
     };
@@ -847,6 +877,9 @@ describe("local persistence", () => {
               ...state.syncMetadata.persistedPodConfig,
             }
           : null,
+        canonicalContainerVersions: {
+          ...state.syncMetadata.canonicalContainerVersions,
+        },
       },
       updatedOrder: state.updatedOrder,
     });
@@ -875,6 +908,9 @@ describe("local persistence", () => {
                 ...state.syncMetadata.persistedPodConfig,
               }
             : null,
+          canonicalContainerVersions: {
+            ...state.syncMetadata.canonicalContainerVersions,
+          },
         };
       },
       async transact<T>(
@@ -910,6 +946,9 @@ describe("local persistence", () => {
                     ...draft.syncMetadata.persistedPodConfig,
                   }
                 : null,
+              canonicalContainerVersions: {
+                ...draft.syncMetadata.canonicalContainerVersions,
+              },
             };
           },
           writeSyncMetadata(metadata) {
@@ -920,6 +959,9 @@ describe("local persistence", () => {
                     ...metadata.persistedPodConfig,
                   }
                 : null,
+              canonicalContainerVersions: {
+                ...metadata.canonicalContainerVersions,
+              },
             };
           },
           nextUpdatedOrder() {
@@ -1603,7 +1645,7 @@ describe("sync state", () => {
 
     await engine.sync.attach({
       adapter: {
-        async applyEntityPatch(request) {
+        async applyEntityPatch(request: PodEntityPatchRequest) {
           pushed.push(request.path);
         },
         async appendLogEntry() {
@@ -1646,7 +1688,7 @@ describe("sync state", () => {
 
     await engine.sync.attach({
       adapter: {
-        async applyEntityPatch(request) {
+        async applyEntityPatch(request: PodEntityPatchRequest) {
           firstAdapterPaths.push(request.path);
         },
         async appendLogEntry() {
@@ -1691,7 +1733,7 @@ describe("sync state", () => {
 
     await engine.sync.attach({
       adapter: {
-        async applyEntityPatch(request) {
+        async applyEntityPatch(request: PodEntityPatchRequest) {
           secondAdapterPaths.push(request.path);
         },
         async appendLogEntry() {
@@ -1874,11 +1916,95 @@ describe("mocked entity sync", () => {
       rdfType: ReturnType<typeof uri>;
       graph: Triple[];
     }> = [];
+    const canonicalContainerVersions = new Map<string, string>();
+    const canonicalChecks: string[] = [];
+    let nextCanonicalVersion = 0;
+
+    const bumpCanonicalVersion = (entityName: string) => {
+      nextCanonicalVersion += 1;
+      canonicalContainerVersions.set(entityName, `v${nextCanonicalVersion}`);
+    };
+
+    const upsertCanonicalEntity = (entity: {
+      entityName: string;
+      entityId: string;
+      path: string;
+      rootUri: string;
+      rdfType: ReturnType<typeof uri>;
+      graph: Triple[];
+    }) => {
+      const index = canonicalEntities.findIndex(
+        (current) =>
+          current.entityName === entity.entityName &&
+          current.entityId === entity.entityId,
+      );
+
+      if (index >= 0) {
+        canonicalEntities[index] = {
+          ...entity,
+          graph: [...entity.graph],
+        };
+      } else {
+        canonicalEntities.push({
+          ...entity,
+          graph: [...entity.graph],
+        });
+      }
+
+      bumpCanonicalVersion(entity.entityName);
+    };
+
+    const removeCanonicalEntity = (entityName: string, entityId: string) => {
+      const index = canonicalEntities.findIndex(
+        (entity) =>
+          entity.entityName === entityName && entity.entityId === entityId,
+      );
+
+      if (index < 0) {
+        return;
+      }
+
+      canonicalEntities.splice(index, 1);
+      bumpCanonicalVersion(entityName);
+    };
 
     return {
       adapter: {
-        async applyEntityPatch() {
-          // no-op for mocked canonical file writes in pull tests
+        async applyEntityPatch(request: PodEntityPatchRequest) {
+          const current = canonicalEntities.find(
+            (entity) =>
+              entity.entityName === request.entityName &&
+              entity.entityId === request.entityId,
+          );
+          const rdfType =
+            current?.rdfType ??
+            ((request.assertions.find(
+              ([, predicate, object]) =>
+                predicate.value === rdf.type.value &&
+                typeof object !== "string" &&
+                typeof object !== "number" &&
+                typeof object !== "boolean",
+            )?.[2] ?? uri("https://example.com/ns#Unknown")) as ReturnType<
+              typeof uri
+            >);
+
+          upsertCanonicalEntity({
+            entityName: request.entityName,
+            entityId: request.entityId,
+            path: request.path,
+            rootUri: request.rootUri,
+            rdfType,
+            graph: applyPublicTripleDelta(current?.graph ?? [], {
+              assertions: request.assertions,
+              retractions: request.retractions,
+            }),
+          });
+        },
+        async deleteEntityResource(request: {
+          entityName: string;
+          entityId: string;
+        }) {
+          removeCanonicalEntity(request.entityName, request.entityId);
         },
         async appendLogEntry(request: {
           entityName: string;
@@ -1904,6 +2030,42 @@ describe("mocked entity sync", () => {
             retractions: [...entry.retractions],
           }));
         },
+        async checkCanonicalResources(input: {
+          entityName: string;
+          basePath: string;
+          rdfType: ReturnType<typeof uri>;
+          previousVersion: string | null;
+        }) {
+          canonicalChecks.push(input.entityName);
+          const version =
+            canonicalContainerVersions.get(input.entityName) ?? null;
+
+          if (version === input.previousVersion) {
+            return {
+              version,
+              changed: false,
+              entities: [],
+            };
+          }
+
+          return {
+            version,
+            changed: true,
+            entities: canonicalEntities
+              .filter(
+                (entity) =>
+                  entity.entityName === input.entityName &&
+                  entity.path.startsWith(input.basePath) &&
+                  entity.rdfType.value === input.rdfType.value,
+              )
+              .map((entity) => ({
+                entityId: entity.entityId,
+                path: entity.path,
+                rootUri: entity.rootUri,
+                graph: [...entity.graph],
+              })),
+          };
+        },
         async listCanonicalEntities(input: {
           entityName: string;
           basePath: string;
@@ -1926,6 +2088,9 @@ describe("mocked entity sync", () => {
       },
       logEntries,
       canonicalEntities,
+      canonicalChecks,
+      upsertCanonicalEntity,
+      removeCanonicalEntity,
     };
   };
 
@@ -2490,6 +2655,221 @@ describe("mocked entity sync", () => {
     await expect(
       secondStorage.listChanges("event", "ev-delete"),
     ).resolves.toHaveLength(2);
+  });
+
+  it("reconciles external canonical edits after log replay and queues only log projection", async () => {
+    const { entity } = createEventFixture();
+    const remote = createSharedRemoteAdapter();
+    const firstEngine = createEngine({
+      entities: [entity],
+      pod,
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+    const secondStorage = createMemoryStorage();
+    const secondEngine = createEngine({
+      entities: [entity],
+      pod,
+      storage: secondStorage,
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+
+    await firstEngine.save("event", {
+      id: "ev-external",
+      title: "Local",
+      time: {
+        year: 2024,
+      },
+    });
+    await firstEngine.sync.now();
+    await secondEngine.sync.now();
+
+    remote.upsertCanonicalEntity({
+      entityName: "event",
+      entityId: "ev-external",
+      path: "events/ev-external.ttl",
+      rootUri: "https://example.com/id/event/ev-external",
+      rdfType: entity.rdfType,
+      graph: eventGraph("ev-external", "External", 2026),
+    });
+
+    const beforeReconcileLogEntries = remote.logEntries.length;
+
+    await secondEngine.sync.now();
+
+    await expect(secondEngine.get("event", "ev-external")).resolves.toEqual({
+      id: "ev-external",
+      title: "External",
+      time: {
+        year: 2026,
+      },
+    });
+    await expect(secondEngine.sync.state()).resolves.toEqual({
+      status: "pending",
+      configured: true,
+      pendingChanges: 1,
+    });
+
+    const changes = await secondStorage.listChanges("event", "ev-external");
+    const reconciliationChange = changes.at(-1);
+
+    expect(reconciliationChange).toMatchObject({
+      entityProjected: true,
+      logProjected: false,
+    });
+    expect(remote.logEntries).toHaveLength(beforeReconcileLogEntries);
+
+    await secondEngine.sync.now();
+
+    expect(remote.logEntries).toHaveLength(beforeReconcileLogEntries + 1);
+    await expect(secondEngine.sync.state()).resolves.toEqual({
+      status: "idle",
+      configured: true,
+      pendingChanges: 0,
+    });
+  });
+
+  it("does not create a duplicate canonical reconciliation change when log replay already matches the Pod", async () => {
+    const { entity } = createEventFixture();
+    const remote = createSharedRemoteAdapter();
+    const firstEngine = createEngine({
+      entities: [entity],
+      pod,
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+    const secondStorage = createMemoryStorage();
+    const secondEngine = createEngine({
+      entities: [entity],
+      pod,
+      storage: secondStorage,
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+
+    await firstEngine.save("event", {
+      id: "ev-deduped",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+    await firstEngine.sync.now();
+    await secondEngine.sync.now();
+
+    await expect(secondEngine.get("event", "ev-deduped")).resolves.toEqual({
+      id: "ev-deduped",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+    await expect(
+      secondStorage.listChanges("event", "ev-deduped"),
+    ).resolves.toHaveLength(1);
+  });
+
+  it("imports externally created canonical entities during sync", async () => {
+    const { entity } = createEventFixture();
+    const remote = createSharedRemoteAdapter();
+    const storage = createMemoryStorage();
+    const engine = createEngine({
+      entities: [entity],
+      pod,
+      storage,
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+
+    remote.upsertCanonicalEntity({
+      entityName: "event",
+      entityId: "ev-imported",
+      path: "events/ev-imported.ttl",
+      rootUri: "https://example.com/id/event/ev-imported",
+      rdfType: entity.rdfType,
+      graph: eventGraph("ev-imported", "Imported", 2027),
+    });
+
+    await engine.sync.now();
+
+    await expect(engine.get("event", "ev-imported")).resolves.toEqual({
+      id: "ev-imported",
+      title: "Imported",
+      time: {
+        year: 2027,
+      },
+    });
+
+    const changes = await storage.listChanges("event", "ev-imported");
+
+    expect(changes.at(-1)).toMatchObject({
+      entityProjected: true,
+      logProjected: false,
+    });
+  });
+
+  it("removes local entities when canonical resources are deleted externally", async () => {
+    const { entity } = createEventFixture();
+    const remote = createSharedRemoteAdapter();
+    const firstEngine = createEngine({
+      entities: [entity],
+      pod,
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+    const secondStorage = createMemoryStorage();
+    const secondEngine = createEngine({
+      entities: [entity],
+      pod,
+      storage: secondStorage,
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+
+    await firstEngine.save("event", {
+      id: "ev-external-delete",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+    await firstEngine.sync.now();
+    await secondEngine.sync.now();
+
+    remote.removeCanonicalEntity("event", "ev-external-delete");
+
+    await secondEngine.sync.now();
+
+    await expect(
+      secondEngine.get("event", "ev-external-delete"),
+    ).resolves.toBeNull();
+    await expect(secondEngine.sync.state()).resolves.toEqual({
+      status: "pending",
+      configured: true,
+      pendingChanges: 1,
+    });
+
+    const changes = await secondStorage.listChanges(
+      "event",
+      "ev-external-delete",
+    );
+
+    expect(changes.at(-1)).toMatchObject({
+      assertions: [],
+      entityProjected: true,
+      logProjected: false,
+    });
   });
 
   it("auto-merges non-conflicting concurrent edits and syncs the merge on the next sync", async () => {

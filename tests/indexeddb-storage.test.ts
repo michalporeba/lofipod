@@ -279,6 +279,7 @@ describe("createIndexedDbStorage", () => {
           value: {
             observedRemoteChangeIds: [],
             persistedPodConfig: null,
+            canonicalContainerVersions: {},
           },
         });
 

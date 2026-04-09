@@ -118,6 +118,14 @@ and known boundaries for the project.
   engine should reconcile them locally by merging non-conflicting triple-level
   edits and resolving true conflicts deterministically by timestamp, then
   lexicographic `changeId`.
+- Remote sync should also poll canonical entity containers for version changes.
+  If a container changed and the current canonical `.ttl` graph still differs
+  from local state after log replay, the engine should treat that as an
+  external canonical edit, reconcile local state to the remote graph, and
+  queue a local log append without re-projecting the canonical file again.
+- Canonical reconciliation should ignore entities that still have pending local
+  changes so remote polling does not trample unsynced local work or merge
+  results.
 - Realtime collaborative editing is out of scope.
 
 ### Local-first query model
@@ -170,8 +178,6 @@ and known boundaries for the project.
 ## Open questions
 
 - What minimal metadata is required for bucket discovery and log replay?
-- How should canonical reconciliation work after first bootstrap when other
-  applications can edit canonical resources directly?
 - What framework-agnostic observation API is needed before React bindings are
   added?
 - How should branch/conflict state be exposed to consumers?
