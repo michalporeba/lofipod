@@ -63,7 +63,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.23.0",
-    "@inrupt/solid-client-authn-node": "^3.1.1",
+    "@inrupt/solid-client-authn-node": "^4.0.0",
     "@types/node": "^25.5.0",
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^3.2.4",
