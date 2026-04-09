@@ -278,6 +278,7 @@ describe("createIndexedDbStorage", () => {
           key: "syncMetadata",
           value: {
             observedRemoteChangeIds: [],
+            persistedPodConfig: null,
           },
         });
 

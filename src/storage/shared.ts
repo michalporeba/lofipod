@@ -40,6 +40,12 @@ export function cloneLocalChange(change: LocalChange): LocalChange {
 export function cloneSyncMetadata(metadata: SyncMetadata): SyncMetadata {
   return {
     observedRemoteChangeIds: [...metadata.observedRemoteChangeIds],
+    persistedPodConfig: metadata.persistedPodConfig
+      ? {
+          podBaseUrl: metadata.persistedPodConfig.podBaseUrl,
+          logBasePath: metadata.persistedPodConfig.logBasePath,
+        }
+      : null,
   };
 }
 

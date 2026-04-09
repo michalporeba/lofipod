@@ -110,6 +110,7 @@ function readStoredRecord(
 function createDefaultSyncMetadata(): SyncMetadata {
   return {
     observedRemoteChangeIds: [],
+    persistedPodConfig: null,
   };
 }
 

@@ -91,6 +91,8 @@ and known boundaries for the project.
 - Background sync should be expected on save, startup, focus, reconnect, and
   periodic polling.
 - Manual sync should not be required for normal operation.
+- The engine should support attaching and detaching a Pod sync adapter at
+  runtime without rebuilding local state.
 - Solid notifications are an enhancement path, not a baseline dependency.
 - Concurrent branches should be preserved rather than discarded.
 - One branch may be chosen as current automatically for normal reads.
@@ -104,6 +106,8 @@ and known boundaries for the project.
   replay the deletion locally.
 - First attach to an existing Pod should support explicit bootstrap import from
   canonical entity directories.
+- Persisted Pod connection metadata may survive restart, but live attachment
+  still requires the application to supply a runtime adapter.
 - Bootstrap import should be additive by default:
   - import missing local entities
   - skip identical local and remote entities

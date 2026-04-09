@@ -3,8 +3,14 @@ import type { RdfTerm, Term, Triple } from "./rdf.js";
 
 export type { RdfTerm, Term, Triple };
 
+export type PersistedPodConfig = {
+  podBaseUrl: string;
+  logBasePath: string;
+};
+
 export type SyncMetadata = {
   observedRemoteChangeIds: string[];
+  persistedPodConfig: PersistedPodConfig | null;
 };
 
 export type ToRdfHelpers<T> = {
@@ -139,10 +145,17 @@ export type EngineConfig = {
   storage?: LocalStorageAdapter;
   pod?: {
     logBasePath?: string;
+    podBaseUrl?: string;
   };
   sync?: {
     adapter: PodSyncAdapter;
   };
+};
+
+export type SyncAttachConfig = {
+  adapter: PodSyncAdapter;
+  podBaseUrl: string;
+  logBasePath: string;
 };
 
 export type SyncState = {
@@ -169,6 +182,9 @@ export type Engine = {
   list<T>(entityName: string, options?: { limit?: number }): Promise<T[]>;
   delete(entityName: string, id: string): Promise<void>;
   sync: {
+    attach(config: SyncAttachConfig): Promise<void>;
+    detach(): Promise<void>;
+    persistedConfig(): Promise<PersistedPodConfig | null>;
     state(): Promise<SyncState>;
     now(): Promise<void>;
     bootstrap(): Promise<BootstrapResult>;

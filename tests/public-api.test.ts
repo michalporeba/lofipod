@@ -15,6 +15,7 @@ import {
   type LocalStorageTransaction,
   type EntityDefinition,
   type Triple,
+  type SyncMetadata,
 } from "../src/index.js";
 import {
   createEventFixture,
@@ -814,7 +815,8 @@ describe("local persistence", () => {
       changes: [] as LocalChange[],
       syncMetadata: {
         observedRemoteChangeIds: [] as string[],
-      },
+        persistedPodConfig: null,
+      } as SyncMetadata,
       updatedOrder: 0,
     };
 
@@ -840,6 +842,11 @@ describe("local persistence", () => {
         observedRemoteChangeIds: [
           ...state.syncMetadata.observedRemoteChangeIds,
         ],
+        persistedPodConfig: state.syncMetadata.persistedPodConfig
+          ? {
+              ...state.syncMetadata.persistedPodConfig,
+            }
+          : null,
       },
       updatedOrder: state.updatedOrder,
     });
@@ -863,6 +870,11 @@ describe("local persistence", () => {
           observedRemoteChangeIds: [
             ...state.syncMetadata.observedRemoteChangeIds,
           ],
+          persistedPodConfig: state.syncMetadata.persistedPodConfig
+            ? {
+                ...state.syncMetadata.persistedPodConfig,
+              }
+            : null,
         };
       },
       async transact<T>(
@@ -893,11 +905,21 @@ describe("local persistence", () => {
               observedRemoteChangeIds: [
                 ...draft.syncMetadata.observedRemoteChangeIds,
               ],
+              persistedPodConfig: draft.syncMetadata.persistedPodConfig
+                ? {
+                    ...draft.syncMetadata.persistedPodConfig,
+                  }
+                : null,
             };
           },
           writeSyncMetadata(metadata) {
             draft.syncMetadata = {
               observedRemoteChangeIds: [...metadata.observedRemoteChangeIds],
+              persistedPodConfig: metadata.persistedPodConfig
+                ? {
+                    ...metadata.persistedPodConfig,
+                  }
+                : null,
             };
           },
           nextUpdatedOrder() {
@@ -1554,6 +1576,276 @@ describe("sync state", () => {
 
     await expect(engine.sync.now()).rejects.toThrow(
       "Pod logBasePath is required for remote log projection.",
+    );
+  });
+
+  it("attaches sync at runtime and exposes pending local changes", async () => {
+    const { entity } = createEventFixture();
+    const pushed: string[] = [];
+    const engine = createEngine({
+      entities: [entity],
+      storage: createMemoryStorage(),
+    });
+
+    await engine.save("event", {
+      id: "ev-attach",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+
+    await expect(engine.sync.state()).resolves.toEqual({
+      status: "unconfigured",
+      configured: false,
+      pendingChanges: 1,
+    });
+
+    await engine.sync.attach({
+      adapter: {
+        async applyEntityPatch(request) {
+          pushed.push(request.path);
+        },
+        async appendLogEntry() {
+          // no-op
+        },
+      },
+      podBaseUrl: "https://pod.example/",
+      logBasePath: "apps/my-journal/log/",
+    });
+
+    await expect(engine.sync.persistedConfig()).resolves.toEqual({
+      podBaseUrl: "https://pod.example/",
+      logBasePath: "apps/my-journal/log/",
+    });
+    await expect(engine.sync.state()).resolves.toEqual({
+      status: "pending",
+      configured: true,
+      pendingChanges: 1,
+    });
+
+    await engine.sync.now();
+
+    expect(pushed).toEqual(["events/ev-attach.ttl"]);
+    await expect(engine.sync.state()).resolves.toEqual({
+      status: "idle",
+      configured: true,
+      pendingChanges: 0,
+    });
+  });
+
+  it("detaches sync, leaves new changes local-only, and can reattach later", async () => {
+    const { entity } = createEventFixture();
+    const firstAdapterPaths: string[] = [];
+    const secondAdapterPaths: string[] = [];
+    const storage = createMemoryStorage();
+    const engine = createEngine({
+      entities: [entity],
+      storage,
+    });
+
+    await engine.sync.attach({
+      adapter: {
+        async applyEntityPatch(request) {
+          firstAdapterPaths.push(request.path);
+        },
+        async appendLogEntry() {
+          // no-op
+        },
+      },
+      podBaseUrl: "https://pod-one.example/",
+      logBasePath: "apps/one/log/",
+    });
+
+    await engine.save("event", {
+      id: "ev-detach-1",
+      title: "First",
+      time: {
+        year: 2024,
+      },
+    });
+    await engine.sync.now();
+
+    await engine.sync.detach();
+    await expect(engine.sync.persistedConfig()).resolves.toBeNull();
+    await expect(engine.sync.state()).resolves.toEqual({
+      status: "unconfigured",
+      configured: false,
+      pendingChanges: 0,
+    });
+
+    await engine.save("event", {
+      id: "ev-detach-2",
+      title: "Second",
+      time: {
+        year: 2025,
+      },
+    });
+
+    await expect(engine.sync.state()).resolves.toEqual({
+      status: "unconfigured",
+      configured: false,
+      pendingChanges: 1,
+    });
+    await expect(engine.sync.now()).resolves.toBeUndefined();
+
+    await engine.sync.attach({
+      adapter: {
+        async applyEntityPatch(request) {
+          secondAdapterPaths.push(request.path);
+        },
+        async appendLogEntry() {
+          // no-op
+        },
+      },
+      podBaseUrl: "https://pod-two.example/",
+      logBasePath: "apps/two/log/",
+    });
+
+    await expect(engine.sync.persistedConfig()).resolves.toEqual({
+      podBaseUrl: "https://pod-two.example/",
+      logBasePath: "apps/two/log/",
+    });
+
+    await engine.sync.now();
+
+    expect(firstAdapterPaths).toEqual(["events/ev-detach-1.ttl"]);
+    expect(secondAdapterPaths).toEqual(["events/ev-detach-2.ttl"]);
+    await expect(engine.sync.state()).resolves.toEqual({
+      status: "idle",
+      configured: true,
+      pendingChanges: 0,
+    });
+  });
+
+  it("replaces the current adapter when attaching again", async () => {
+    const { entity } = createEventFixture();
+    const firstAdapterPaths: string[] = [];
+    const secondAdapterPaths: string[] = [];
+    const engine = createEngine({
+      entities: [entity],
+      storage: createMemoryStorage(),
+    });
+
+    await engine.sync.attach({
+      adapter: {
+        async applyEntityPatch(request) {
+          firstAdapterPaths.push(request.path);
+        },
+        async appendLogEntry() {
+          // no-op
+        },
+      },
+      podBaseUrl: "https://pod-one.example/",
+      logBasePath: "apps/one/log/",
+    });
+
+    await engine.sync.attach({
+      adapter: {
+        async applyEntityPatch(request) {
+          secondAdapterPaths.push(request.path);
+        },
+        async appendLogEntry() {
+          // no-op
+        },
+      },
+      podBaseUrl: "https://pod-two.example/",
+      logBasePath: "apps/two/log/",
+    });
+
+    await engine.save("event", {
+      id: "ev-switch",
+      title: "Switched",
+      time: {
+        year: 2024,
+      },
+    });
+    await engine.sync.now();
+
+    expect(firstAdapterPaths).toEqual([]);
+    expect(secondAdapterPaths).toEqual(["events/ev-switch.ttl"]);
+    await expect(engine.sync.persistedConfig()).resolves.toEqual({
+      podBaseUrl: "https://pod-two.example/",
+      logBasePath: "apps/two/log/",
+    });
+  });
+
+  it("persists attached pod config across engine recreation", async () => {
+    const { entity } = createEventFixture();
+    const storage = createMemoryStorage();
+    const firstEngine = createEngine({
+      entities: [entity],
+      storage,
+    });
+
+    await firstEngine.sync.attach({
+      adapter: {
+        async applyEntityPatch() {
+          // no-op
+        },
+        async appendLogEntry() {
+          // no-op
+        },
+      },
+      podBaseUrl: "https://pod.example/",
+      logBasePath: "apps/my-journal/log/",
+    });
+
+    const secondEngine = createEngine({
+      entities: [entity],
+      storage,
+    });
+
+    await expect(secondEngine.sync.persistedConfig()).resolves.toEqual({
+      podBaseUrl: "https://pod.example/",
+      logBasePath: "apps/my-journal/log/",
+    });
+    await expect(secondEngine.sync.state()).resolves.toEqual({
+      status: "unconfigured",
+      configured: false,
+      pendingChanges: 0,
+    });
+  });
+
+  it("clears persisted pod config across engine recreation after detach", async () => {
+    const { entity } = createEventFixture();
+    const storage = createMemoryStorage();
+    const firstEngine = createEngine({
+      entities: [entity],
+      storage,
+    });
+
+    await firstEngine.sync.attach({
+      adapter: {
+        async applyEntityPatch() {
+          // no-op
+        },
+        async appendLogEntry() {
+          // no-op
+        },
+      },
+      podBaseUrl: "https://pod.example/",
+      logBasePath: "apps/my-journal/log/",
+    });
+    await firstEngine.sync.detach();
+
+    const secondEngine = createEngine({
+      entities: [entity],
+      storage,
+    });
+
+    await expect(secondEngine.sync.persistedConfig()).resolves.toBeNull();
+  });
+
+  it("requires an attached adapter for bootstrap", async () => {
+    const { entity } = createEventFixture();
+    const engine = createEngine({
+      entities: [entity],
+      storage: createMemoryStorage(),
+    });
+
+    await expect(engine.sync.bootstrap()).rejects.toThrow(
+      "Sync adapter is not attached.",
     );
   });
 });

@@ -75,6 +75,7 @@ export function createDemoApp(options: CreateDemoAppOptions = {}): DemoApp {
     }),
     pod: options.pod
       ? {
+          podBaseUrl: options.pod.podBaseUrl,
           logBasePath: options.pod.logBasePath ?? "apps/lifegraph-demo/log/",
         }
       : undefined,

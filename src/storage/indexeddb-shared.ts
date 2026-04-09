@@ -50,6 +50,7 @@ export const SYNC_METADATA_KEY = "syncMetadata";
 export function createDefaultSyncMetadata(): SyncMetadata {
   return {
     observedRemoteChangeIds: [],
+    persistedPodConfig: null,
   };
 }
 

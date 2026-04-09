@@ -1,10 +1,11 @@
 import { createMemoryStorage } from "./storage/memory.js";
-import { readSyncState } from "./sync.js";
+import { normalizeLogBasePath, readSyncState } from "./sync.js";
 import type {
   BootstrapResult,
   Engine,
   EngineConfig,
   EntityDefinition,
+  PersistedPodConfig,
   SyncState,
 } from "./types.js";
 import {
@@ -24,9 +25,17 @@ export function createEngine(config: EngineConfig): Engine {
     config.entities.map((entity) => [entity.name, entity]),
   );
   const storage = (config.storage ?? createMemoryStorage()) as EngineStorage;
+  let currentPodConfig = createRuntimePodConfig(config.pod);
+  let currentSyncConfig = config.sync;
 
   const requireEntity = (entityName: string): EntityDefinition<unknown> =>
     requireEntityDefinition(entities, entityName);
+
+  const runtimeConfig = (): EngineConfig => ({
+    ...config,
+    pod: currentPodConfig,
+    sync: currentSyncConfig,
+  });
 
   return {
     async save<T>(entityName: string, entity: T): Promise<T> {
@@ -61,17 +70,79 @@ export function createEngine(config: EngineConfig): Engine {
     },
 
     sync: {
+      async attach(syncConfig): Promise<void> {
+        currentPodConfig = {
+          podBaseUrl: syncConfig.podBaseUrl,
+          logBasePath: normalizeLogBasePath(syncConfig.logBasePath),
+        };
+        currentSyncConfig = {
+          adapter: syncConfig.adapter,
+        };
+
+        await storage.transact((transaction) => {
+          const metadata = transaction.readSyncMetadata();
+
+          transaction.writeSyncMetadata({
+            ...metadata,
+            persistedPodConfig: {
+              podBaseUrl: syncConfig.podBaseUrl,
+              logBasePath: normalizeLogBasePath(syncConfig.logBasePath),
+            },
+          });
+        });
+      },
+
+      async detach(): Promise<void> {
+        currentPodConfig = undefined;
+        currentSyncConfig = undefined;
+
+        await storage.transact((transaction) => {
+          const metadata = transaction.readSyncMetadata();
+
+          transaction.writeSyncMetadata({
+            ...metadata,
+            persistedPodConfig: null,
+          });
+        });
+      },
+
+      async persistedConfig(): Promise<PersistedPodConfig | null> {
+        const metadata = await storage.readSyncMetadata();
+        return metadata.persistedPodConfig;
+      },
+
       async state(): Promise<SyncState> {
-        return readSyncState(storage, config.sync);
+        return readSyncState(storage, currentSyncConfig);
       },
 
       async now(): Promise<void> {
-        return syncNow(storage, entities, config);
+        return syncNow(storage, entities, runtimeConfig());
       },
 
       async bootstrap(): Promise<BootstrapResult> {
-        return bootstrapFromCanonicalResources(storage, entities, config);
+        if (!currentSyncConfig) {
+          throw new Error("Sync adapter is not attached.");
+        }
+
+        return bootstrapFromCanonicalResources(
+          storage,
+          entities,
+          runtimeConfig(),
+        );
       },
     },
+  };
+}
+
+function createRuntimePodConfig(
+  podConfig: EngineConfig["pod"],
+): EngineConfig["pod"] | undefined {
+  if (!podConfig?.logBasePath) {
+    return undefined;
+  }
+
+  return {
+    logBasePath: normalizeLogBasePath(podConfig.logBasePath),
+    podBaseUrl: podConfig.podBaseUrl,
   };
 }

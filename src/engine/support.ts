@@ -82,6 +82,7 @@ export async function rememberObservedRemoteChangeIds(
     }
 
     transaction.writeSyncMetadata({
+      ...metadata,
       observedRemoteChangeIds: Array.from(observed).sort(),
     });
   });
