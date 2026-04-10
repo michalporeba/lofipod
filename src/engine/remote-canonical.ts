@@ -21,12 +21,13 @@ export async function reconcileCanonicalResources(
   storage: EngineStorage,
   entities: Map<string, EntityDefinition<unknown>>,
   config: EngineConfig,
-): Promise<void> {
+): Promise<number> {
   if (!config.sync?.adapter.checkCanonicalResources) {
-    return;
+    return 0;
   }
 
   const metadata = await storage.readSyncMetadata();
+  let entitiesReconciled = 0;
 
   for (const definition of entities.values()) {
     const previousVersion =
@@ -54,13 +55,15 @@ export async function reconcileCanonicalResources(
       continue;
     }
 
-    await reconcileCanonicalContainer(
+    entitiesReconciled += await reconcileCanonicalContainer(
       storage,
       definition,
       remote.entities,
       await readPendingEntityIds(storage, definition.name),
     );
   }
+
+  return entitiesReconciled;
 }
 
 async function reconcileCanonicalContainer(
@@ -73,7 +76,7 @@ async function reconcileCanonicalContainer(
     graph: Triple[];
   }[],
   pendingEntityIds: Set<string>,
-): Promise<void> {
+): Promise<number> {
   const localRecords = await storage.listEntities(definition.name);
   const localById = new Map(
     localRecords.map(({ entityId, record }) => [entityId, record]),
@@ -81,6 +84,7 @@ async function reconcileCanonicalContainer(
   const remoteById = new Map(
     remoteEntities.map((entity) => [entity.entityId, entity]),
   );
+  let reconciled = 0;
 
   for (const remoteEntity of remoteEntities) {
     if (pendingEntityIds.has(remoteEntity.entityId)) {
@@ -91,6 +95,7 @@ async function reconcileCanonicalContainer(
 
     if (!localRecord) {
       await importExternalCanonicalEntity(storage, definition, remoteEntity);
+      reconciled += 1;
       continue;
     }
 
@@ -105,6 +110,7 @@ async function reconcileCanonicalContainer(
       localRecord,
       remoteEntity,
     );
+    reconciled += 1;
   }
 
   for (const { entityId } of localRecords) {
@@ -117,7 +123,10 @@ async function reconcileCanonicalContainer(
     }
 
     await reconcileExternalCanonicalDeletion(storage, definition, entityId);
+    reconciled += 1;
   }
+
+  return reconciled;
 }
 
 async function readPendingEntityIds(

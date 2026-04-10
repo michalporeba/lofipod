@@ -26,6 +26,7 @@ export type {
   EntityDefinition,
   ListedEntityRecord,
   LocalChange,
+  Logger,
   LocalStorageAdapter,
   LocalStorageTransaction,
   PodEntityPatchRequest,

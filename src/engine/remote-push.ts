@@ -78,15 +78,17 @@ export async function syncPendingChanges(
   storage: EngineStorage,
   entities: Map<string, EntityDefinition<unknown>>,
   config: EngineConfig,
-): Promise<void> {
+): Promise<number> {
   if (!config.sync) {
-    return;
+    return 0;
   }
 
   const pendingChanges = storage.listPendingChanges
     ? await storage.listPendingChanges()
     : (await storage.listChanges()).filter(hasPendingSync);
   const deletedEntities = new Set<string>();
+
+  let changesPushed = 0;
 
   for (const change of pendingChanges) {
     if (!isDeletionChange(change)) {
@@ -113,5 +115,8 @@ export async function syncPendingChanges(
     }
 
     await projectPendingChange(storage, config, definition, change, record);
+    changesPushed += 1;
   }
+
+  return changesPushed;
 }

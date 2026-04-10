@@ -1,5 +1,6 @@
 import type { NamedNode } from "n3";
 import type {
+  Logger,
   PodEntityPatchRequest,
   PodLogAppendRequest,
   PodSyncAdapter,
@@ -19,6 +20,7 @@ type SolidPodAdapterOptions = {
   podBaseUrl: string;
   authorization?: string;
   fetch?: typeof fetch;
+  logger?: Logger;
 };
 
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
@@ -30,7 +32,11 @@ export { parseCanonicalTriples, parseLogEntryNTriples } from "./solid-rdf.js";
 export function createSolidPodAdapter(
   options: SolidPodAdapterOptions,
 ): PodSyncAdapter {
-  const http = createSolidHttpClient(options);
+  let logger = options.logger;
+  const http = createSolidHttpClient({
+    ...options,
+    getLogger: () => logger,
+  });
   const fetchImpl = options.fetch ?? fetch;
 
   const readContainerVersion = async (
@@ -40,10 +46,14 @@ export function createSolidPodAdapter(
     exists: boolean;
     version: string | null;
   }> => {
-    const response = await fetchImpl(http.joinUrl(basePath), {
-      method: "HEAD",
-      headers: http.authHeaders,
-    });
+    const response = await http.rawRequest(
+      basePath,
+      {
+        method: "HEAD",
+        headers: http.authHeaders,
+      },
+      `Check canonical container for ${entityName}`,
+    );
 
     if (response.status === 404) {
       return {
@@ -73,12 +83,16 @@ export function createSolidPodAdapter(
   }) => {
     const containerPath = input.basePath;
     const containerUrl = http.joinUrl(containerPath);
-    const containerResponse = await fetchImpl(containerUrl, {
-      headers: {
-        ...http.authHeaders,
-        Accept: "text/turtle",
+    const containerResponse = await http.rawRequest(
+      containerPath,
+      {
+        headers: {
+          ...http.authHeaders,
+          Accept: "text/turtle",
+        },
       },
-    });
+      `List canonical entities for ${input.entityName}`,
+    );
 
     if (containerResponse.status === 404) {
       return [];
@@ -146,6 +160,10 @@ export function createSolidPodAdapter(
   };
 
   return {
+    setLogger(nextLogger) {
+      logger = nextLogger;
+    },
+
     async applyEntityPatch(request: PodEntityPatchRequest) {
       await http.ensureContainers(request.path);
       const shouldCreate = await http.ensureResourceMissing(request.path);

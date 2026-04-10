@@ -30,6 +30,7 @@ The current public API direction is:
   sync metadata
 - sync exposed through a small status and trigger surface without making normal
   CRUD feel sync-driven
+- optional structured logging without a logging-framework dependency
 
 This means `lofipod` should own orchestration, local-first behaviour, sync, and
 Pod projection mechanics, while application code owns domain types, ontology
@@ -46,6 +47,7 @@ The current public surface is still intentionally small and explicit:
 - `createIndexedDbStorage(...)` from `lofipod/browser`
 - `createSqliteStorage(...)` from `lofipod/node`
 - `createSolidPodAdapter(...)` from `lofipod/node` or `lofipod/browser`
+- optional `logger` on `createEngine(...)`
 - `engine.save(entityName, entity)`
 - `engine.get(entityName, id)`
 - `engine.list(entityName, options?)`
@@ -116,6 +118,26 @@ The current version does not expose:
 
 The library should own exact revision and index resource naming within those
 configured roots so the sync model remains coherent.
+
+## Logging
+
+The engine may also accept an optional logger with the shape:
+
+- `debug(message, metadata?)`
+- `info(message, metadata?)`
+- `warn(message, metadata?)`
+- `error(message, metadata?)`
+
+When provided, the current implementation logs:
+
+- Pod HTTP requests as `pod:request`
+- sync phase timings such as `sync:push`, `sync:pull`, `sync:reconcile`, and
+  `sync:cycle`
+- infrequent operational events such as `sync:attached`, `sync:detached`,
+  `sync:bootstrap`, and notification subscription changes
+
+When omitted, logging should add no meaningful work beyond the normal code
+paths.
 
 ## Local storage and listing
 

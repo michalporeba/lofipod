@@ -8,6 +8,13 @@ export type PersistedPodConfig = {
   logBasePath: string;
 };
 
+export type Logger = {
+  debug(message: string, metadata?: Record<string, unknown>): void;
+  info(message: string, metadata?: Record<string, unknown>): void;
+  warn(message: string, metadata?: Record<string, unknown>): void;
+  error(message: string, metadata?: Record<string, unknown>): void;
+};
+
 export type SyncMetadata = {
   observedRemoteChangeIds: string[];
   persistedPodConfig: PersistedPodConfig | null;
@@ -111,6 +118,7 @@ export type PodLogAppendRequest = {
 };
 
 export type PodSyncAdapter = {
+  setLogger?(logger: Logger | undefined): void;
   applyEntityPatch(request: PodEntityPatchRequest): Promise<void>;
   deleteEntityResource?(request: {
     entityName: string;
@@ -171,6 +179,7 @@ export type LocalStorageAdapter = {
 export type EngineConfig = {
   entities: EntityDefinition<unknown>[];
   storage?: LocalStorageAdapter;
+  logger?: Logger;
   pod?: {
     logBasePath?: string;
     podBaseUrl?: string;

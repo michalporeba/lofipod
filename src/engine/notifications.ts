@@ -1,7 +1,9 @@
 import { normalizeLogBasePath } from "../sync.js";
+import { logInfo, logWarn } from "../logger.js";
 import type {
   EngineConfig,
   EntityDefinition,
+  Logger,
   PodSyncAdapter,
 } from "../types.js";
 
@@ -12,6 +14,7 @@ type NotificationManagerInput = {
   getConfig: () => EngineConfig;
   runSyncNow: (suppressErrors: boolean) => Promise<void>;
   setNotificationsActive: (active: boolean) => void;
+  logger?: Logger;
 };
 
 export function createNotificationManager(input: NotificationManagerInput) {
@@ -22,6 +25,11 @@ export function createNotificationManager(input: NotificationManagerInput) {
     generation += 1;
     const current = unsubscribers;
     unsubscribers = [];
+    if (input.logger && current.length > 0) {
+      logInfo(input.logger, "sync:notifications:lost", {
+        subscriptions: current.length,
+      });
+    }
     input.setNotificationsActive(false);
     await Promise.all(
       current.map((unsubscribe) => Promise.resolve(unsubscribe())),
@@ -61,8 +69,19 @@ export function createNotificationManager(input: NotificationManagerInput) {
         );
 
         nextUnsubscribers.push(() => subscription.unsubscribe());
-      } catch {
+        if (input.logger) {
+          logInfo(input.logger, "sync:notifications:established", {
+            containerPath,
+          });
+        }
+      } catch (error) {
         // Notification subscriptions are an optimization layer only.
+        if (input.logger) {
+          logWarn(input.logger, "sync:notifications:failed", {
+            containerPath,
+            reason: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
     }
 

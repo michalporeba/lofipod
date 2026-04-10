@@ -159,6 +159,7 @@ The codebase now also includes:
 - N-Triples replication log parsing and serialization
 - entity deletion with Pod-side HTTP `DELETE` plus retraction-only log replay
 - extended sync status reporting plus `engine.sync.onStateChange(...)`
+- optional structured logging for Pod requests and sync timing
 - internal refactors that keep the public engine and Pod entrypoints thin and
   easier to read
 

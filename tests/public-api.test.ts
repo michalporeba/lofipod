@@ -19,6 +19,7 @@ import {
   type Triple,
   type SyncMetadata,
 } from "../src/index.js";
+import { createSolidPodAdapter } from "../src/node.js";
 import {
   createEventFixture,
   createEventWithDetailsFixture,
@@ -2400,6 +2401,294 @@ describe("sync state", () => {
       expect(unsubscribed).toContain("dispose:events/");
       expect(unsubscribed).toContain("dispose:apps/my-journal/log/event/");
     });
+  });
+});
+
+describe("logging", () => {
+  const pod = {
+    logBasePath: "apps/my-journal/log/",
+  };
+
+  function createMockLogger() {
+    return {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+  }
+
+  it("accepts console as a logger without affecting save and sync", async () => {
+    const { entity } = createEventFixture();
+    const engine = createEngine({
+      entities: [entity],
+      logger: console,
+      pod,
+      sync: {
+        adapter: {
+          async applyEntityPatch() {
+            // no-op
+          },
+          async appendLogEntry() {
+            // no-op
+          },
+        },
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-console",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+    await engine.sync.now();
+
+    await expect(engine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "idle",
+        configured: true,
+        pendingChanges: 0,
+        connection: {
+          reachable: true,
+          lastSyncedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+        },
+      }),
+    );
+  });
+
+  it("logs Pod HTTP requests with method, url, status, and duration", async () => {
+    const { entity } = createEventFixture();
+    const logger = createMockLogger();
+    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (method === "POST") {
+        return new Response("", { status: 201 });
+      }
+
+      if (method === "HEAD" && url === "https://pod.example/events/") {
+        return new Response("", { status: 404 });
+      }
+
+      if (method === "GET" && url === "https://pod.example/events/") {
+        return new Response("", { status: 404 });
+      }
+
+      if (
+        method === "HEAD" &&
+        url === "https://pod.example/events/ev-logger.ttl"
+      ) {
+        return new Response("", { status: 404 });
+      }
+
+      if (method === "PUT") {
+        return new Response("", { status: 201 });
+      }
+
+      return new Response("unexpected", { status: 500 });
+    });
+    const engine = createEngine({
+      entities: [entity],
+      logger,
+      pod,
+      sync: {
+        adapter: createSolidPodAdapter({
+          podBaseUrl: "https://pod.example/",
+          fetch,
+        }),
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-logger",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+    await engine.sync.now();
+
+    const podRequestLogs = logger.debug.mock.calls.filter(
+      ([message]) => message === "pod:request",
+    );
+
+    expect(podRequestLogs.length).toBeGreaterThan(0);
+    expect(podRequestLogs).toEqual(
+      expect.arrayContaining([
+        [
+          "pod:request",
+          expect.objectContaining({
+            method: expect.any(String),
+            url: expect.any(String),
+            status: expect.any(Number),
+            durationMs: expect.any(Number),
+            context: expect.any(String),
+          }),
+        ],
+      ]),
+    );
+
+    for (const [, metadata] of podRequestLogs) {
+      expect((metadata as { durationMs?: number }).durationMs).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("logs sync phase timings and total cycle duration", async () => {
+    const { entity } = createEventFixture();
+    const logger = createMockLogger();
+    const engine = createEngine({
+      entities: [entity],
+      logger,
+      pod,
+      sync: {
+        adapter: {
+          async applyEntityPatch() {
+            // no-op
+          },
+          async appendLogEntry() {
+            // no-op
+          },
+          async listLogEntries() {
+            return [];
+          },
+        },
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-sync-log",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+    await engine.sync.now();
+
+    expect(logger.debug).toHaveBeenCalledWith(
+      "sync:cycle",
+      expect.objectContaining({
+        durationMs: expect.any(Number),
+      }),
+    );
+    expect(logger.debug).toHaveBeenCalledWith(
+      "sync:push",
+      expect.objectContaining({
+        durationMs: expect.any(Number),
+        changesPushed: expect.any(Number),
+      }),
+    );
+    expect(logger.debug).toHaveBeenCalledWith(
+      "sync:pull",
+      expect.objectContaining({
+        durationMs: expect.any(Number),
+        entriesReplayed: expect.any(Number),
+      }),
+    );
+    expect(logger.debug).toHaveBeenCalledWith(
+      "sync:reconcile",
+      expect.objectContaining({
+        durationMs: expect.any(Number),
+        entitiesReconciled: expect.any(Number),
+      }),
+    );
+  });
+
+  it("preserves an adapter-provided logger when the engine has no logger", async () => {
+    const { entity } = createEventFixture();
+    const adapterLogger = createMockLogger();
+    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+
+      if (method === "POST") {
+        return new Response("", { status: 201 });
+      }
+
+      if (method === "HEAD" && url === "https://pod.example/events/") {
+        return new Response("", { status: 404 });
+      }
+
+      if (method === "GET" && url === "https://pod.example/events/") {
+        return new Response("", { status: 404 });
+      }
+
+      if (
+        method === "HEAD" &&
+        url === "https://pod.example/events/ev-adapter-logger.ttl"
+      ) {
+        return new Response("", { status: 404 });
+      }
+
+      if (method === "PUT") {
+        return new Response("", { status: 201 });
+      }
+
+      return new Response("unexpected", { status: 500 });
+    });
+    const engine = createEngine({
+      entities: [entity],
+      pod,
+      sync: {
+        adapter: createSolidPodAdapter({
+          podBaseUrl: "https://pod.example/",
+          fetch,
+          logger: adapterLogger,
+        }),
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-adapter-logger",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+    await engine.sync.now();
+
+    expect(adapterLogger.debug).toHaveBeenCalledWith(
+      "pod:request",
+      expect.objectContaining({
+        method: expect.any(String),
+        url: expect.any(String),
+        status: expect.any(Number),
+        durationMs: expect.any(Number),
+      }),
+    );
+  });
+
+  it("does not require a logger to save and sync", async () => {
+    const { entity } = createEventFixture();
+    const engine = createEngine({
+      entities: [entity],
+      pod,
+      sync: {
+        adapter: {
+          async applyEntityPatch() {
+            // no-op
+          },
+          async appendLogEntry() {
+            // no-op
+          },
+          async listLogEntries() {
+            return [];
+          },
+        },
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-no-logger",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+
+    await expect(engine.sync.now()).resolves.toBeUndefined();
   });
 });
 

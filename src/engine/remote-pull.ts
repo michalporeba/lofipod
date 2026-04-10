@@ -16,11 +16,11 @@ export async function replayRemoteLogEntries(
   storage: EngineStorage,
   entities: Map<string, EntityDefinition<unknown>>,
   config: EngineConfig,
-): Promise<void> {
+): Promise<number> {
   const remoteEntries = await config.sync?.adapter.listLogEntries?.();
 
   if (!remoteEntries) {
-    return;
+    return 0;
   }
 
   const observedRemoteChangeIds = await readObservedRemoteChangeIds(storage);
@@ -28,6 +28,7 @@ export async function replayRemoteLogEntries(
     (await storage.listChanges()).map((change) => change.changeId),
   );
   const touchedEntities = new Set<string>();
+  let entriesReplayed = 0;
 
   for (const entry of remoteEntries) {
     if (
@@ -103,7 +104,9 @@ export async function replayRemoteLogEntries(
 
     knownChangeIds.add(entry.changeId);
     touchedEntities.add(`${entry.entityName}:${entry.entityId}`);
+    entriesReplayed += 1;
   }
 
   await reconcileForksAfterPull(storage, entities, touchedEntities);
+  return entriesReplayed;
 }

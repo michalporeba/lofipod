@@ -1,4 +1,5 @@
 import { createMemoryStorage } from "./storage/memory.js";
+import { logInfo, logWarn } from "./logger.js";
 import { normalizeLogBasePath, readSyncState } from "./sync.js";
 import type {
   BootstrapResult,
@@ -33,6 +34,7 @@ export function createEngine(config: EngineConfig): Engine {
     config.entities.map((entity) => [entity.name, entity]),
   );
   const storage = (config.storage ?? createMemoryStorage()) as EngineStorage;
+  const logger = config.logger;
   let currentPodConfig = createRuntimePodConfig(config.pod);
   let currentSyncConfig = config.sync;
   let queuedSync = Promise.resolve();
@@ -46,9 +48,14 @@ export function createEngine(config: EngineConfig): Engine {
 
   const runtimeConfig = (): EngineConfig => ({
     ...config,
+    logger,
     pod: currentPodConfig,
     sync: currentSyncConfig,
   });
+
+  if (logger) {
+    currentSyncConfig?.adapter.setLogger?.(logger);
+  }
 
   const emitSyncStateChange = (): void => {
     const emissionVersion = ++syncStateEmissionVersion;
@@ -111,6 +118,11 @@ export function createEngine(config: EngineConfig): Engine {
         createTimestamp(),
         error instanceof Error ? error.message : String(error),
       );
+      if (logger) {
+        logWarn(logger, "sync:failure", {
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      }
       emitSyncStateChange();
       throw error;
     } finally {
@@ -151,6 +163,7 @@ export function createEngine(config: EngineConfig): Engine {
     getConfig: runtimeConfig,
     runSyncNow,
     setNotificationsActive,
+    logger,
   });
   const polling = createPollingManager({
     getConfig: runtimeConfig,
@@ -218,6 +231,9 @@ export function createEngine(config: EngineConfig): Engine {
           adapter: syncConfig.adapter,
           pollIntervalMs: syncConfig.pollIntervalMs,
         };
+        if (logger) {
+          currentSyncConfig.adapter.setLogger?.(logger);
+        }
 
         await storage.transact((transaction) => {
           const metadata = transaction.readSyncMetadata();
@@ -234,6 +250,12 @@ export function createEngine(config: EngineConfig): Engine {
         await notifications.start();
         polling.start();
         queueBackgroundSync();
+        if (logger) {
+          logInfo(logger, "sync:attached", {
+            podBaseUrl: syncConfig.podBaseUrl,
+            logBasePath: normalizeLogBasePath(syncConfig.logBasePath),
+          });
+        }
         emitSyncStateChange();
       },
 
@@ -252,6 +274,7 @@ export function createEngine(config: EngineConfig): Engine {
           });
         });
 
+        logInfo(logger, "sync:detached");
         emitSyncStateChange();
       },
 
@@ -285,7 +308,16 @@ export function createEngine(config: EngineConfig): Engine {
           storage,
           entities,
           runtimeConfig(),
-        );
+        ).then((result) => {
+          if (logger) {
+            logInfo(logger, "sync:bootstrap", {
+              imported: result.imported,
+              skipped: result.skipped,
+              collisions: result.collisions.length,
+            });
+          }
+          return result;
+        });
       },
     },
   };
