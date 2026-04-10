@@ -160,6 +160,7 @@ The codebase now also includes:
 - entity deletion with Pod-side HTTP `DELETE` plus retraction-only log replay
 - extended sync status reporting plus `engine.sync.onStateChange(...)`
 - optional structured logging for Pod requests and sync timing
+- an explicit testing guide and coverage thresholds for the source tree
 - internal refactors that keep the public engine and Pod entrypoints thin and
   easier to read
 

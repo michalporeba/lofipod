@@ -72,9 +72,23 @@ See [QUICKSTART.md](QUICKSTART.md) for a small end-to-end example using
 - [QUICKSTART.md](QUICKSTART.md): first-use example
 - [API.md](API.md): current public API direction
 - [ADR.md](ADR.md): accepted architectural decisions
+- [TESTING.md](TESTING.md): testing approach, commands, and coverage guardrails
 - [PLANS.md](PLANS.md): delivery slices
 - [WIP.md](WIP.md): current implementation state and open questions
 - [demo/README.md](demo/README.md): in-repo demo app area and ontology seed
+
+## Testing
+
+Common commands:
+
+- `npm test`: fast unit and mocked-sync suite
+- `npm run test:coverage`: source coverage report with enforced thresholds
+- `npm run test:demo`: CLI demo regression harness
+- `npm run test:pod`: focused Community Solid Server integration suite
+- `npm run verify`: format, lint, types, and the default fast suite
+
+See [TESTING.md](TESTING.md) for the intended test layering and current
+coverage expectations.
 
 ## Why it exists
 
