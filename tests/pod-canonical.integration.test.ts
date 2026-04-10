@@ -195,10 +195,14 @@ describe("Community Solid Server canonical reconciliation", () => {
 
     await engine.sync.now();
 
-    await expect(engine.sync.state()).resolves.toEqual({
+    await expect(engine.sync.state()).resolves.toMatchObject({
       status: "idle",
       configured: true,
       pendingChanges: 0,
+      connection: {
+        reachable: true,
+        lastSyncedAt: expect.any(String),
+      },
     });
   }, 30_000);
 
@@ -226,10 +230,14 @@ describe("Community Solid Server canonical reconciliation", () => {
 
     await engine.sync.now();
 
-    await expect(engine.sync.state()).resolves.toEqual({
+    await expect(engine.sync.state()).resolves.toMatchObject({
       status: "idle",
       configured: true,
       pendingChanges: 0,
+      connection: {
+        reachable: true,
+        lastSyncedAt: expect.any(String),
+      },
     });
   }, 30_000);
 
@@ -260,10 +268,14 @@ describe("Community Solid Server canonical reconciliation", () => {
 
     await engine.sync.now();
 
-    await expect(engine.sync.state()).resolves.toEqual({
+    await expect(engine.sync.state()).resolves.toMatchObject({
       status: "idle",
       configured: true,
       pendingChanges: 0,
+      connection: {
+        reachable: true,
+        lastSyncedAt: expect.any(String),
+      },
     });
   }, 30_000);
 });

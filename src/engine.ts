@@ -18,6 +18,12 @@ import { createNotificationManager } from "./engine/notifications.js";
 import { createPollingManager } from "./engine/polling.js";
 import { bootstrapFromCanonicalResources, syncNow } from "./engine/remote.js";
 import {
+  createRuntimeSyncState,
+  persistSyncFailure,
+  persistSyncSuccess,
+} from "./engine/sync-state.js";
+import {
+  createTimestamp,
   requireEntityDefinition,
   type EngineStorage,
 } from "./engine/support.js";
@@ -30,6 +36,10 @@ export function createEngine(config: EngineConfig): Engine {
   let currentPodConfig = createRuntimePodConfig(config.pod);
   let currentSyncConfig = config.sync;
   let queuedSync = Promise.resolve();
+  const runtimeSyncState = createRuntimeSyncState();
+  const syncStateListeners = new Set<(state: SyncState) => void>();
+  let lastEmittedSyncState = "";
+  let syncStateEmissionVersion = 0;
 
   const requireEntity = (entityName: string): EntityDefinition<unknown> =>
     requireEntityDefinition(entities, entityName);
@@ -40,12 +50,80 @@ export function createEngine(config: EngineConfig): Engine {
     sync: currentSyncConfig,
   });
 
+  const emitSyncStateChange = (): void => {
+    const emissionVersion = ++syncStateEmissionVersion;
+
+    void readSyncState(storage, currentSyncConfig, runtimeSyncState)
+      .then((state) => {
+        if (emissionVersion !== syncStateEmissionVersion) {
+          return;
+        }
+
+        const serialized = JSON.stringify(state);
+
+        if (serialized === lastEmittedSyncState) {
+          return;
+        }
+
+        lastEmittedSyncState = serialized;
+
+        for (const listener of syncStateListeners) {
+          listener(state);
+        }
+      })
+      .catch(() => {
+        // Sync state emission should never break engine behaviour.
+      });
+  };
+
+  const setSyncing = (syncing: boolean): void => {
+    if (runtimeSyncState.syncing === syncing) {
+      return;
+    }
+
+    runtimeSyncState.syncing = syncing;
+    emitSyncStateChange();
+  };
+
+  const setNotificationsActive = (active: boolean): void => {
+    if (runtimeSyncState.notificationsActive === active) {
+      return;
+    }
+
+    runtimeSyncState.notificationsActive = active;
+    emitSyncStateChange();
+  };
+
+  const runSyncCycle = async (): Promise<void> => {
+    if (!currentSyncConfig) {
+      return;
+    }
+
+    setSyncing(true);
+
+    try {
+      await syncNow(storage, entities, runtimeConfig());
+      await persistSyncSuccess(storage, createTimestamp());
+      emitSyncStateChange();
+    } catch (error) {
+      await persistSyncFailure(
+        storage,
+        createTimestamp(),
+        error instanceof Error ? error.message : String(error),
+      );
+      emitSyncStateChange();
+      throw error;
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const enqueueSyncCycle = (): Promise<void> => {
     const task = queuedSync
       .catch(() => {
         // Continue processing later sync attempts after an earlier failure.
       })
-      .then(() => syncNow(storage, entities, runtimeConfig()));
+      .then(() => runSyncCycle());
 
     queuedSync = task;
 
@@ -72,6 +150,7 @@ export function createEngine(config: EngineConfig): Engine {
     entities,
     getConfig: runtimeConfig,
     runSyncNow,
+    setNotificationsActive,
   });
   const polling = createPollingManager({
     getConfig: runtimeConfig,
@@ -93,6 +172,7 @@ export function createEngine(config: EngineConfig): Engine {
         entity,
       );
 
+      emitSyncStateChange();
       queueBackgroundSync();
 
       return saved;
@@ -100,6 +180,7 @@ export function createEngine(config: EngineConfig): Engine {
 
     async delete(entityName: string, id: string): Promise<void> {
       await deleteEntity(storage, requireEntity(entityName), id);
+      emitSyncStateChange();
       queueBackgroundSync();
     },
 
@@ -153,6 +234,7 @@ export function createEngine(config: EngineConfig): Engine {
         await notifications.start();
         polling.start();
         queueBackgroundSync();
+        emitSyncStateChange();
       },
 
       async detach(): Promise<void> {
@@ -169,6 +251,8 @@ export function createEngine(config: EngineConfig): Engine {
             persistedPodConfig: null,
           });
         });
+
+        emitSyncStateChange();
       },
 
       async persistedConfig(): Promise<PersistedPodConfig | null> {
@@ -177,7 +261,15 @@ export function createEngine(config: EngineConfig): Engine {
       },
 
       async state(): Promise<SyncState> {
-        return readSyncState(storage, currentSyncConfig);
+        return readSyncState(storage, currentSyncConfig, runtimeSyncState);
+      },
+
+      onStateChange(callback: (state: SyncState) => void): () => void {
+        syncStateListeners.add(callback);
+
+        return () => {
+          syncStateListeners.delete(callback);
+        };
       },
 
       async now(): Promise<void> {

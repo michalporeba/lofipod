@@ -15,6 +15,7 @@ import {
   type LocalStorageTransaction,
   type EntityDefinition,
   type PodEntityPatchRequest,
+  type SyncState,
   type Triple,
   type SyncMetadata,
 } from "../src/index.js";
@@ -109,6 +110,38 @@ function createDeferred<T = void>() {
     promise,
     resolve,
     reject,
+  };
+}
+
+function expectedSyncState(
+  input: {
+    status: SyncState["status"];
+    configured: boolean;
+    pendingChanges: number;
+    connection?: Partial<Record<keyof SyncState["connection"], unknown>>;
+  },
+){
+  const nullableString = {
+    asymmetricMatch(value: unknown) {
+      return value === null || typeof value === "string";
+    },
+    toString() {
+      return "NullableString";
+    },
+  };
+
+  return {
+    status: input.status,
+    configured: input.configured,
+    pendingChanges: input.pendingChanges,
+    connection: {
+      reachable: expect.any(Boolean),
+      lastSyncedAt: nullableString,
+      lastFailedAt: nullableString,
+      lastFailureReason: nullableString,
+      notificationsActive: expect.any(Boolean),
+      ...input.connection,
+    },
   };
 }
 
@@ -881,6 +914,12 @@ describe("local persistence", () => {
         observedRemoteChangeIds: [] as string[],
         persistedPodConfig: null,
         canonicalContainerVersions: {},
+        connection: {
+          reachable: false,
+          lastSyncedAt: null,
+          lastFailedAt: null,
+          lastFailureReason: null,
+        },
       } as SyncMetadata,
       updatedOrder: 0,
     };
@@ -915,6 +954,9 @@ describe("local persistence", () => {
         canonicalContainerVersions: {
           ...state.syncMetadata.canonicalContainerVersions,
         },
+        connection: {
+          ...state.syncMetadata.connection,
+        },
       },
       updatedOrder: state.updatedOrder,
     });
@@ -945,6 +987,9 @@ describe("local persistence", () => {
             : null,
           canonicalContainerVersions: {
             ...state.syncMetadata.canonicalContainerVersions,
+          },
+          connection: {
+            ...state.syncMetadata.connection,
           },
         };
       },
@@ -984,6 +1029,9 @@ describe("local persistence", () => {
               canonicalContainerVersions: {
                 ...draft.syncMetadata.canonicalContainerVersions,
               },
+              connection: {
+                ...draft.syncMetadata.connection,
+              },
             };
           },
           writeSyncMetadata(metadata) {
@@ -996,6 +1044,9 @@ describe("local persistence", () => {
                 : null,
               canonicalContainerVersions: {
                 ...metadata.canonicalContainerVersions,
+              },
+              connection: {
+                ...metadata.connection,
               },
             };
           },
@@ -1444,18 +1495,19 @@ describe("sync state", () => {
       entities: [entity],
     });
 
-    await expect(engine.sync.state()).resolves.toEqual({
-      status: "unconfigured",
-      configured: false,
-      pendingChanges: 0,
-    });
+    await expect(engine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "unconfigured",
+        configured: false,
+        pendingChanges: 0,
+      }),
+    );
   });
 
   it("reports pending local changes when sync is configured", async () => {
     const { entity } = createEventFixture();
     const engine = createEngine({
       entities: [entity],
-      pod,
       sync: {
         adapter: {
           async applyEntityPatch() {
@@ -1476,18 +1528,19 @@ describe("sync state", () => {
       },
     });
 
-    await expect(engine.sync.state()).resolves.toEqual({
-      status: "pending",
-      configured: true,
-      pendingChanges: 1,
-    });
+    await expect(engine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "pending",
+        configured: true,
+        pendingChanges: 1,
+      }),
+    );
   });
 
   it("reports a pending deletion before sync", async () => {
     const { entity } = createEventFixture();
     const engine = createEngine({
       entities: [entity],
-      pod,
       sync: {
         adapter: {
           async applyEntityPatch() {
@@ -1509,11 +1562,13 @@ describe("sync state", () => {
     });
     await engine.delete("event", "ev-delete");
 
-    await expect(engine.sync.state()).resolves.toEqual({
-      status: "pending",
-      configured: true,
-      pendingChanges: 2,
-    });
+    await expect(engine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "pending",
+        configured: true,
+        pendingChanges: 2,
+      }),
+    );
   });
 
   it("preserves pending change count across restart", async () => {
@@ -1523,7 +1578,6 @@ describe("sync state", () => {
     const firstEngine = createEngine({
       entities: [entity],
       storage,
-      pod,
       sync: {
         adapter: {
           async applyEntityPatch() {
@@ -1547,7 +1601,6 @@ describe("sync state", () => {
     const secondEngine = createEngine({
       entities: [entity],
       storage,
-      pod,
       sync: {
         adapter: {
           async applyEntityPatch() {
@@ -1560,18 +1613,19 @@ describe("sync state", () => {
       },
     });
 
-    await expect(secondEngine.sync.state()).resolves.toEqual({
-      status: "pending",
-      configured: true,
-      pendingChanges: 1,
-    });
+    await expect(secondEngine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "pending",
+        configured: true,
+        pendingChanges: 1,
+      }),
+    );
   });
 
   it("reports idle when sync is configured and there are no pending local changes", async () => {
     const { entity } = createEventFixture();
     const engine = createEngine({
       entities: [entity],
-      pod,
       sync: {
         adapter: {
           async applyEntityPatch() {
@@ -1584,11 +1638,13 @@ describe("sync state", () => {
       },
     });
 
-    await expect(engine.sync.state()).resolves.toEqual({
-      status: "idle",
-      configured: true,
-      pendingChanges: 0,
-    });
+    await expect(engine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "idle",
+        configured: true,
+        pendingChanges: 0,
+      }),
+    );
   });
 
   it("becomes idle after pending changes are projected to canonical entity files", async () => {
@@ -1620,11 +1676,211 @@ describe("sync state", () => {
     await engine.sync.now();
 
     expect(applied).toEqual(["events/ev-123.ttl"]);
-    await expect(engine.sync.state()).resolves.toEqual({
-      status: "idle",
-      configured: true,
-      pendingChanges: 0,
+    await expect(engine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "idle",
+        configured: true,
+        pendingChanges: 0,
+        connection: {
+          reachable: true,
+          lastSyncedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+        },
+      }),
+    );
+  });
+
+  it("reports syncing while a sync cycle is in progress", async () => {
+    const { entity } = createEventFixture();
+    const patchGate = createDeferred<void>();
+    const engine = createEngine({
+      entities: [entity],
+      pod,
+      sync: {
+        adapter: {
+          async applyEntityPatch() {
+            await patchGate.promise;
+          },
+          async appendLogEntry() {
+            // no-op
+          },
+        },
+      },
     });
+
+    await engine.save("event", {
+      id: "ev-syncing",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+
+    await waitForExpectation(async () => {
+      await expect(engine.sync.state()).resolves.toEqual(
+        expectedSyncState({
+          status: "syncing",
+          configured: true,
+          pendingChanges: 1,
+        }),
+      );
+    });
+
+    patchGate.resolve();
+    await waitForExpectation(async () => {
+      await expect(engine.sync.state()).resolves.toEqual(
+        expectedSyncState({
+          status: "idle",
+          configured: true,
+          pendingChanges: 0,
+          connection: {
+            reachable: true,
+            lastSyncedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+          },
+        }),
+      );
+    });
+  });
+
+  it("reports offline after a failed sync and recovers after a later success", async () => {
+    const { entity } = createEventFixture();
+    let shouldFail = true;
+    const engine = createEngine({
+      entities: [entity],
+      pod,
+      sync: {
+        adapter: {
+          async applyEntityPatch() {
+            if (shouldFail) {
+              throw new Error("temporary network failure");
+            }
+          },
+          async appendLogEntry() {
+            // no-op
+          },
+        },
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-offline",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+
+    await waitForExpectation(async () => {
+      await expect(engine.sync.state()).resolves.toEqual(
+        expectedSyncState({
+          status: "offline",
+          configured: true,
+          pendingChanges: 1,
+          connection: {
+            reachable: false,
+            lastFailedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+            lastFailureReason: "temporary network failure",
+          },
+        }),
+      );
+    });
+
+    shouldFail = false;
+    await engine.sync.now();
+
+    await expect(engine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "idle",
+        configured: true,
+        pendingChanges: 0,
+        connection: {
+          reachable: true,
+          lastSyncedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+        },
+      }),
+    );
+  });
+
+  it("fires onStateChange callbacks when sync state changes", async () => {
+    const { entity } = createEventFixture();
+    const patchGate = createDeferred<void>();
+    const states: SyncState["status"][] = [];
+    const engine = createEngine({
+      entities: [entity],
+      pod,
+      sync: {
+        adapter: {
+          async applyEntityPatch() {
+            await patchGate.promise;
+          },
+          async appendLogEntry() {
+            // no-op
+          },
+        },
+      },
+    });
+    const unsubscribe = engine.sync.onStateChange((state) => {
+      states.push(state.status);
+    });
+
+    await engine.save("event", {
+      id: "ev-state-listener",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+
+    await waitForExpectation(() => {
+      expect(states).toContain("syncing");
+    });
+
+    patchGate.resolve();
+    await waitForExpectation(() => {
+      expect(states).toContain("idle");
+    });
+
+    unsubscribe();
+  });
+
+  it("reports whether notification subscriptions are active", async () => {
+    const { entity } = createEventFixture();
+    const engine = createEngine({
+      entities: [entity],
+      pod,
+      sync: {
+        adapter: {
+          async applyEntityPatch() {
+            // no-op
+          },
+          async appendLogEntry() {
+            // no-op
+          },
+          async subscribeToContainer() {
+            return {
+              unsubscribe() {
+                // no-op
+              },
+            };
+          },
+        },
+      },
+    });
+
+    await waitForExpectation(async () => {
+      const state = await engine.sync.state();
+
+      expect(state.connection.notificationsActive).toBe(true);
+    });
+
+    await engine.sync.detach();
+
+    await expect(engine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "unconfigured",
+        configured: false,
+        pendingChanges: 0,
+      }),
+    );
   });
 
   it("requires pod logBasePath before projecting remote log entries", async () => {
@@ -1672,11 +1928,13 @@ describe("sync state", () => {
       },
     });
 
-    await expect(engine.sync.state()).resolves.toEqual({
-      status: "unconfigured",
-      configured: false,
-      pendingChanges: 1,
-    });
+    await expect(engine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "unconfigured",
+        configured: false,
+        pendingChanges: 1,
+      }),
+    );
 
     await engine.sync.attach({
       adapter: {
@@ -1698,10 +1956,18 @@ describe("sync state", () => {
     await waitForExpectation(() => {
       expect(pushed).toEqual(["events/ev-attach.ttl"]);
     });
-    await expect(engine.sync.state()).resolves.toEqual({
-      status: "idle",
-      configured: true,
-      pendingChanges: 0,
+    await waitForExpectation(async () => {
+      await expect(engine.sync.state()).resolves.toEqual(
+        expectedSyncState({
+          status: "idle",
+          configured: true,
+          pendingChanges: 0,
+          connection: {
+            reachable: true,
+            lastSyncedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+          },
+        }),
+      );
     });
   });
 
@@ -1737,11 +2003,17 @@ describe("sync state", () => {
     await waitForExpectation(() => {
       expect(pushed).toEqual(["events/ev-auto-attach.ttl"]);
     });
-    await expect(engine.sync.state()).resolves.toEqual({
-      status: "idle",
-      configured: true,
-      pendingChanges: 0,
-    });
+    await expect(engine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "idle",
+        configured: true,
+        pendingChanges: 0,
+        connection: {
+          reachable: true,
+          lastSyncedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+        },
+      }),
+    );
   });
 
   it("detaches sync, leaves new changes local-only, and can reattach later", async () => {
@@ -1778,11 +2050,13 @@ describe("sync state", () => {
 
     await engine.sync.detach();
     await expect(engine.sync.persistedConfig()).resolves.toBeNull();
-    await expect(engine.sync.state()).resolves.toEqual({
-      status: "unconfigured",
-      configured: false,
-      pendingChanges: 0,
-    });
+    await expect(engine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "unconfigured",
+        configured: false,
+        pendingChanges: 0,
+      }),
+    );
 
     await engine.save("event", {
       id: "ev-detach-2",
@@ -1792,11 +2066,13 @@ describe("sync state", () => {
       },
     });
 
-    await expect(engine.sync.state()).resolves.toEqual({
-      status: "unconfigured",
-      configured: false,
-      pendingChanges: 1,
-    });
+    await expect(engine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "unconfigured",
+        configured: false,
+        pendingChanges: 1,
+      }),
+    );
     await expect(engine.sync.now()).resolves.toBeUndefined();
 
     await engine.sync.attach({
@@ -1821,11 +2097,17 @@ describe("sync state", () => {
 
     expect(firstAdapterPaths).toEqual(["events/ev-detach-1.ttl"]);
     expect(secondAdapterPaths).toEqual(["events/ev-detach-2.ttl"]);
-    await expect(engine.sync.state()).resolves.toEqual({
-      status: "idle",
-      configured: true,
-      pendingChanges: 0,
-    });
+    await expect(engine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "idle",
+        configured: true,
+        pendingChanges: 0,
+        connection: {
+          reachable: true,
+          lastSyncedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+        },
+      }),
+    );
   });
 
   it("replaces the current adapter when attaching again", async () => {
@@ -1957,11 +2239,13 @@ describe("sync state", () => {
       podBaseUrl: "https://pod.example/",
       logBasePath: "apps/my-journal/log/",
     });
-    await expect(secondEngine.sync.state()).resolves.toEqual({
-      status: "unconfigured",
-      configured: false,
-      pendingChanges: 0,
-    });
+    await expect(secondEngine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "unconfigured",
+        configured: false,
+        pendingChanges: 0,
+      }),
+    );
   });
 
   it("clears persisted pod config across engine recreation after detach", async () => {
@@ -2708,10 +2992,19 @@ describe("mocked entity sync", () => {
         storage.listChanges("event", "ev-own-notification"),
       ).resolves.toHaveLength(1);
     });
-    await expect(engine.sync.state()).resolves.toEqual({
-      status: "idle",
-      configured: true,
-      pendingChanges: 0,
+    await waitForExpectation(async () => {
+      await expect(engine.sync.state()).resolves.toEqual(
+        expectedSyncState({
+          status: "idle",
+          configured: true,
+          pendingChanges: 0,
+          connection: {
+            reachable: true,
+            lastSyncedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+            notificationsActive: true,
+          },
+        }),
+      );
     });
   });
 
@@ -2792,11 +3085,17 @@ describe("mocked entity sync", () => {
     await waitForExpectation(() => {
       expect(requests).toEqual(["events/ev-auto-save.ttl"]);
     });
-    await expect(engine.sync.state()).resolves.toEqual({
-      status: "idle",
-      configured: true,
-      pendingChanges: 0,
-    });
+    await expect(engine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "idle",
+        configured: true,
+        pendingChanges: 0,
+        connection: {
+          reachable: true,
+          lastSyncedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+        },
+      }),
+    );
   });
 
   it("does not wait for background sync before resolving save", async () => {
@@ -2836,11 +3135,17 @@ describe("mocked entity sync", () => {
 
     patchGate.resolve();
     await waitForExpectation(async () => {
-      await expect(engine.sync.state()).resolves.toEqual({
-        status: "idle",
-        configured: true,
-        pendingChanges: 0,
-      });
+      await expect(engine.sync.state()).resolves.toEqual(
+        expectedSyncState({
+          status: "idle",
+          configured: true,
+          pendingChanges: 0,
+          connection: {
+            reachable: true,
+            lastSyncedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+          },
+        }),
+      );
     });
   });
 
@@ -2932,20 +3237,33 @@ describe("mocked entity sync", () => {
     });
 
     await waitForExpectation(async () => {
-      await expect(engine.sync.state()).resolves.toEqual({
-        status: "pending",
-        configured: true,
-        pendingChanges: 1,
-      });
+      await expect(engine.sync.state()).resolves.toEqual(
+        expectedSyncState({
+          status: "offline",
+          configured: true,
+          pendingChanges: 1,
+          connection: {
+            reachable: false,
+            lastFailedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+            lastFailureReason: "temporary failure",
+          },
+        }),
+      );
     });
 
     await expect(engine.sync.now()).resolves.toBeUndefined();
     expect(attempts).toBe(2);
-    await expect(engine.sync.state()).resolves.toEqual({
-      status: "idle",
-      configured: true,
-      pendingChanges: 0,
-    });
+    await expect(engine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "idle",
+        configured: true,
+        pendingChanges: 0,
+        connection: {
+          reachable: true,
+          lastSyncedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+        },
+      }),
+    );
   });
 
   it("retries failed background sync on the next automatic trigger", async () => {
@@ -2982,11 +3300,18 @@ describe("mocked entity sync", () => {
     });
 
     await waitForExpectation(async () => {
-      await expect(engine.sync.state()).resolves.toEqual({
-        status: "pending",
-        configured: true,
-        pendingChanges: 1,
-      });
+      await expect(engine.sync.state()).resolves.toEqual(
+        expectedSyncState({
+          status: "offline",
+          configured: true,
+          pendingChanges: 1,
+          connection: {
+            reachable: false,
+            lastFailedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+            lastFailureReason: "temporary failure",
+          },
+        }),
+      );
     });
 
     await engine.save("event", {
@@ -3003,11 +3328,17 @@ describe("mocked entity sync", () => {
         "events/ev-retry-2.ttl",
       ]);
     });
-    await expect(engine.sync.state()).resolves.toEqual({
-      status: "idle",
-      configured: true,
-      pendingChanges: 0,
-    });
+    await expect(engine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "idle",
+        configured: true,
+        pendingChanges: 0,
+        connection: {
+          reachable: true,
+          lastSyncedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+        },
+      }),
+    );
   });
 
   it("serializes automatic sync cycles when multiple saves happen close together", async () => {
@@ -3061,11 +3392,17 @@ describe("mocked entity sync", () => {
     });
 
     expect(maxConcurrentSyncs).toBe(1);
-    await expect(engine.sync.state()).resolves.toEqual({
-      status: "idle",
-      configured: true,
-      pendingChanges: 0,
-    });
+    await expect(engine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "idle",
+        configured: true,
+        pendingChanges: 0,
+        connection: {
+          reachable: true,
+          lastSyncedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+        },
+      }),
+    );
   });
 
   it("includes embedded child-node updates in later patches", async () => {
@@ -3220,11 +3557,17 @@ describe("mocked entity sync", () => {
     expect(logRequests.at(-1)?.rootUri).toBe(
       "https://example.com/id/event/ev-delete",
     );
-    await expect(engine.sync.state()).resolves.toEqual({
-      status: "idle",
-      configured: true,
-      pendingChanges: 0,
-    });
+    await expect(engine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "idle",
+        configured: true,
+        pendingChanges: 0,
+        connection: {
+          reachable: true,
+          lastSyncedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+        },
+      }),
+    );
   });
 
   it("treats earlier unsynced changes as superseded when an entity is deleted before sync", async () => {
@@ -3261,11 +3604,17 @@ describe("mocked entity sync", () => {
     await engine.sync.now();
 
     expect(calls).toEqual(["delete", "log"]);
-    await expect(engine.sync.state()).resolves.toEqual({
-      status: "idle",
-      configured: true,
-      pendingChanges: 0,
-    });
+    await expect(engine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "idle",
+        configured: true,
+        pendingChanges: 0,
+        connection: {
+          reachable: true,
+          lastSyncedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+        },
+      }),
+    );
   });
 
   it("retries remote log append independently after entity projection succeeded", async () => {
@@ -3302,21 +3651,34 @@ describe("mocked entity sync", () => {
     await waitForExpectation(async () => {
       expect(patchAttempts).toBe(1);
       expect(logAttempts).toBe(1);
-      await expect(engine.sync.state()).resolves.toEqual({
-        status: "pending",
-        configured: true,
-        pendingChanges: 1,
-      });
+      await expect(engine.sync.state()).resolves.toEqual(
+        expectedSyncState({
+          status: "offline",
+          configured: true,
+          pendingChanges: 1,
+          connection: {
+            reachable: false,
+            lastFailedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+            lastFailureReason: "log failure",
+          },
+        }),
+      );
     });
 
     await expect(engine.sync.now()).resolves.toBeUndefined();
     expect(patchAttempts).toBe(1);
     expect(logAttempts).toBe(2);
-    await expect(engine.sync.state()).resolves.toEqual({
-      status: "idle",
-      configured: true,
-      pendingChanges: 0,
-    });
+    await expect(engine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "idle",
+        configured: true,
+        pendingChanges: 0,
+        connection: {
+          reachable: true,
+          lastSyncedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+        },
+      }),
+    );
   });
 
   it("replays remote log entries into local graph state on another engine", async () => {
@@ -3369,11 +3731,17 @@ describe("mocked entity sync", () => {
         }),
       ],
     );
-    await expect(secondEngine.sync.state()).resolves.toEqual({
-      status: "idle",
-      configured: true,
-      pendingChanges: 0,
-    });
+    await expect(secondEngine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "idle",
+        configured: true,
+        pendingChanges: 0,
+        connection: {
+          reachable: true,
+          lastSyncedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+        },
+      }),
+    );
   });
 
   it("applies later remote updates and tolerates duplicate remote log entries", async () => {
@@ -3532,11 +3900,17 @@ describe("mocked entity sync", () => {
         year: 2026,
       },
     });
-    await expect(secondEngine.sync.state()).resolves.toEqual({
-      status: "pending",
-      configured: true,
-      pendingChanges: 1,
-    });
+    await expect(secondEngine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "pending",
+        configured: true,
+        pendingChanges: 1,
+        connection: {
+          reachable: true,
+          lastSyncedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+        },
+      }),
+    );
 
     const changes = await secondStorage.listChanges("event", "ev-external");
     const reconciliationChange = changes.at(-1);
@@ -3550,11 +3924,17 @@ describe("mocked entity sync", () => {
     await secondEngine.sync.now();
 
     expect(remote.logEntries).toHaveLength(beforeReconcileLogEntries + 1);
-    await expect(secondEngine.sync.state()).resolves.toEqual({
-      status: "idle",
-      configured: true,
-      pendingChanges: 0,
-    });
+    await expect(secondEngine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "idle",
+        configured: true,
+        pendingChanges: 0,
+        connection: {
+          reachable: true,
+          lastSyncedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+        },
+      }),
+    );
   });
 
   it("does not create a duplicate canonical reconciliation change when log replay already matches the Pod", async () => {
@@ -3678,11 +4058,17 @@ describe("mocked entity sync", () => {
     await expect(
       secondEngine.get("event", "ev-external-delete"),
     ).resolves.toBeNull();
-    await expect(secondEngine.sync.state()).resolves.toEqual({
-      status: "pending",
-      configured: true,
-      pendingChanges: 1,
-    });
+    await expect(secondEngine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "pending",
+        configured: true,
+        pendingChanges: 1,
+        connection: {
+          reachable: true,
+          lastSyncedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+        },
+      }),
+    );
 
     const changes = await secondStorage.listChanges(
       "event",
@@ -3761,11 +4147,17 @@ describe("mocked entity sync", () => {
           year: 2025,
         },
       });
-      await expect(secondEngine.sync.state()).resolves.toEqual({
-        status: "idle",
-        configured: true,
-        pendingChanges: 0,
-      });
+      await expect(secondEngine.sync.state()).resolves.toEqual(
+        expectedSyncState({
+          status: "idle",
+          configured: true,
+          pendingChanges: 0,
+          connection: {
+            reachable: true,
+            lastSyncedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+          },
+        }),
+      );
 
       await secondEngine.sync.now();
       await firstEngine.sync.now();
@@ -3777,11 +4169,17 @@ describe("mocked entity sync", () => {
           year: 2025,
         },
       });
-      await expect(secondEngine.sync.state()).resolves.toEqual({
-        status: "idle",
-        configured: true,
-        pendingChanges: 0,
-      });
+      await expect(secondEngine.sync.state()).resolves.toEqual(
+        expectedSyncState({
+          status: "idle",
+          configured: true,
+          pendingChanges: 0,
+          connection: {
+            reachable: true,
+            lastSyncedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+          },
+        }),
+      );
     } finally {
       vi.useRealTimers();
     }
@@ -4285,11 +4683,17 @@ describe("mocked entity sync", () => {
         year: 2024,
       },
     });
-    await expect(engine.sync.state()).resolves.toEqual({
-      status: "idle",
-      configured: true,
-      pendingChanges: 0,
-    });
+    await expect(engine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "idle",
+        configured: true,
+        pendingChanges: 0,
+        connection: {
+          reachable: true,
+          lastSyncedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+        },
+      }),
+    );
   });
 
   it("reports collisions instead of overwriting differing local entities during bootstrap", async () => {

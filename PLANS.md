@@ -158,6 +158,7 @@ The codebase now also includes:
 - canonical bootstrap import from entity directories
 - N-Triples replication log parsing and serialization
 - entity deletion with Pod-side HTTP `DELETE` plus retraction-only log replay
+- extended sync status reporting plus `engine.sync.onStateChange(...)`
 - internal refactors that keep the public engine and Pod entrypoints thin and
   easier to read
 
@@ -165,4 +166,4 @@ The codebase now also includes:
 
 - clarify the minimal metadata shape for remote log discovery
 - decide how branch and conflict state should surface publicly
-- design the first framework-agnostic observation API
+- design any broader framework-agnostic observation API beyond sync status

@@ -9,6 +9,7 @@ import {
   cloneLocalChange,
   cloneStoredRecord,
   cloneSyncMetadata,
+  createDefaultSyncMetadata,
   createListedEntityRecord,
 } from "./shared.js";
 
@@ -37,11 +38,7 @@ export function createMemoryStorage(): LocalStorageAdapter {
   const state: MemoryStorageState = {
     records: new Map<string, StoredEntityRecord<unknown>>(),
     changes: [],
-    syncMetadata: {
-      observedRemoteChangeIds: [],
-      persistedPodConfig: null,
-      canonicalContainerVersions: {},
-    },
+    syncMetadata: createDefaultSyncMetadata(),
     updatedOrder: 0,
   };
 

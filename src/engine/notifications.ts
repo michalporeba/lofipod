@@ -11,6 +11,7 @@ type NotificationManagerInput = {
   entities: Map<string, EntityDefinition<unknown>>;
   getConfig: () => EngineConfig;
   runSyncNow: (suppressErrors: boolean) => Promise<void>;
+  setNotificationsActive: (active: boolean) => void;
 };
 
 export function createNotificationManager(input: NotificationManagerInput) {
@@ -21,6 +22,7 @@ export function createNotificationManager(input: NotificationManagerInput) {
     generation += 1;
     const current = unsubscribers;
     unsubscribers = [];
+    input.setNotificationsActive(false);
     await Promise.all(
       current.map((unsubscribe) => Promise.resolve(unsubscribe())),
     );
@@ -34,6 +36,7 @@ export function createNotificationManager(input: NotificationManagerInput) {
     const logBasePath = config.pod?.logBasePath;
 
     if (!adapter?.subscribeToContainer || !logBasePath) {
+      input.setNotificationsActive(false);
       return;
     }
 
@@ -67,10 +70,12 @@ export function createNotificationManager(input: NotificationManagerInput) {
       await Promise.all(
         nextUnsubscribers.map((unsubscribe) => Promise.resolve(unsubscribe())),
       );
+      input.setNotificationsActive(false);
       return;
     }
 
     unsubscribers = nextUnsubscribers;
+    input.setNotificationsActive(nextUnsubscribers.length > 0);
   };
 
   return {

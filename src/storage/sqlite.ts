@@ -20,6 +20,7 @@ import {
   cloneLocalChange,
   cloneStoredRecord,
   cloneSyncMetadata,
+  createDefaultSyncMetadata,
 } from "./shared.js";
 
 type SqliteStorageOptions = {
@@ -105,14 +106,6 @@ function readStoredRecord(
 ): StoredEntityRecord<unknown> | null {
   const row = statement.get(entityName, entityId);
   return row ? cloneStoredRecord(hydrateStoredRecord(row)) : null;
-}
-
-function createDefaultSyncMetadata(): SyncMetadata {
-  return {
-    observedRemoteChangeIds: [],
-    persistedPodConfig: null,
-    canonicalContainerVersions: {},
-  };
 }
 
 export function createSqliteStorage(

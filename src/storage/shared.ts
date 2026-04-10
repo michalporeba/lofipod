@@ -7,6 +7,20 @@ import type {
 } from "../types.js";
 import { clonePublicTriples } from "../rdf.js";
 
+export function createDefaultSyncMetadata(): SyncMetadata {
+  return {
+    observedRemoteChangeIds: [],
+    persistedPodConfig: null,
+    canonicalContainerVersions: {},
+    connection: {
+      reachable: false,
+      lastSyncedAt: null,
+      lastFailedAt: null,
+      lastFailureReason: null,
+    },
+  };
+}
+
 function cloneValue<T>(value: T): T {
   return structuredClone(value);
 }
@@ -38,16 +52,25 @@ export function cloneLocalChange(change: LocalChange): LocalChange {
 }
 
 export function cloneSyncMetadata(metadata: SyncMetadata): SyncMetadata {
+  const nextMetadata = {
+    ...createDefaultSyncMetadata(),
+    ...metadata,
+  };
+
   return {
-    observedRemoteChangeIds: [...metadata.observedRemoteChangeIds],
-    persistedPodConfig: metadata.persistedPodConfig
+    observedRemoteChangeIds: [...nextMetadata.observedRemoteChangeIds],
+    persistedPodConfig: nextMetadata.persistedPodConfig
       ? {
-          podBaseUrl: metadata.persistedPodConfig.podBaseUrl,
-          logBasePath: metadata.persistedPodConfig.logBasePath,
+          podBaseUrl: nextMetadata.persistedPodConfig.podBaseUrl,
+          logBasePath: nextMetadata.persistedPodConfig.logBasePath,
         }
       : null,
     canonicalContainerVersions: {
-      ...(metadata.canonicalContainerVersions ?? {}),
+      ...(nextMetadata.canonicalContainerVersions ?? {}),
+    },
+    connection: {
+      ...createDefaultSyncMetadata().connection,
+      ...(nextMetadata.connection ?? {}),
     },
   };
 }

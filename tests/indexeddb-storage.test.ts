@@ -280,6 +280,12 @@ describe("createIndexedDbStorage", () => {
             observedRemoteChangeIds: [],
             persistedPodConfig: null,
             canonicalContainerVersions: {},
+            connection: {
+              reachable: false,
+              lastSyncedAt: null,
+              lastFailedAt: null,
+              lastFailureReason: null,
+            },
           },
         });
 

@@ -12,6 +12,12 @@ export type SyncMetadata = {
   observedRemoteChangeIds: string[];
   persistedPodConfig: PersistedPodConfig | null;
   canonicalContainerVersions: Record<string, string>;
+  connection: {
+    reachable: boolean;
+    lastSyncedAt: string | null;
+    lastFailedAt: string | null;
+    lastFailureReason: string | null;
+  };
 };
 
 export type ToRdfHelpers<T> = {
@@ -183,9 +189,16 @@ export type SyncAttachConfig = {
 };
 
 export type SyncState = {
-  status: "unconfigured" | "idle" | "pending";
+  status: "unconfigured" | "offline" | "syncing" | "idle" | "pending";
   configured: boolean;
   pendingChanges: number;
+  connection: {
+    reachable: boolean;
+    lastSyncedAt: string | null;
+    lastFailedAt: string | null;
+    lastFailureReason: string | null;
+    notificationsActive: boolean;
+  };
 };
 
 export type BootstrapCollision = {
@@ -211,6 +224,7 @@ export type Engine = {
     detach(): Promise<void>;
     persistedConfig(): Promise<PersistedPodConfig | null>;
     state(): Promise<SyncState>;
+    onStateChange(callback: (state: SyncState) => void): () => void;
     now(): Promise<void>;
     bootstrap(): Promise<BootstrapResult>;
   };

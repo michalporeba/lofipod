@@ -7,6 +7,11 @@ import type {
   StoredEntityRecord,
   SyncState,
 } from "./types.js";
+import {
+  createRuntimeSyncState,
+  readDerivedSyncState,
+  type RuntimeSyncState,
+} from "./engine/sync-state.js";
 import { publicTriplesToRdfTriples, rdfTermToN3 } from "./rdf.js";
 
 export function hasPendingSync(change: LocalChange): boolean {
@@ -16,26 +21,9 @@ export function hasPendingSync(change: LocalChange): boolean {
 export async function readSyncState(
   storage: NonNullable<EngineConfig["storage"]>,
   syncConfig: EngineConfig["sync"],
+  runtime: RuntimeSyncState = createRuntimeSyncState(),
 ): Promise<SyncState> {
-  const pendingChanges = (
-    storage.listPendingChanges
-      ? await storage.listPendingChanges()
-      : (await storage.listChanges()).filter(hasPendingSync)
-  ).length;
-
-  if (!syncConfig) {
-    return {
-      status: "unconfigured",
-      configured: false,
-      pendingChanges,
-    };
-  }
-
-  return {
-    status: pendingChanges > 0 ? "pending" : "idle",
-    configured: true,
-    pendingChanges,
-  };
+  return readDerivedSyncState(storage, syncConfig, runtime);
 }
 
 function triplesToN3(

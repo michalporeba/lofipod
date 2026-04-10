@@ -10,6 +10,7 @@ import {
   cloneLocalChange,
   cloneStoredRecord,
   cloneSyncMetadata,
+  createDefaultSyncMetadata,
 } from "./shared.js";
 
 export type StoredRecordRow = Omit<StoredEntityRecord<unknown>, "graph"> & {
@@ -46,14 +47,6 @@ export const CHANGE_ENTITY_INDEX = "byEntity";
 export const CHANGE_PENDING_INDEX = "byPending";
 export const UPDATED_ORDER_KEY = "updatedOrder";
 export const SYNC_METADATA_KEY = "syncMetadata";
-
-export function createDefaultSyncMetadata(): SyncMetadata {
-  return {
-    observedRemoteChangeIds: [],
-    persistedPodConfig: null,
-    canonicalContainerVersions: {},
-  };
-}
 
 export function createChangeKey(change: LocalChange): string {
   return `${change.entityName}:${change.entityId}:${change.changeId}`;

@@ -52,13 +52,15 @@ The current public surface is still intentionally small and explicit:
 - `engine.delete(entityName, id)`
 - `engine.dispose()`
 - `engine.sync.state()`
+- `engine.sync.onStateChange(callback)`
 - `engine.sync.now()`
 - `engine.sync.bootstrap()`
 - RDF helpers such as `uri(...)`, `literal(...)`, `objectOf(...)`,
   `stringValue(...)`, `numberValue(...)`, and `booleanValue(...)`
 
-There is currently no `engine.connection.state()` API and no general
-observation/subscription API yet.
+There is currently no separate `engine.connection.state()` API and no general
+entity observation API yet. The current observation surface is limited to sync
+state changes.
 
 This is intentionally not a full query or schema system. The initial API still
 prefers stability and clarity over breadth.
@@ -139,6 +141,11 @@ Developers should be able to:
 
 - determine whether remote sync is configured at all
 - inspect overall sync status
+- inspect whether sync is currently running, whether the last sync failed, and
+  whether notification subscriptions are active
+- inspect connection metadata such as `lastSyncedAt`, `lastFailedAt`, and the
+  last failure reason
+- subscribe to aggregate sync-state changes with `engine.sync.onStateChange(...)`
 - trigger sync explicitly when needed
 - rely on attached sync to run automatically after save/delete and after
   initial attach
@@ -154,6 +161,17 @@ Normal save, get, and list flows should work without requiring explicit sync
 operations in the common case.
 When omitted, the current default polling interval is 30 seconds, with
 exponential backoff after consecutive sync failures.
+
+The current `SyncState` reports aggregate engine-level status:
+
+- `status`: `"unconfigured" | "offline" | "syncing" | "idle" | "pending"`
+- `configured`
+- `pendingChanges`
+- `connection.reachable`
+- `connection.lastSyncedAt`
+- `connection.lastFailedAt`
+- `connection.lastFailureReason`
+- `connection.notificationsActive`
 
 ## Example
 
