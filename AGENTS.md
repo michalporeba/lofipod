@@ -35,6 +35,11 @@ Before making substantive changes, read:
 - Use Inrupt's Community Solid Server in local Docker for real integration
   checks.
 - Keep heavy integration tests focused so CI remains efficient.
+- Before finishing substantive changes, run the same checks used by the GitHub
+  workflows so remote CI failures are caught locally when possible:
+  `npm run verify`, `npm run build`, `npm run test:demo`, and `npm run test:pod`.
+- If an environment limitation prevents one of those workflow checks from
+  running locally, say so explicitly in the final handoff.
 
 ## Architecture intent
 

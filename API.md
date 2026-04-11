@@ -71,7 +71,7 @@ prefers stability and clarity over breadth.
 
 Each entity definition should include:
 
-- `name`
+- `kind`
 - a TypeScript type parameter for the domain object
 - `pod.basePath`
 - `rdfType`
@@ -82,6 +82,7 @@ Each entity definition should include:
 The initial assumptions are:
 
 - identity lives on the entity object in v0
+- `kind` is a stable machine identifier rather than a display label
 - RDF mapping is owned per entity, not globally
 - `toRdf(...)` should be pure and should return RDF triples rather than mutate
   external state
@@ -230,7 +231,7 @@ type Event = {
 };
 
 const eventEntity = defineEntity<Event>({
-  name: "event",
+  kind: "event",
   pod: {
     basePath: "events/",
   },

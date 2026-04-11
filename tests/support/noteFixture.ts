@@ -26,7 +26,7 @@ export function createNoteFixture(): { entity: EntityDefinition<Note> } {
   });
 
   const entity = defineEntity<Note>({
-    name: "note",
+    kind: "note",
     pod: {
       basePath: "notes/",
     },

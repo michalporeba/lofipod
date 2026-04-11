@@ -40,7 +40,7 @@ export function createEventFixture(): { entity: EntityDefinition<Event> } {
   });
 
   const entity = defineEntity<Event>({
-    name: "event",
+    kind: "event",
     pod: {
       basePath: "events/",
     },
@@ -97,7 +97,7 @@ export function createEventWithDetailsFixture(): {
   });
 
   const entity = defineEntity<EventWithDetails>({
-    name: "event",
+    kind: "event",
     pod: {
       basePath: "events/",
     },

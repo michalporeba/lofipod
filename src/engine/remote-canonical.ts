@@ -31,11 +31,11 @@ export async function reconcileCanonicalResources(
 
   for (const definition of entities.values()) {
     const previousVersion =
-      metadata.canonicalContainerVersions[definition.name] ?? null;
+      metadata.canonicalContainerVersions[definition.kind] ?? null;
     const hasLocalEntities =
-      (await storage.listEntities(definition.name)).length > 0;
+      (await storage.listEntities(definition.kind)).length > 0;
     const remote = await config.sync.adapter.checkCanonicalResources({
-      entityName: definition.name,
+      entityName: definition.kind,
       basePath: definition.pod.basePath,
       rdfType: definition.rdfType,
       previousVersion,
@@ -43,7 +43,7 @@ export async function reconcileCanonicalResources(
 
     await persistCanonicalContainerVersion(
       storage,
-      definition.name,
+      definition.kind,
       remote.version,
     );
 
@@ -59,7 +59,7 @@ export async function reconcileCanonicalResources(
       storage,
       definition,
       remote.entities,
-      await readPendingEntityIds(storage, definition.name),
+      await readPendingEntityIds(storage, definition.kind),
     );
   }
 
@@ -77,7 +77,7 @@ async function reconcileCanonicalContainer(
   }[],
   pendingEntityIds: Set<string>,
 ): Promise<number> {
-  const localRecords = await storage.listEntities(definition.name);
+  const localRecords = await storage.listEntities(definition.kind);
   const localById = new Map(
     localRecords.map(({ entityId, record }) => [entityId, record]),
   );
@@ -161,7 +161,7 @@ async function importExternalCanonicalEntity(
 
   await storage.transact((transaction) => {
     const latest = transaction.readEntity(
-      definition.name,
+      definition.kind,
       remoteEntity.entityId,
     );
 
@@ -171,7 +171,7 @@ async function importExternalCanonicalEntity(
 
     const updatedOrder = transaction.nextUpdatedOrder();
 
-    transaction.writeEntity(definition.name, remoteEntity.entityId, {
+    transaction.writeEntity(definition.kind, remoteEntity.entityId, {
       rootUri: remoteEntity.rootUri,
       graph: remoteEntity.graph,
       projection,
@@ -179,7 +179,7 @@ async function importExternalCanonicalEntity(
       updatedOrder,
     });
     transaction.appendChange({
-      entityName: definition.name,
+      entityName: definition.kind,
       entityId: remoteEntity.entityId,
       changeId,
       parentChangeId: null,
@@ -219,7 +219,7 @@ async function reconcileExternalCanonicalUpdate(
   const changeId = createChangeId();
 
   await storage.transact((transaction) => {
-    const latest = transaction.readEntity(definition.name, entityId);
+    const latest = transaction.readEntity(definition.kind, entityId);
 
     if (!latest || graphsMatch(latest.graph, remoteEntity.graph)) {
       return;
@@ -227,7 +227,7 @@ async function reconcileExternalCanonicalUpdate(
 
     const updatedOrder = transaction.nextUpdatedOrder();
 
-    transaction.writeEntity(definition.name, entityId, {
+    transaction.writeEntity(definition.kind, entityId, {
       rootUri: remoteEntity.rootUri,
       graph: remoteEntity.graph,
       projection,
@@ -235,7 +235,7 @@ async function reconcileExternalCanonicalUpdate(
       updatedOrder,
     });
     transaction.appendChange({
-      entityName: definition.name,
+      entityName: definition.kind,
       entityId,
       changeId,
       parentChangeId: latest.lastChangeId,
@@ -256,15 +256,15 @@ async function reconcileExternalCanonicalDeletion(
   const changeId = createChangeId();
 
   await storage.transact((transaction) => {
-    const latest = transaction.readEntity(definition.name, entityId);
+    const latest = transaction.readEntity(definition.kind, entityId);
 
     if (!latest) {
       return;
     }
 
-    transaction.removeEntity(definition.name, entityId);
+    transaction.removeEntity(definition.kind, entityId);
     transaction.appendChange({
-      entityName: definition.name,
+      entityName: definition.kind,
       entityId,
       changeId,
       parentChangeId: latest.lastChangeId,

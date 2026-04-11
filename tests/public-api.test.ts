@@ -114,14 +114,12 @@ function createDeferred<T = void>() {
   };
 }
 
-function expectedSyncState(
-  input: {
-    status: SyncState["status"];
-    configured: boolean;
-    pendingChanges: number;
-    connection?: Partial<Record<keyof SyncState["connection"], unknown>>;
-  },
-){
+function expectedSyncState(input: {
+  status: SyncState["status"];
+  configured: boolean;
+  pendingChanges: number;
+  connection?: Partial<Record<keyof SyncState["connection"], unknown>>;
+}) {
   const nullableString = {
     asymmetricMatch(value: unknown) {
       return value === null || typeof value === "string";
@@ -198,7 +196,7 @@ function createRecanonicalizedEventFixtures(): {
   };
 
   const legacyEntity = defineEntity<Event>({
-    name: "event",
+    kind: "event",
     pod: {
       basePath: "events/",
     },
@@ -292,9 +290,71 @@ describe("defineEntity", () => {
   it("keeps entity configuration together with pure RDF projection logic", () => {
     const { entity } = createEventFixture();
 
-    expect(entity.name).toBe("event");
+    expect(entity.kind).toBe("event");
     expect(entity.pod.basePath).toBe("events/");
     expect(entity.rdfType.value).toBe("https://example.com/ns#Event");
+  });
+
+  it("throws when kind is empty", () => {
+    expect(() =>
+      defineEntity({
+        kind: "",
+        pod: {
+          basePath: "events/",
+        },
+        rdfType: uri("https://example.com/ns#Event"),
+        id: (event: { id: string }) => event.id,
+        toRdf() {
+          return [];
+        },
+        project() {
+          return { id: "x" };
+        },
+      }),
+    ).toThrow(
+      'defineEntity: entity definition is missing a non-empty "kind" string.',
+    );
+  });
+
+  it("throws a clear error when the definition is not an object", () => {
+    expect(() =>
+      defineEntity(undefined as unknown as EntityDefinition<{ id: string }>),
+    ).toThrow("defineEntity: entity definition must be a non-null object.");
+  });
+
+  it("throws when toRdf is missing", () => {
+    expect(() =>
+      defineEntity({
+        kind: "event",
+        pod: {
+          basePath: "events/",
+        },
+        rdfType: uri("https://example.com/ns#Event"),
+        id: (event: { id: string }) => event.id,
+        project() {
+          return { id: "x" };
+        },
+      } as unknown as EntityDefinition<{ id: string }>),
+    ).toThrow('defineEntity: "event" is missing a "toRdf" function.');
+  });
+
+  it("returns the original definition object when validation passes", () => {
+    const definition = {
+      kind: "event",
+      pod: {
+        basePath: "events/",
+      },
+      rdfType: uri("https://example.com/ns#Event"),
+      id: (event: { id: string }) => event.id,
+      toRdf() {
+        return [];
+      },
+      project() {
+        return { id: "x" };
+      },
+    } satisfies EntityDefinition<{ id: string }>;
+
+    expect(defineEntity(definition)).toBe(definition);
   });
 
   it("supports path-based child nodes for embedded one-to-one structures", () => {
@@ -447,6 +507,62 @@ describe("defineEntity", () => {
       id: "note-1",
       title: "Hello",
       tags: ["alpha", "zeta"],
+    });
+  });
+});
+
+describe("createEngine validation", () => {
+  it("throws when entity kinds are duplicated", () => {
+    const { entity: first } = createEventFixture();
+    const { entity: second } = createEventFixture();
+
+    expect(() =>
+      createEngine({
+        entities: [first, second],
+      }),
+    ).toThrow('createEngine: duplicate entity kind "event" is not allowed.');
+  });
+
+  it("allows multiple entity kinds to share the same pod base path", async () => {
+    const { entity: first } = createEventFixture();
+    const { entity: noteEntity } = createNoteFixture();
+    const second = defineEntity<Note>({
+      ...noteEntity,
+      pod: {
+        basePath: first.pod.basePath,
+      },
+    });
+
+    const engine = createEngine({
+      entities: [first, second],
+    });
+
+    await expect(
+      engine.save("event", {
+        id: "ev-1",
+        title: "Hello",
+        time: {
+          year: 2024,
+        },
+      }),
+    ).resolves.toEqual({
+      id: "ev-1",
+      title: "Hello",
+      time: {
+        year: 2024,
+      },
+    });
+
+    await expect(
+      engine.save("note", {
+        id: "note-1",
+        title: "Note",
+        body: "Body",
+      }),
+    ).resolves.toEqual({
+      id: "note-1",
+      title: "Note",
+      body: "Body",
     });
   });
 });
@@ -2461,35 +2577,37 @@ describe("logging", () => {
   it("logs Pod HTTP requests with method, url, status, and duration", async () => {
     const { entity } = createEventFixture();
     const logger = createMockLogger();
-    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      const method = init?.method ?? "GET";
+    const fetch = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const method = init?.method ?? "GET";
 
-      if (method === "POST") {
-        return new Response("", { status: 201 });
-      }
+        if (method === "POST") {
+          return new Response("", { status: 201 });
+        }
 
-      if (method === "HEAD" && url === "https://pod.example/events/") {
-        return new Response("", { status: 404 });
-      }
+        if (method === "HEAD" && url === "https://pod.example/events/") {
+          return new Response("", { status: 404 });
+        }
 
-      if (method === "GET" && url === "https://pod.example/events/") {
-        return new Response("", { status: 404 });
-      }
+        if (method === "GET" && url === "https://pod.example/events/") {
+          return new Response("", { status: 404 });
+        }
 
-      if (
-        method === "HEAD" &&
-        url === "https://pod.example/events/ev-logger.ttl"
-      ) {
-        return new Response("", { status: 404 });
-      }
+        if (
+          method === "HEAD" &&
+          url === "https://pod.example/events/ev-logger.ttl"
+        ) {
+          return new Response("", { status: 404 });
+        }
 
-      if (method === "PUT") {
-        return new Response("", { status: 201 });
-      }
+        if (method === "PUT") {
+          return new Response("", { status: 201 });
+        }
 
-      return new Response("unexpected", { status: 500 });
-    });
+        return new Response("unexpected", { status: 500 });
+      },
+    );
     const engine = createEngine({
       entities: [entity],
       logger,
@@ -2532,7 +2650,9 @@ describe("logging", () => {
     );
 
     for (const [, metadata] of podRequestLogs) {
-      expect((metadata as { durationMs?: number }).durationMs).toBeGreaterThanOrEqual(0);
+      expect(
+        (metadata as { durationMs?: number }).durationMs,
+      ).toBeGreaterThanOrEqual(0);
     }
   });
 
@@ -2599,35 +2719,37 @@ describe("logging", () => {
   it("preserves an adapter-provided logger when the engine has no logger", async () => {
     const { entity } = createEventFixture();
     const adapterLogger = createMockLogger();
-    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      const method = init?.method ?? "GET";
+    const fetch = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const method = init?.method ?? "GET";
 
-      if (method === "POST") {
-        return new Response("", { status: 201 });
-      }
+        if (method === "POST") {
+          return new Response("", { status: 201 });
+        }
 
-      if (method === "HEAD" && url === "https://pod.example/events/") {
-        return new Response("", { status: 404 });
-      }
+        if (method === "HEAD" && url === "https://pod.example/events/") {
+          return new Response("", { status: 404 });
+        }
 
-      if (method === "GET" && url === "https://pod.example/events/") {
-        return new Response("", { status: 404 });
-      }
+        if (method === "GET" && url === "https://pod.example/events/") {
+          return new Response("", { status: 404 });
+        }
 
-      if (
-        method === "HEAD" &&
-        url === "https://pod.example/events/ev-adapter-logger.ttl"
-      ) {
-        return new Response("", { status: 404 });
-      }
+        if (
+          method === "HEAD" &&
+          url === "https://pod.example/events/ev-adapter-logger.ttl"
+        ) {
+          return new Response("", { status: 404 });
+        }
 
-      if (method === "PUT") {
-        return new Response("", { status: 201 });
-      }
+        if (method === "PUT") {
+          return new Response("", { status: 201 });
+        }
 
-      return new Response("unexpected", { status: 500 });
-    });
+        return new Response("unexpected", { status: 500 });
+      },
+    );
     const engine = createEngine({
       entities: [entity],
       pod,

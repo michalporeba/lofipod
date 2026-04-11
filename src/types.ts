@@ -38,7 +38,7 @@ export type ProjectionHelpers = {
 };
 
 export type EntityDefinition<T> = {
-  name: string;
+  kind: string;
   pod: {
     basePath: string;
   };
@@ -223,10 +223,10 @@ export type BootstrapResult = {
 };
 
 export type Engine = {
-  save<T>(entityName: string, entity: T): Promise<T>;
-  get<T>(entityName: string, id: string): Promise<T | null>;
-  list<T>(entityName: string, options?: { limit?: number }): Promise<T[]>;
-  delete(entityName: string, id: string): Promise<void>;
+  save<T>(entityKind: string, entity: T): Promise<T>;
+  get<T>(entityKind: string, id: string): Promise<T | null>;
+  list<T>(entityKind: string, options?: { limit?: number }): Promise<T[]>;
+  delete(entityKind: string, id: string): Promise<void>;
   dispose(): Promise<void>;
   sync: {
     attach(config: SyncAttachConfig): Promise<void>;

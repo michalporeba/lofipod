@@ -134,7 +134,7 @@ describe("demo CLI with Community Solid Server", () => {
         "--pod-base-url",
         solidOpenBaseUrl,
       ]),
-    ).resolves.toBe("status=pending configured=true pending=2");
+    ).resolves.toBe("status=syncing configured=true pending=2");
 
     await expect(
       runDemo([

@@ -30,8 +30,10 @@ import {
 } from "./engine/support.js";
 
 export function createEngine(config: EngineConfig): Engine {
+  validateEntityDefinitions(config.entities);
+
   const entities = new Map(
-    config.entities.map((entity) => [entity.name, entity]),
+    config.entities.map((entity) => [entity.kind, entity]),
   );
   const storage = (config.storage ?? createMemoryStorage()) as EngineStorage;
   const logger = config.logger;
@@ -321,6 +323,22 @@ export function createEngine(config: EngineConfig): Engine {
       },
     },
   };
+}
+
+function validateEntityDefinitions(
+  definitions: EntityDefinition<unknown>[],
+): void {
+  const seenKinds = new Set<string>();
+
+  for (const definition of definitions) {
+    if (seenKinds.has(definition.kind)) {
+      throw new Error(
+        `createEngine: duplicate entity kind "${definition.kind}" is not allowed.`,
+      );
+    }
+
+    seenKinds.add(definition.kind);
+  }
 }
 
 function createRuntimePodConfig(

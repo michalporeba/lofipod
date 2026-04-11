@@ -47,7 +47,7 @@ export function createStoredRecord<T>(
 ): StoredEntityRecord<T> {
   const rootUri =
     definition.uri?.(entity) ??
-    uri(fallbackRootUri(definition.name, definition.id(entity)));
+    uri(fallbackRootUri(definition.kind, definition.id(entity)));
   const projection = definition.project(
     graph,
     createProjectionHelpers(rootUri.value),

@@ -106,7 +106,7 @@ async function reconcileEntityForks(
     return nextGraph;
   };
 
-  let currentRecord = await storage.readEntity(definition.name, entityId);
+  let currentRecord = await storage.readEntity(definition.kind, entityId);
 
   for (const fork of forks) {
     const ancestorGraph = getSnapshot(fork.parentChangeId);
@@ -151,7 +151,7 @@ async function reconcileEntityForks(
     const timestamp = createTimestamp();
 
     await storage.transact((transaction) => {
-      const latest = transaction.readEntity(definition.name, entityId);
+      const latest = transaction.readEntity(definition.kind, entityId);
       const latestGraph = latest?.graph ?? [];
 
       if (graphsMatch(latestGraph, mergedPublicGraph)) {
@@ -159,11 +159,11 @@ async function reconcileEntityForks(
       }
 
       if (mergedPublicGraph.length === 0) {
-        transaction.removeEntity(definition.name, entityId);
+        transaction.removeEntity(definition.kind, entityId);
       } else {
         const updatedOrder = transaction.nextUpdatedOrder();
 
-        transaction.writeEntity(definition.name, entityId, {
+        transaction.writeEntity(definition.kind, entityId, {
           rootUri,
           graph: mergedPublicGraph,
           projection,
@@ -173,7 +173,7 @@ async function reconcileEntityForks(
       }
 
       transaction.appendChange({
-        entityName: definition.name,
+        entityName: definition.kind,
         entityId,
         changeId,
         parentChangeId: parentTip.change.changeId,
@@ -185,7 +185,7 @@ async function reconcileEntityForks(
       });
     });
 
-    currentRecord = await storage.readEntity(definition.name, entityId);
+    currentRecord = await storage.readEntity(definition.kind, entityId);
   }
 }
 

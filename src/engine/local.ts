@@ -26,7 +26,7 @@ export async function saveEntity<T>(
   const rootUri =
     definition.uri?.(entity) ??
     rootUriTerm(fallbackEntityRootUri(definition, entityId));
-  const previousRecord = await storage.readEntity(definition.name, entityId);
+  const previousRecord = await storage.readEntity(definition.kind, entityId);
   const graph = definition.toRdf(entity, createToRdfHelpers(rootUri.value));
   const internalGraph = publicTriplesToRdfTriples(graph, {
     rdfType: definition.rdfType,
@@ -57,9 +57,9 @@ export async function saveEntity<T>(
       updatedOrder,
     );
 
-    transaction.writeEntity(definition.name, entityId, nextRecord);
+    transaction.writeEntity(definition.kind, entityId, nextRecord);
     transaction.appendChange({
-      entityName: definition.name,
+      entityName: definition.kind,
       entityId,
       changeId,
       parentChangeId: previousRecord?.lastChangeId ?? null,
@@ -81,16 +81,16 @@ export async function deleteEntity(
   definition: EntityDefinition<unknown>,
   entityId: string,
 ): Promise<void> {
-  const previousRecord = await storage.readEntity(definition.name, entityId);
+  const previousRecord = await storage.readEntity(definition.kind, entityId);
 
   if (!previousRecord) {
     return;
   }
 
   await storage.transact((transaction) => {
-    transaction.removeEntity(definition.name, entityId);
+    transaction.removeEntity(definition.kind, entityId);
     transaction.appendChange({
-      entityName: definition.name,
+      entityName: definition.kind,
       entityId,
       changeId: createChangeId(),
       parentChangeId: previousRecord.lastChangeId,
@@ -108,7 +108,7 @@ export async function getEntity<T>(
   definition: EntityDefinition<T>,
   entityId: string,
 ): Promise<T | null> {
-  const record = await storage.readEntity(definition.name, entityId);
+  const record = await storage.readEntity(definition.kind, entityId);
 
   if (!record) {
     return null;
@@ -122,7 +122,7 @@ export async function listEntities<T>(
   definition: EntityDefinition<T>,
   options?: { limit?: number },
 ): Promise<T[]> {
-  const records = await storage.listEntities(definition.name);
+  const records = await storage.listEntities(definition.kind);
   const limited =
     typeof options?.limit === "number"
       ? records.slice(0, options.limit)

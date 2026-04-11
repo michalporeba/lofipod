@@ -110,21 +110,21 @@ export function createDemoApp(options: CreateDemoAppOptions = {}): DemoApp {
         modifiedAt: timestamp,
       };
 
-      return engine.save<Task>(TaskEntity.name, task);
+      return engine.save<Task>(TaskEntity.kind, task);
     },
 
     async listTasks() {
-      return engine.list<Task>(TaskEntity.name);
+      return engine.list<Task>(TaskEntity.kind);
     },
 
     async completeTask(id) {
-      const existing = await engine.get<Task>(TaskEntity.name, id);
+      const existing = await engine.get<Task>(TaskEntity.kind, id);
 
       if (!existing) {
         throw new Error(`Unknown task: ${id}`);
       }
 
-      return engine.save<Task>(TaskEntity.name, {
+      return engine.save<Task>(TaskEntity.kind, {
         ...existing,
         status: "done",
         modifiedAt: now(),
@@ -135,7 +135,7 @@ export function createDemoApp(options: CreateDemoAppOptions = {}): DemoApp {
       const timestamp = now();
 
       if (input.aboutTaskId) {
-        const task = await engine.get<Task>(TaskEntity.name, input.aboutTaskId);
+        const task = await engine.get<Task>(TaskEntity.kind, input.aboutTaskId);
 
         if (!task) {
           throw new Error(`Unknown task: ${input.aboutTaskId}`);
@@ -152,11 +152,11 @@ export function createDemoApp(options: CreateDemoAppOptions = {}): DemoApp {
         modifiedAt: timestamp,
       };
 
-      return engine.save<JournalEntry>(JournalEntryEntity.name, entry);
+      return engine.save<JournalEntry>(JournalEntryEntity.kind, entry);
     },
 
     async listJournalEntries() {
-      return engine.list<JournalEntry>(JournalEntryEntity.name);
+      return engine.list<JournalEntry>(JournalEntryEntity.kind);
     },
 
     async syncState() {

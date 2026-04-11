@@ -177,7 +177,7 @@ describe("createSqliteStorage", () => {
       id: string;
       url: string;
     }>({
-      name: "bookmark",
+      kind: "bookmark",
       pod: {
         basePath: "bookmarks/",
       },

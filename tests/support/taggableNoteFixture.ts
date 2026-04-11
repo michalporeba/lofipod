@@ -29,7 +29,7 @@ export function createTaggableNoteFixture(): {
   });
 
   const entity = defineEntity<TaggableNote>({
-    name: "taggable-note",
+    kind: "taggable-note",
     pod: {
       basePath: "taggable-notes/",
     },

@@ -48,7 +48,7 @@ type Event = {
 };
 
 const EventEntity = defineEntity<Event>({
-  name: "event",
+  kind: "event",
   pod: {
     basePath: "events/",
   },

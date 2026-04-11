@@ -29,14 +29,14 @@ export async function bootstrapFromCanonicalResources(
 
   for (const definition of entities.values()) {
     const remoteEntities = await config.sync.adapter.listCanonicalEntities({
-      entityName: definition.name,
+      entityName: definition.kind,
       basePath: definition.pod.basePath,
       rdfType: definition.rdfType,
     });
 
     for (const remoteEntity of remoteEntities) {
       const existingRecord = await storage.readEntity(
-        definition.name,
+        definition.kind,
         remoteEntity.entityId,
       );
 
@@ -47,7 +47,7 @@ export async function bootstrapFromCanonicalResources(
         }
 
         collisions.push({
-          entityName: definition.name,
+          entityName: definition.kind,
           entityId: remoteEntity.entityId,
           path: remoteEntity.path,
         });
@@ -61,7 +61,7 @@ export async function bootstrapFromCanonicalResources(
 
       await storage.transact((transaction) => {
         const updatedOrder = transaction.nextUpdatedOrder();
-        transaction.writeEntity(definition.name, remoteEntity.entityId, {
+        transaction.writeEntity(definition.kind, remoteEntity.entityId, {
           rootUri: remoteEntity.rootUri,
           graph: remoteEntity.graph,
           projection: nextProjection,

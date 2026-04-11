@@ -112,7 +112,7 @@ function collectSubscriptionPaths(
 
   for (const entity of entities.values()) {
     paths.add(entity.pod.basePath);
-    paths.add(`${normalizeLogBasePath(logBasePath)}${entity.name}/`);
+    paths.add(`${normalizeLogBasePath(logBasePath)}${entity.kind}/`);
   }
 
   return Array.from(paths);

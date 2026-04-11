@@ -73,7 +73,7 @@ function idFromUri(subject: { value: string }): string {
 }
 
 export const TaskEntity: EntityDefinition<Task> = defineEntity<Task>({
-  name: "task",
+  kind: "task",
   pod: {
     basePath: "tasks/",
   },
@@ -115,7 +115,7 @@ export const TaskEntity: EntityDefinition<Task> = defineEntity<Task>({
 
 export const JournalEntryEntity: EntityDefinition<JournalEntry> =
   defineEntity<JournalEntry>({
-    name: "journal-entry",
+    kind: "journal-entry",
     pod: {
       basePath: "journal-entries/",
     },

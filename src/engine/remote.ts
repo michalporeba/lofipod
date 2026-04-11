@@ -29,7 +29,11 @@ export async function syncNow(
   }
 
   const pullStartedAt = logger ? nowMs() : 0;
-  const entriesReplayed = await replayRemoteLogEntries(storage, entities, config);
+  const entriesReplayed = await replayRemoteLogEntries(
+    storage,
+    entities,
+    config,
+  );
   if (logger) {
     logDebug(logger, "sync:pull", {
       durationMs: durationSince(pullStartedAt),

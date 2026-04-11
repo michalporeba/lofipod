@@ -114,7 +114,7 @@ export function inferRootUri(
     return firstNamedSubject.value;
   }
 
-  return fallback ?? fallbackRootUri(definition.name, entityId);
+  return fallback ?? fallbackRootUri(definition.kind, entityId);
 }
 
 export async function repairStoredProjection<T>(
@@ -127,7 +127,7 @@ export async function repairStoredProjection<T>(
 
   if (repair.assertions.length > 0 || repair.retractions.length > 0) {
     await storage.transact((transaction) => {
-      const latest = transaction.readEntity(definition.name, entityId);
+      const latest = transaction.readEntity(definition.kind, entityId);
 
       if (!latest) {
         return;
@@ -140,7 +140,7 @@ export async function repairStoredProjection<T>(
         latestRepair.retractions.length === 0
       ) {
         if (!projectionsMatch(latest.projection, latestRepair.projection)) {
-          transaction.writeEntity(definition.name, entityId, {
+          transaction.writeEntity(definition.kind, entityId, {
             ...latest,
             projection: latestRepair.projection,
           });
@@ -151,7 +151,7 @@ export async function repairStoredProjection<T>(
 
       const changeId = createChangeId();
 
-      transaction.writeEntity(definition.name, entityId, {
+      transaction.writeEntity(definition.kind, entityId, {
         ...latest,
         rootUri: latestRepair.rootUri,
         graph: latestRepair.graph,
@@ -159,7 +159,7 @@ export async function repairStoredProjection<T>(
         lastChangeId: changeId,
       });
       transaction.appendChange({
-        entityName: definition.name,
+        entityName: definition.kind,
         entityId,
         changeId,
         parentChangeId: latest.lastChangeId,
@@ -176,7 +176,7 @@ export async function repairStoredProjection<T>(
 
   if (!projectionsMatch(record.projection, repair.projection)) {
     await storage.transact((transaction) => {
-      const latest = transaction.readEntity(definition.name, entityId);
+      const latest = transaction.readEntity(definition.kind, entityId);
 
       if (!latest) {
         return;
@@ -190,7 +190,7 @@ export async function repairStoredProjection<T>(
       ) {
         const changeId = createChangeId();
 
-        transaction.writeEntity(definition.name, entityId, {
+        transaction.writeEntity(definition.kind, entityId, {
           ...latest,
           rootUri: latestRepair.rootUri,
           graph: latestRepair.graph,
@@ -198,7 +198,7 @@ export async function repairStoredProjection<T>(
           lastChangeId: changeId,
         });
         transaction.appendChange({
-          entityName: definition.name,
+          entityName: definition.kind,
           entityId,
           changeId,
           parentChangeId: latest.lastChangeId,
@@ -211,7 +211,7 @@ export async function repairStoredProjection<T>(
         return;
       }
 
-      transaction.writeEntity(definition.name, entityId, {
+      transaction.writeEntity(definition.kind, entityId, {
         ...latest,
         rootUri: latestRepair.rootUri,
         projection: latestRepair.projection,
@@ -230,7 +230,7 @@ export function fallbackEntityRootUri(
   definition: EntityDefinition<unknown>,
   entityId: string,
 ): string {
-  return fallbackRootUri(definition.name, entityId);
+  return fallbackRootUri(definition.kind, entityId);
 }
 
 export function rootUriTerm(value: string) {
