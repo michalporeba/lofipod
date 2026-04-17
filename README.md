@@ -97,17 +97,17 @@ The smallest useful flow is:
 4. save and read entities locally
 5. attach Pod sync when you want remote durability and replication
 
-See [QUICKSTART.md](QUICKSTART.md) for a small end-to-end example using
+See [docs/QUICKSTART.md](docs/QUICKSTART.md) for a small end-to-end example using
 `defineVocabulary(...)`, `defineEntity<T>(...)`, and `createEngine(...)`.
 
 ## Project Docs
 
-- [QUICKSTART.md](QUICKSTART.md): first-use example
-- [API.md](API.md): current public API direction
-- [ADR.md](ADR.md): accepted architectural decisions
-- [TESTING.md](TESTING.md): testing approach, commands, and coverage guardrails
-- [PLANS.md](PLANS.md): delivery slices
-- [WIP.md](WIP.md): current implementation state and open questions
+- [docs/QUICKSTART.md](docs/QUICKSTART.md): first-use example
+- [docs/API.md](docs/API.md): current public API direction
+- [docs/ADR.md](docs/ADR.md): accepted architectural decisions
+- [docs/TESTING.md](docs/TESTING.md): testing approach, commands, and coverage guardrails
+- [docs/PLANS.md](docs/PLANS.md): delivery slices
+- [docs/WIP.md](docs/WIP.md): current implementation state and open questions
 - [demo/README.md](demo/README.md): in-repo demo app area and ontology seed
 
 ## Why it exists
@@ -132,5 +132,5 @@ Common commands:
 - `npm run test:pod`: focused Community Solid Server integration suite
 - `npm run verify`: format, lint, types, and the default fast suite
 
-See [TESTING.md](TESTING.md) for the intended test layering and current
+See [docs/TESTING.md](docs/TESTING.md) for the intended test layering and current
 coverage expectations.
