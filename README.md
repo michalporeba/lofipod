@@ -1,15 +1,60 @@
 # lofipod
 
-`lofipod` is a local-first TypeScript library for building privacy-first
-applications with RDF data and SOLID Pod sync.
+`lofipod` is a TypeScript library for building apps that work offline first and
+sync user-owned data to a SOLID Pod in the background.
 
-It is for applications that want:
+It is aimed at developers who want local-first UX, background sync, and
+portable data. Applications read and write local state first, while `lofipod`
+stores canonical remote data as interoperable RDF resources in the user's Pod.
+
+A SOLID Pod is a user-controlled web data store. RDF is the standard data
+format used for the canonical remote representation.
+
+## The problem
+
+Many apps need fast local reads, offline writes, and a UI that keeps working
+without a network connection.
+
+At the same time, some apps also need data portability and open storage rather
+than keeping everything in an app-specific backend.
+
+`lofipod` is for that combination. It keeps the application local-first while
+syncing canonical remote data to interoperable RDF resources in a user's Pod.
+
+## Who it is for
+
+`lofipod` is for developers building apps such as:
+
+- notes and journals
+- task and planning tools
+- personal knowledge tools
+- privacy-sensitive productivity apps
+
+It is most useful when you want:
 
 - local-first behaviour by default
-- usable offline reads and writes
-- canonical data stored as interoperable RDF resources
-- SOLID Pods as durable backing store and sync target
+- normal reads and writes to stay local
+- background sync rather than manual sync as the main flow
+- user-owned data stored in an open format
 - a small framework-agnostic core rather than a full app framework
+
+## How it works
+
+1. Define your entity types in TypeScript.
+2. Define how each entity maps to RDF.
+3. Save and read entities through a local-first API.
+4. Keep application queries and lists local.
+5. Sync canonical RDF resources and replication data to the user's Pod in the
+   background.
+6. Recover compatible data from existing canonical Pod resources when needed.
+
+## What it is not
+
+- not a realtime collaborative editor
+- not a general-purpose RDF database
+- not a general sync engine for arbitrary graphs
+- not a UI framework
+- not a system that expects Pod-side querying for normal application reads
 
 ## Status
 
@@ -28,26 +73,6 @@ The project currently includes:
 
 Expect the API to keep evolving while the core model is being proven.
 
-## What it does
-
-`lofipod` lets application code define entity types, map them to RDF triples,
-store them locally first, and later project the same data to SOLID Pods.
-
-The intended flow is:
-
-1. define an entity type and RDF projection
-2. save and read entities through a local-first API
-3. keep application queries local
-4. sync canonical RDF resources and replication data in the background
-5. recover compatible data from existing canonical Pod resources when needed
-
-## What it is not
-
-- not a realtime collaborative editor
-- not a general-purpose RDF database
-- not a general sync engine for arbitrary graphs
-- not a UI framework
-
 ## Install
 
 ```bash
@@ -64,6 +89,14 @@ Node.js `24+` is the current supported runtime target for development and CI.
 
 ## Quick Start
 
+The smallest useful flow is:
+
+1. define a vocabulary
+2. define one entity type and its RDF mapping
+3. create an engine
+4. save and read entities locally
+5. attach Pod sync when you want remote durability and replication
+
 See [QUICKSTART.md](QUICKSTART.md) for a small end-to-end example using
 `defineVocabulary(...)`, `defineEntity<T>(...)`, and `createEngine(...)`.
 
@@ -77,6 +110,18 @@ See [QUICKSTART.md](QUICKSTART.md) for a small end-to-end example using
 - [WIP.md](WIP.md): current implementation state and open questions
 - [demo/README.md](demo/README.md): in-repo demo app area and ontology seed
 
+## Why it exists
+
+There are good browser storage tools and good Solid authentication and Pod
+client tools, but there is still a gap between them.
+
+Most local-first libraries do not target SOLID Pods as a durable backing store,
+and most Solid tooling does not provide a local-first sync engine with an
+application-facing developer experience.
+
+`lofipod` is an attempt to cover that missing middle ground without becoming a
+large framework.
+
 ## Testing
 
 Common commands:
@@ -89,15 +134,3 @@ Common commands:
 
 See [TESTING.md](TESTING.md) for the intended test layering and current
 coverage expectations.
-
-## Why it exists
-
-There are good browser storage tools and good Solid authentication and Pod
-client tools, but there is still a gap between them.
-
-Most local-first libraries do not target SOLID Pods as a durable backing store,
-and most Solid tooling does not provide a local-first sync engine with an
-application-facing developer experience.
-
-`lofipod` is an attempt to cover that missing middle ground without becoming a
-large framework.

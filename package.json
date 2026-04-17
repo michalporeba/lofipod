@@ -1,7 +1,7 @@
 {
   "name": "lofipod",
   "version": "0.2.0",
-  "description": "Local-first library for building privacy-first applications with RDF data and SOLID Pod sync.",
+  "description": "Offline-first TypeScript library for apps that keep data locally and sync it to a user's SOLID Pod as RDF for synchronisation and reuse.",
   "license": "MIT",
   "author": "Michał Poręba <michalporeba@gmail.com>",
   "repository": "github:michalporeba/lofipod",
