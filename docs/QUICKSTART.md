@@ -1,11 +1,22 @@
 # Quick Start
 
-This guide shows the smallest useful `lofipod` flow:
+This guide shows the smallest useful `lofipod` flow.
 
-1. define a vocabulary
-2. define one entity type
-3. create an engine
-4. save and read one entity
+You will:
+
+1. define one small entity type
+2. map it to RDF
+3. create a local engine
+4. save and read data through the public API
+
+This example stays local on purpose. It shows the core model first, without
+adding browser persistence or Pod sync yet.
+
+## What you are building
+
+A tiny local task store with one entity:
+
+- `Task { id, title, done }`
 
 ## Install
 
@@ -17,11 +28,11 @@ npm install lofipod
 
 ```ts
 import {
+  booleanValue,
   createEngine,
   createMemoryStorage,
   defineEntity,
   defineVocabulary,
-  numberValue,
   rdf,
   stringValue,
 } from "lofipod";
@@ -29,92 +40,102 @@ import {
 const ex = defineVocabulary({
   base: "https://example.com/",
   terms: {
-    Event: "ns#Event",
+    Task: "ns#Task",
     title: "ns#title",
-    time: "ns#time",
-    year: "ns#year",
+    done: "ns#done",
   },
   uri({ base, entityName, id }) {
     return `${base}id/${entityName}/${id}`;
   },
 });
 
-type Event = {
+type Task = {
   id: string;
   title: string;
-  time: {
-    year: number;
-  };
+  done: boolean;
 };
 
-const EventEntity = defineEntity<Event>({
-  kind: "event",
+const TaskEntity = defineEntity<Task>({
+  kind: "task",
   pod: {
-    basePath: "events/",
+    basePath: "tasks/",
   },
-  rdfType: ex.Event,
-  id: (event) => event.id,
-  uri: (event) =>
+  rdfType: ex.Task,
+  id: (task) => task.id,
+  uri: (task) =>
     ex.uri({
-      entityName: "event",
-      id: event.id,
+      entityName: "task",
+      id: task.id,
     }),
-
-  toRdf(event, { uri, child }) {
-    const subject = uri(event);
-    const time = child("time");
+  toRdf(task, { uri }) {
+    const subject = uri(task);
 
     return [
-      [subject, rdf.type, ex.Event],
-      [subject, ex.title, event.title],
-      [subject, ex.time, time],
-      [time, ex.year, event.time.year],
+      [subject, rdf.type, ex.Task],
+      [subject, ex.title, task.title],
+      [subject, ex.done, task.done],
     ];
   },
-
-  project(graph, { uri, child }) {
+  project(graph, { uri }) {
     const subject = uri();
-    const time = child("time");
 
     return {
       id: subject.value.split("/").at(-1) ?? "",
       title: stringValue(graph, subject, ex.title),
-      time: {
-        year: numberValue(graph, time, ex.year),
-      },
+      done: booleanValue(graph, subject, ex.done),
     };
   },
 });
 
 const engine = createEngine({
-  entities: [EventEntity],
+  entities: [TaskEntity],
   storage: createMemoryStorage(),
 });
 
-await engine.save("event", {
-  id: "ev-123",
-  title: "Hello",
-  time: {
-    year: 2024,
-  },
+await engine.save("task", {
+  id: "task-1",
+  title: "Write docs",
+  done: false,
 });
 
-const event = await engine.get<Event>("event", "ev-123");
-const events = await engine.list<Event>("event");
+const task = await engine.get<Task>("task", "task-1");
+const tasks = await engine.list<Task>("task");
 
-console.log(event);
-console.log(events);
+console.log(task);
+console.log(tasks);
 ```
 
-## What this proves
+Expected result:
+
+```ts
+task;
+// { id: "task-1", title: "Write docs", done: false }
+
+tasks;
+// [{ id: "task-1", title: "Write docs", done: false }]
+```
+
+## What each part does
+
+- `defineVocabulary(...)` declares the RDF terms used by this app.
+- `defineEntity(...)` tells `lofipod` how a `Task` becomes RDF and back again.
+- `createEngine(...)` creates the local-first API surface.
+- `engine.save(...)`, `engine.get(...)`, and `engine.list(...)` are the normal
+  app-facing operations.
+
+## What this shows
 
 - the application owns the TypeScript entity shape
-- the entity definition owns RDF mapping and Pod placement
+- RDF mapping is explicit, but still small
 - local reads and writes go through the engine API
-- `project(...)` rebuilds objects from canonical graph state
+- `project(...)` rebuilds an object from canonical graph state
+- normal app queries stay local
 
 ## Next steps
 
-- see [API.md](API.md) for the broader API direction
-- see [ADR.md](ADR.md) for architectural decisions
-- swap `createMemoryStorage()` for `createIndexedDbStorage(...)` from `lofipod/browser` in browser use
+- swap `createMemoryStorage()` for `createIndexedDbStorage(...)` from
+  `lofipod/browser` when you want browser persistence
+- attach a Solid Pod adapter when you want remote durability and background
+  sync
+- see [API.md](API.md) for the broader public API direction
+- see [ADR.md](ADR.md) for accepted architectural decisions

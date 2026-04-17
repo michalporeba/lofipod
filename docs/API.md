@@ -2,188 +2,322 @@
 
 ## Status
 
-Working draft for the public `lofipod` API. This document captures the current
-developer-experience direction, but it is not an accepted architecture record.
-`ADR.md` remains the source of truth for accepted architectural constraints.
+Working draft for the public `lofipod` API.
 
-## Purpose
+This document describes the current developer-facing API shape and the intended
+developer experience. It is not an accepted architecture record.
+[ADR.md](ADR.md) remains the source of truth for accepted constraints.
 
-The first public API should optimize for:
+## What the API is trying to do
 
-- single-user local-first CRUD as the primary developer experience
-- Solid Pod sync as an important but secondary concern
-- a framework-agnostic core that can later be wrapped for React or other UI
-  libraries
-- explicit RDF and Pod mapping without requiring a large schema DSL
+The public API is designed around a simple idea:
 
-## Core direction
+- your application owns its TypeScript entity types
+- `lofipod` owns local-first storage, change tracking, and sync orchestration
+- each entity definition owns its RDF mapping
+- normal CRUD should feel local first
+- SOLID Pod sync should be available without making ordinary reads and writes
+  feel remote-driven
 
-The current public API direction is:
+This means the API should stay small, explicit, and framework-agnostic.
 
-- a declarative core with entity registration and an engine object
-- application-owned TypeScript types for entity payloads
-- a thin model layer rather than a rich field-schema DSL
-- per-entity RDF codecs as the main mapping mechanism
-- typed RDF vocabulary and helper values at the public API boundary
-- per-entity Pod base paths under a configured app root
-- adapter-driven local persistence for projected entities, canonical graphs, and
-  sync metadata
-- sync exposed through a small status and trigger surface without making normal
-  CRUD feel sync-driven
-- optional structured logging without a logging-framework dependency
+## API in one minute
 
-This means `lofipod` should own orchestration, local-first behaviour, sync, and
-Pod projection mechanics, while application code owns domain types, ontology
-terms, and entity-specific RDF mapping.
+Most applications use `lofipod` like this:
+
+1. define the RDF vocabulary terms your app uses
+2. define one or more entity types with `toRdf(...)` and `project(...)`
+3. create an engine
+4. save, get, list, and delete entities locally
+5. add browser or Node persistence
+6. attach SOLID Pod sync when you want remote durability and replication
+
+The Pod is the durable remote store.
+The client-local store is still the main place your app reads from.
+
+## Minimal local example
+
+This example stays local on purpose. It shows the core API without adding
+browser persistence or Pod sync yet.
+
+```ts
+import {
+  booleanValue,
+  createEngine,
+  createMemoryStorage,
+  defineEntity,
+  defineVocabulary,
+  rdf,
+  stringValue,
+} from "lofipod";
+
+const ex = defineVocabulary({
+  base: "https://example.com/",
+  terms: {
+    Task: "ns#Task",
+    title: "ns#title",
+    done: "ns#done",
+  },
+  uri({ base, entityName, id }) {
+    return `${base}id/${entityName}/${id}`;
+  },
+});
+
+type Task = {
+  id: string;
+  title: string;
+  done: boolean;
+};
+
+const TaskEntity = defineEntity<Task>({
+  kind: "task",
+  pod: {
+    basePath: "tasks/",
+  },
+  rdfType: ex.Task,
+  id: (task) => task.id,
+  uri: (task) =>
+    ex.uri({
+      entityName: "task",
+      id: task.id,
+    }),
+  toRdf(task, { uri }) {
+    const subject = uri(task);
+
+    return [
+      [subject, rdf.type, ex.Task],
+      [subject, ex.title, task.title],
+      [subject, ex.done, task.done],
+    ];
+  },
+  project(graph, { uri }) {
+    const subject = uri();
+
+    return {
+      id: subject.value.split("/").at(-1) ?? "",
+      title: stringValue(graph, subject, ex.title),
+      done: booleanValue(graph, subject, ex.done),
+    };
+  },
+});
+
+const engine = createEngine({
+  entities: [TaskEntity],
+  storage: createMemoryStorage(),
+});
+
+await engine.save("task", {
+  id: "task-1",
+  title: "Write docs",
+  done: false,
+});
+
+const task = await engine.get<Task>("task", "task-1");
+const tasks = await engine.list<Task>("task", { limit: 20 });
+await engine.delete("task", "task-1");
+```
+
+What this example shows:
+
+- the application owns the `Task` type
+- the entity definition owns RDF mapping and Pod placement
+- the engine owns local CRUD behaviour
+- `project(...)` rebuilds the application object from canonical graph state
+
+## Adding persistence and sync
+
+The same API can use browser or Node storage, and sync can be configured when
+the engine is created or attached later.
+
+```ts
+import { createEngine } from "lofipod";
+import { createIndexedDbStorage, createSolidPodAdapter } from "lofipod/browser";
+
+const engine = createEngine({
+  pod: {
+    logBasePath: "apps/my-app/log/",
+    podBaseUrl,
+  },
+  entities: [TaskEntity],
+  storage: createIndexedDbStorage({
+    databaseName: "my-app",
+  }),
+  sync: {
+    adapter: createSolidPodAdapter({ podBaseUrl, authorization }),
+    pollIntervalMs: 30_000,
+  },
+});
+```
+
+You can also attach sync later:
+
+```ts
+await engine.sync.attach({
+  adapter: createSolidPodAdapter({ podBaseUrl, authorization }),
+  podBaseUrl,
+  logBasePath: "apps/my-app/log/",
+  pollIntervalMs: 30_000,
+});
+```
+
+In normal use:
+
+- `save(...)`, `get(...)`, `list(...)`, and `delete(...)` still operate through
+  the local store
+- attached sync runs in the background
+- `engine.sync.now()` is available, but manual sync is not meant to be the
+  normal application flow
 
 ## Current public surface
 
-The current public surface is still intentionally small and explicit:
+The current public API is intentionally small and explicit.
+
+### Definition and engine
 
 - `defineVocabulary(...)`
 - `defineEntity<T>(...)`
 - `createEngine(...)`
+
+### Storage and adapters
+
 - `createMemoryStorage(...)`
 - `createIndexedDbStorage(...)` from `lofipod/browser`
 - `createSqliteStorage(...)` from `lofipod/node`
-- `createSolidPodAdapter(...)` from `lofipod/node` or `lofipod/browser`
-- optional `logger` on `createEngine(...)`
-- `engine.save(entityName, entity)`
-- `engine.get(entityName, id)`
-- `engine.list(entityName, options?)`
-- `engine.delete(entityName, id)`
+- `createSolidPodAdapter(...)` from `lofipod/browser` or `lofipod/node`
+
+### Engine CRUD
+
+- `engine.save(entityKind, entity)`
+- `engine.get(entityKind, id)`
+- `engine.list(entityKind, options?)`
+- `engine.delete(entityKind, id)`
 - `engine.dispose()`
+
+### Sync surface
+
+- `engine.sync.attach(config)`
+- `engine.sync.detach()`
+- `engine.sync.persistedConfig()`
 - `engine.sync.state()`
 - `engine.sync.onStateChange(callback)`
 - `engine.sync.now()`
 - `engine.sync.bootstrap()`
-- RDF helpers such as `uri(...)`, `literal(...)`, `objectOf(...)`,
-  `stringValue(...)`, `numberValue(...)`, and `booleanValue(...)`
 
-There is currently no separate `engine.connection.state()` API and no general
-entity observation API yet. The current observation surface is limited to sync
-state changes.
+### RDF helpers
 
-This is intentionally not a full query or schema system. The initial API still
-prefers stability and clarity over breadth.
+- `uri(...)`
+- `literal(...)`
+- `objectOf(...)`
+- `stringValue(...)`
+- `numberValue(...)`
+- `booleanValue(...)`
+- `blankNode(...)`
+- `namedNode(...)`
+- `rdf`
 
-## Entity definition contract
+### Optional engine features
 
-Each entity definition should include:
+- `logger` on `createEngine(...)`
+
+There is currently no general entity observation API.
+The current observation surface is limited to sync-state changes.
+
+## `defineEntity<T>(...)`
+
+Each entity definition should describe one application entity type and how it
+maps to RDF.
+
+Required fields:
 
 - `kind`
-- a TypeScript type parameter for the domain object
 - `pod.basePath`
 - `rdfType`
 - `id(entity)`
 - `toRdf(entity, helpers)`
 - `project(graph, helpers)`
 
-The initial assumptions are:
+Optional field:
+
+- `uri(entity)`
+
+In practice:
+
+- `kind` is the stable machine identifier used with `engine.save(...)`,
+  `engine.get(...)`, and `engine.list(...)`
+- `pod.basePath` defines where canonical resources for that entity type live in
+  the Pod
+- `rdfType` declares the main RDF class for the entity
+- `id(...)` returns the application-level identity
+- `toRdf(...)` returns the full canonical triple set for one entity
+- `project(...)` turns that canonical graph back into an application object
+
+Current assumptions:
 
 - identity lives on the entity object in v0
-- `kind` is a stable machine identifier rather than a display label
 - RDF mapping is owned per entity, not globally
-- `toRdf(...)` should be pure and should return RDF triples rather than mutate
-  external state
-- `project(...)` should be pure and should return a full projected object from
-  the canonical entity graph
-- embedded one-to-one structures can use path-based stable child node helpers
-  such as `child("time")`
-- the library owns its internal revision, index, and sync vocabulary
-- application code owns domain ontology terms and entity mapping logic
+- `toRdf(...)` should be pure
+- `project(...)` should be pure
+- the graph is the canonical local and remote state
+- the object returned by `project(...)` is an application projection of that
+  graph
 
-The API should not require developers to define field kinds in a separate DSL
-if the same information already exists in their TypeScript types and RDF
-projection logic.
+For embedded one-to-one structures, helpers such as `child("time")` are
+available when a stable child node is needed.
 
-## Pod configuration contract
+## `createEngine(...)`
 
-Engine-level Pod configuration currently includes:
+`createEngine(...)` is the main runtime entrypoint.
 
-- `logBasePath`
+Current config shape:
 
-Per-entity Pod configuration should include:
+- `entities`: required
+- `storage`: optional
+- `logger`: optional
+- `pod`: optional
+- `sync`: optional
 
-- `basePath`
+Notes:
 
-The current version lets developers choose:
+- if `storage` is omitted, the engine uses in-memory storage
+- `entities` must have unique `kind` values
+- `pod.logBasePath` configures the app-private replication log root
+- `pod.podBaseUrl` may also be provided
+- `sync.adapter` enables remote sync
+- `sync.pollIntervalMs` is optional
 
-- the app-private replication log base path in the Pod
-- the collection or base path used for each entity type
+The engine API is intentionally narrow:
 
-The current version does not expose:
+- save one entity
+- get one entity by ID
+- list entities of one kind
+- delete one entity
+- inspect and control sync separately when needed
 
-- full resource path callback hooks
-- detailed customization of internal revision or index layout
-
-The library should own exact revision and index resource naming within those
-configured roots so the sync model remains coherent.
-
-## Logging
-
-The engine may also accept an optional logger with the shape:
-
-- `debug(message, metadata?)`
-- `info(message, metadata?)`
-- `warn(message, metadata?)`
-- `error(message, metadata?)`
-
-When provided, the current implementation logs:
-
-- Pod HTTP requests as `pod:request`
-- sync phase timings such as `sync:push`, `sync:pull`, `sync:reconcile`, and
-  `sync:cycle`
-- infrequent operational events such as `sync:attached`, `sync:detached`,
-  `sync:bootstrap`, and notification subscription changes
-
-When omitted, logging should add no meaningful work beyond the normal code
-paths.
-
-## Local storage and listing
-
-The first local persistence approach should stay simple:
-
-- keep local persistence adapter-driven and library-managed
-- persist enough structured graph and metadata state for reliable restart and
-  sync recovery
-- keep local layout internal to the library
-
-The first listing API should also stay intentionally narrow:
-
-- list by entity type
-- default to newest-first ordering
-- support a basic `limit`
-- defer rich filtering and query DSL design
+This is not meant to be a rich query engine or schema DSL.
 
 ## Sync and connection surface
 
-Sync should be visible but not central to ordinary CRUD.
+Sync should be visible, but secondary to CRUD.
 
-Developers should be able to:
+The current sync surface supports:
 
-- determine whether remote sync is configured at all
-- inspect overall sync status
-- inspect whether sync is currently running, whether the last sync failed, and
-  whether notification subscriptions are active
-- inspect connection metadata such as `lastSyncedAt`, `lastFailedAt`, and the
-  last failure reason
-- subscribe to aggregate sync-state changes with `engine.sync.onStateChange(...)`
-- trigger sync explicitly when needed
-- rely on attached sync to run automatically after save/delete and after
-  initial attach
-- configure an optional `pollIntervalMs` for attached sync when they want a
-  faster or slower polling cadence
-- explicitly bootstrap from canonical remote resources on first attach or
-  recovery
-- delete an entity locally and have that deletion replicate through normal sync
-- let optional adapter-level notifications wake remote sync earlier without
-  changing correctness or requiring a subscription API in application code
+- attaching sync at engine creation time or later with `engine.sync.attach(...)`
+- detaching sync at runtime with `engine.sync.detach()`
+- reading persisted Pod config with `engine.sync.persistedConfig()`
+- inspecting aggregate sync state with `engine.sync.state()`
+- subscribing to sync-state changes with `engine.sync.onStateChange(...)`
+- explicitly triggering a sync cycle with `engine.sync.now()`
+- bootstrapping local state from canonical remote resources with
+  `engine.sync.bootstrap()`
 
-Normal save, get, and list flows should work without requiring explicit sync
-operations in the common case.
-When omitted, the current default polling interval is 30 seconds, with
-exponential backoff after consecutive sync failures.
+Important behaviour:
+
+- local saves and deletes complete locally before remote sync
+- attached sync runs automatically after save and delete
+- attaching sync also queues background sync work
+- periodic polling is the reliability backstop
+- notifications are an optimization path, not a correctness dependency
+- manual sync should not be the normal application flow
 
 The current `SyncState` reports aggregate engine-level status:
 
@@ -196,108 +330,44 @@ The current `SyncState` reports aggregate engine-level status:
 - `connection.lastFailureReason`
 - `connection.notificationsActive`
 
-## Example
+When omitted, the current default polling interval is 30 seconds, with
+exponential backoff after consecutive sync failures.
 
-```ts
-import {
-  createEngine,
-  defineEntity,
-  defineVocabulary,
-  numberValue,
-  rdf,
-  stringValue,
-} from "lofipod";
-import { createIndexedDbStorage, createSolidPodAdapter } from "lofipod/browser";
+## Local storage and listing
 
-const ex = defineVocabulary({
-  base: "https://example.com/",
-  terms: {
-    Event: "ns#Event",
-    title: "ns#title",
-    time: "ns#time",
-    year: "ns#year",
-  },
-  uri({ base, entityName, id }) {
-    return `${base}id/${entityName}/${id}`;
-  },
-});
+The current local persistence model is intentionally simple:
 
-type Event = {
-  id: string;
-  title: string;
-  time: {
-    year: number;
-  };
-};
+- storage is adapter-driven and library-managed
+- the library persists projected entities, canonical graphs, and sync metadata
+- local layout stays internal to the library
 
-const eventEntity = defineEntity<Event>({
-  kind: "event",
-  pod: {
-    basePath: "events/",
-  },
-  rdfType: ex.Event,
-  id: (event) => event.id,
-  uri: (event) =>
-    ex.uri({
-      entityName: "event",
-      id: event.id,
-    }),
+The current listing API is also intentionally narrow:
 
-  toRdf(event, { uri, child }) {
-    const subject = uri(event);
-    const time = child("time");
+- list by entity kind
+- default newest first ordering
+- optional `limit`
+- no rich filtering or general query DSL yet
 
-    return [
-      [subject, rdf.type, ex.Event],
-      [subject, ex.title, event.title],
-      [subject, ex.time, time],
-      [time, ex.year, event.time.year],
-    ];
-  },
+## Logging
 
-  project(graph, { uri, child }) {
-    const subject = uri();
-    const time = child("time");
+The engine may accept an optional logger with the shape:
 
-    return {
-      id: subject.value.split("/").at(-1) ?? "",
-      title: stringValue(graph, subject, ex.title),
-      time: {
-        year: numberValue(graph, time, ex.year),
-      },
-    };
-  },
-});
+- `debug(message, metadata?)`
+- `info(message, metadata?)`
+- `warn(message, metadata?)`
+- `error(message, metadata?)`
 
-const engine = createEngine({
-  pod: {
-    logBasePath: "apps/my-journal/log/",
-  },
-  entities: [eventEntity],
-  storage: createIndexedDbStorage(),
-  sync: {
-    adapter: createSolidPodAdapter({ podBaseUrl, authorization }),
-  },
-});
+When provided, the current implementation logs:
 
-await engine.save("event", {
-  id: "n1",
-  title: "Hello",
-  time: {
-    year: 2024,
-  },
-});
+- Pod HTTP requests as `pod:request`
+- sync phase timings such as `sync:push`, `sync:pull`, `sync:reconcile`, and
+  `sync:cycle`
+- operational events such as `sync:attached`, `sync:detached`, and
+  `sync:bootstrap`
 
-const event = await engine.get("event", "n1");
-const events = await engine.list("event", { limit: 20 });
-await engine.delete("event", "n1");
+When omitted, logging adds no meaningful work beyond the normal code paths.
 
-const syncState = await engine.sync.state();
-await engine.sync.now();
-await engine.sync.bootstrap();
-```
-
-## Defaults and open points
+## Defaults and current limits
 
 Current defaults:
 
@@ -305,12 +375,21 @@ Current defaults:
 - per-entity RDF codecs are the default mapping mechanism
 - public vocabulary terms and URI helpers are `NamedNode`-based
 - per-entity Pod base paths are supported
-- local persistence is adapter-driven, with in-memory, IndexedDB, and SQLite
-  storage currently available through core, browser, and Node entrypoints
-- sync state is inspectable, but CRUD should remain the primary experience
+- local persistence is adapter-driven
+- sync state is inspectable, but CRUD remains the primary experience
 - bootstrap from canonical Pod resources is explicit rather than automatic
 
-Still open:
+Current limits:
+
+- no full query system
+- no rich schema DSL
+- no general entity observation API yet
+- listing is intentionally narrow
+- conflict and branch state are not yet fully surfaced as a public API
+
+## Open points
+
+Still open in the API direction:
 
 - the exact helper set exposed to `project(...)`
 - the exact list and cursor API beyond basic newest-first listing
