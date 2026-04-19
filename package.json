@@ -70,7 +70,7 @@
     "eslint": "^10.2.0",
     "eslint-config-prettier": "^10.1.1",
     "fake-indexeddb": "^6.0.0",
-    "globals": "^16.0.0",
+    "globals": "^17.5.0",
     "prettier": "^3.5.3",
     "ts-node": "^10.9.2",
     "tsup": "^8.3.5",
