@@ -1,6 +1,6 @@
 {
   "name": "lofipod",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Offline-first TypeScript library for apps that keep data locally and sync it to a user's SOLID Pod as RDF for synchronisation and reuse.",
   "license": "MIT",
   "author": "Michał Poręba <michalporeba@gmail.com>",
@@ -35,7 +35,9 @@
     "node": ">=24"
   },
   "scripts": {
-    "build": "tsup src/index.ts src/node.ts src/browser.ts --format esm,cjs --dts --clean --external better-sqlite3",
+    "build": "npm run build:js && npm run build:types",
+    "build:js": "tsup src/index.ts src/node.ts src/browser.ts --format esm,cjs --clean --external better-sqlite3",
+    "build:types": "tsc -p tsconfig.build.json",
     "check": "tsc --noEmit",
     "demo": "node --import ./scripts/register-ts-node.mjs demo/cli.ts",
     "lint": "eslint .",
@@ -74,7 +76,7 @@
     "prettier": "^3.5.3",
     "ts-node": "^10.9.2",
     "tsup": "^8.3.5",
-    "typescript": "^5.8.3",
+    "typescript": "^6.0.3",
     "typescript-eslint": "^8.28.0",
     "vitest": "^4.1.4"
   },
