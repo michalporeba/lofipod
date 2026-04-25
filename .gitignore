@@ -5,3 +5,6 @@ coverage/
 TODO.md
 WIP.md
 NEXT.md
+.agent/
+.agents/
+.gemini/
