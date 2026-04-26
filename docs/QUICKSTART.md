@@ -12,6 +12,9 @@ You will:
 This example stays local on purpose. It shows the core model first, without
 adding browser persistence or Pod sync yet.
 
+Use the root `lofipod` entrypoint for this example. Browser-only and Node-only
+adapters come later from `lofipod/browser` and `lofipod/node`.
+
 ## What you are building
 
 A tiny local task store with one entity:
@@ -133,8 +136,12 @@ tasks;
 
 ## Next steps
 
+- use the in-repo demo from [../demo/README.md](../demo/README.md) if you want
+  an exact local-first CLI flow without reading source files
 - swap `createMemoryStorage()` for `createIndexedDbStorage(...)` from
   `lofipod/browser` when you want browser persistence
+- use `createSqliteStorage(...)` from `lofipod/node` when you want Node-backed
+  persistence
 - attach a Solid Pod adapter when you want remote durability and background
   sync
 - see [API.md](API.md) for the broader public API direction

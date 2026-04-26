@@ -6,6 +6,10 @@ The first purpose of the demo is not to be a polished showcase. It is a small
 end-to-end application surface that can help validate `lofipod` behaviour over
 time.
 
+It is also the intended first proof of value after reading the quick start:
+run it locally first, without Pod sync, and confirm that the library feels like
+an ordinary local application API before adding remote durability.
+
 The current shape is:
 
 - a command-line-first application that can also gain a TUI shell later
@@ -31,6 +35,35 @@ by default under a cache directory such as:
 
 - `$XDG_CACHE_HOME/lifegraph-demo`
 - or `~/.cache/lifegraph-demo`
+
+## First local run
+
+You do not need a Pod to start.
+
+From the repository root:
+
+```bash
+npm run demo -- task add --title "Prepare April review" --id task-1 --due 2026-04
+npm run demo -- task list
+npm run demo -- task done task-1
+```
+
+If you want an isolated local state directory for inspection:
+
+```bash
+npm run demo -- task add --data-dir /tmp/lofipod-demo --title "Prepare April review" --id task-1 --due 2026-04
+npm run demo -- task list --data-dir /tmp/lofipod-demo
+```
+
+Useful files for the first-run path:
+
+- `demo/README.md`: local and sync command guide
+- `demo/cli.ts`: command surface
+- `demo/app.ts`: demo application wiring
+- `docs/QUICKSTART.md`: minimal public API example
+
+The local-first task flow is the intended first stop. Journal entries and Pod
+sync are follow-on paths once the basic local flow is clear.
 
 ## Sync
 

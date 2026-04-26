@@ -10,6 +10,21 @@ stores canonical remote data as interoperable RDF resources in the user's Pod.
 A SOLID Pod is a user-controlled web data store. RDF is the standard data
 format used for the canonical remote representation.
 
+## First Run
+
+The intended first run is local only.
+
+Start with the framework-agnostic core package, define one entity, create an
+engine, and perform local CRUD without setting up Pod sync first. After that,
+use the in-repo demo to prove the same local-first flow through a small CLI.
+
+The shortest path is:
+
+1. Read [docs/QUICKSTART.md](docs/QUICKSTART.md) for the minimal local API.
+2. Run the local demo commands from [demo/README.md](demo/README.md).
+3. Add browser or Node persistence when needed.
+4. Attach Pod sync later when you want remote durability and replication.
+
 ## The problem
 
 Many apps need fast local reads, offline writes, and a UI that keeps working
@@ -85,6 +100,10 @@ Current entrypoints:
 - `lofipod/browser`: browser-specific adapters such as IndexedDB
 - `lofipod/node`: Node-specific adapters such as SQLite and the Solid adapter
 
+The root `lofipod` entrypoint is intentionally environment-neutral. Do not
+expect `createIndexedDbStorage(...)`, `createSqliteStorage(...)`, or
+`createSolidPodAdapter(...)` to come from the root package.
+
 Node.js `24+` is the current supported runtime target for development and CI.
 
 ## Quick Start
@@ -95,10 +114,22 @@ The smallest useful flow is:
 2. define one entity type and its RDF mapping
 3. create an engine
 4. save and read entities locally
-5. attach Pod sync when you want remote durability and replication
+5. run the in-repo local demo if you want a concrete first proof of value
+6. attach Pod sync when you want remote durability and replication
 
 See [docs/QUICKSTART.md](docs/QUICKSTART.md) for a small end-to-end example using
 `defineVocabulary(...)`, `defineEntity<T>(...)`, and `createEngine(...)`.
+
+For a local-only repo workflow without reading internals:
+
+```bash
+npm run demo -- task add --id task-1 --title "Write docs"
+npm run demo -- task list
+npm run demo -- task done task-1
+```
+
+The demo commands and file layout are documented in
+[demo/README.md](demo/README.md).
 
 ## Project Docs
 
@@ -108,7 +139,7 @@ See [docs/QUICKSTART.md](docs/QUICKSTART.md) for a small end-to-end example usin
 - [docs/TESTING.md](docs/TESTING.md): testing approach, commands, and coverage guardrails
 - [docs/PLANS.md](docs/PLANS.md): delivery slices
 - [docs/WIP.md](docs/WIP.md): current implementation state and open questions
-- [demo/README.md](demo/README.md): in-repo demo app area and ontology seed
+- [demo/README.md](demo/README.md): exact local demo commands, app layout, and ontology seed
 
 ## Why it exists
 
