@@ -216,9 +216,25 @@ export type BootstrapCollision = {
   path: string;
 };
 
+export type BootstrapReconciliation = {
+  entityName: string;
+  entityId: string;
+  path: string;
+  resolution: "merged";
+};
+
+export type BootstrapUnsupported = {
+  entityName: string;
+  entityId: string;
+  path: string;
+  reason: string;
+};
+
 export type BootstrapResult = {
   imported: number;
   skipped: number;
+  reconciled: BootstrapReconciliation[];
+  unsupported: BootstrapUnsupported[];
   collisions: BootstrapCollision[];
 };
 

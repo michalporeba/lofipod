@@ -249,7 +249,7 @@ export async function runCli(
       await attachPodSync(app, options);
       const result = await app.syncBootstrap();
       output.stdout(
-        `imported=${result.imported} skipped=${result.skipped} collisions=${result.collisions.length}`,
+        `imported=${result.imported} skipped=${result.skipped} reconciled=${result.reconciled.length} unsupported=${result.unsupported.length} collisions=${result.collisions.length}`,
       );
       return 0;
     }

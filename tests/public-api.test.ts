@@ -5000,6 +5000,8 @@ describe("mocked entity sync", () => {
     await expect(engine.sync.bootstrap()).resolves.toEqual({
       imported: 1,
       skipped: 0,
+      reconciled: [],
+      unsupported: [],
       collisions: [],
     });
     await expect(engine.get("event", "ev-remote")).resolves.toEqual({
@@ -5107,7 +5109,7 @@ describe("mocked entity sync", () => {
     );
   });
 
-  it("reports collisions instead of overwriting differing local entities during bootstrap", async () => {
+  it("reconciles supported mixed local and remote differences during bootstrap", async () => {
     const { entity } = createEventFixture();
     const remote = createSharedRemoteAdapter();
     remote.canonicalEntities.push({
@@ -5116,7 +5118,7 @@ describe("mocked entity sync", () => {
       path: "events/ev-123.ttl",
       rootUri: "https://example.com/id/event/ev-123",
       rdfType: entity.rdfType,
-      graph: eventGraph("ev-123", "Remote title", 2024),
+      graph: eventGraph("ev-123", "Remote title", 2026),
     });
     const storage = createMemoryStorage();
     const engine = createEngine({
@@ -5139,6 +5141,77 @@ describe("mocked entity sync", () => {
     await expect(engine.sync.bootstrap()).resolves.toEqual({
       imported: 0,
       skipped: 0,
+      reconciled: [
+        {
+          entityName: "event",
+          entityId: "ev-123",
+          path: "events/ev-123.ttl",
+          resolution: "merged",
+        },
+      ],
+      unsupported: [],
+      collisions: [],
+    });
+    await expect(engine.get("event", "ev-123")).resolves.toEqual({
+      id: "ev-123",
+      title: "Remote title",
+      time: {
+        year: 2026,
+      },
+    });
+    await expect(storage.listChanges("event", "ev-123")).resolves.toHaveLength(
+      2,
+    );
+  });
+
+  it("surfaces unsupported mixed-state differences and keeps local state unchanged", async () => {
+    const { entity } = createEventFixture();
+    const remote = createSharedRemoteAdapter();
+    remote.canonicalEntities.push({
+      entityName: "event",
+      entityId: "ev-123",
+      path: "events/ev-123.ttl",
+      rootUri: "https://example.com/id/event/ev-123",
+      rdfType: entity.rdfType,
+      graph: [
+        ...eventGraph("ev-123", "Remote title", 2024),
+        [
+          uri("https://example.com/id/event/ev-123"),
+          uri("https://example.com/ns#title"),
+          "Remote duplicate title",
+        ],
+      ],
+    });
+    const storage = createMemoryStorage();
+    const engine = createEngine({
+      entities: [entity],
+      pod,
+      storage,
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-123",
+      title: "Local title",
+      time: {
+        year: 2025,
+      },
+    });
+
+    await expect(engine.sync.bootstrap()).resolves.toEqual({
+      imported: 0,
+      skipped: 0,
+      reconciled: [],
+      unsupported: [
+        {
+          entityName: "event",
+          entityId: "ev-123",
+          path: "events/ev-123.ttl",
+          reason: "Unsupported multi-value conflict for subject/predicate.",
+        },
+      ],
       collisions: [
         {
           entityName: "event",

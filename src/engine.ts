@@ -315,6 +315,8 @@ export function createEngine(config: EngineConfig): Engine {
             logInfo(logger, "sync:bootstrap", {
               imported: result.imported,
               skipped: result.skipped,
+              reconciled: result.reconciled.length,
+              unsupported: result.unsupported.length,
               collisions: result.collisions.length,
             });
           }

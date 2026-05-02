@@ -122,7 +122,8 @@ and known boundaries for the project.
 - Bootstrap import should be additive by default:
   - import missing local entities
   - skip identical local and remote entities
-  - report differing entities as collisions rather than overwriting either side
+  - reconcile supported bounded local/remote differences deterministically
+  - surface unsupported or unsafe differences explicitly without overwrite
 - Sequential replay of app-private logs is an acceleration path, not the only
   valid remote discovery mechanism.
 - When remote replay reveals concurrent branches for the same entity, the

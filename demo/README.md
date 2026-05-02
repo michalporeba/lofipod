@@ -204,8 +204,10 @@ Bootstrap stays additive by design:
 
 - missing local entities are imported
 - graph-identical local entities are skipped
-- differing local and remote entities are reported as collisions instead of
-  being overwritten automatically
+- supported bounded mixed-state differences are reconciled deterministically
+- unsupported or unsafe mixed-state differences are surfaced explicitly
+- `collisions` remains as the compatibility list of unresolved unsupported
+  entities
 
 That keeps the first remote recovery story small and inspectable while
 preserving the local-first operational model after import.

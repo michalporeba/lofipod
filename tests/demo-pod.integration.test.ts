@@ -345,7 +345,9 @@ describe("demo CLI with Community Solid Server", () => {
         "--pod-base-url",
         solidOpenBaseUrl,
       ]),
-    ).resolves.toMatch(/^imported=\d+ skipped=0 collisions=0$/);
+    ).resolves.toMatch(
+      /^imported=\d+ skipped=0 reconciled=0 unsupported=0 collisions=0$/,
+    );
 
     await expect(
       runDemo(["task", "get", taskId, "--data-dir", dataDir]),

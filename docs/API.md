@@ -348,6 +348,14 @@ The current sync surface supports:
 - bootstrapping local state from canonical remote resources with
   `engine.sync.bootstrap()`
 
+`engine.sync.bootstrap()` currently returns:
+
+- `imported`: remote-only entities imported locally
+- `skipped`: graph-identical entities skipped
+- `reconciled`: supported bounded mixed-state entities auto-merged
+- `unsupported`: mixed-state entities surfaced as unsupported/unsafe
+- `collisions`: compatibility list of unresolved unsupported entities
+
 Important behaviour:
 
 - local saves and deletes complete locally before remote sync
