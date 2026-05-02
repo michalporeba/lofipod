@@ -297,6 +297,83 @@ describe("demo CLI", () => {
     );
   });
 
+  it("proves the documented local-first demo workflow through repeated CLI runs", async () => {
+    const dataDir = await createDataDir();
+
+    await expect(
+      runWithCapturedOutput([
+        "task",
+        "add",
+        "--data-dir",
+        dataDir,
+        "--id",
+        "task-1",
+        "--title",
+        "Prepare April review",
+        "--due",
+        "2026-04",
+      ]),
+    ).resolves.toMatchObject({
+      exitCode: 0,
+      stdout: ["created task-1 [todo] Prepare April review due=2026-04"],
+      stderr: [],
+    });
+
+    await expect(
+      runWithCapturedOutput(["task", "get", "task-1", "--data-dir", dataDir]),
+    ).resolves.toMatchObject({
+      exitCode: 0,
+      stdout: ["task-1 [todo] Prepare April review due=2026-04"],
+      stderr: [],
+    });
+
+    await expect(
+      runWithCapturedOutput(["task", "list", "--data-dir", dataDir]),
+    ).resolves.toMatchObject({
+      exitCode: 0,
+      stdout: ["task-1 [todo] Prepare April review due=2026-04"],
+      stderr: [],
+    });
+
+    await expect(
+      runWithCapturedOutput(["task", "done", "task-1", "--data-dir", dataDir]),
+    ).resolves.toMatchObject({
+      exitCode: 0,
+      stdout: ["completed task-1 [done] Prepare April review due=2026-04"],
+      stderr: [],
+    });
+
+    await expect(
+      runWithCapturedOutput(["task", "get", "task-1", "--data-dir", dataDir]),
+    ).resolves.toMatchObject({
+      exitCode: 0,
+      stdout: ["task-1 [done] Prepare April review due=2026-04"],
+      stderr: [],
+    });
+
+    await expect(
+      runWithCapturedOutput([
+        "task",
+        "delete",
+        "task-1",
+        "--data-dir",
+        dataDir,
+      ]),
+    ).resolves.toMatchObject({
+      exitCode: 0,
+      stdout: ["deleted task-1"],
+      stderr: [],
+    });
+
+    await expect(
+      runWithCapturedOutput(["task", "list", "--data-dir", dataDir]),
+    ).resolves.toMatchObject({
+      exitCode: 0,
+      stdout: ["no tasks"],
+      stderr: [],
+    });
+  });
+
   it("shows help for the top-level command", async () => {
     await expect(runWithCapturedOutput([])).resolves.toMatchObject({
       exitCode: 0,

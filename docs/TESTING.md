@@ -63,7 +63,10 @@ npm run test:demo
 ```
 
 This exercises the CLI demo as an end-to-end smoke test around the packaged
-developer workflow.
+developer workflow. It is the explicit regression harness for the documented
+local-only first-proof path in `demo/README.md`: add, get, list, update, and
+delete a task through repeated CLI runs against the same SQLite-backed data
+directory.
 
 ### 4. Real Pod integration tests
 

@@ -41,6 +41,25 @@ The persisted database file is `state.sqlite` inside that directory. Every
 state is demonstrated by running the next command with the same default
 location or the same explicit `--data-dir`.
 
+## What this demo proves today
+
+The demo is the repo's first proof of value for the local-only path.
+
+Today it proves:
+
+- local entity definition wired into a runnable app
+- local task CRUD through a small CLI surface
+- restart-safe persistence by reopening the same SQLite-backed data directory
+- inspectable local state through `task get` and `task list`
+
+The repeatable verification command is:
+
+```bash
+npm run test:demo
+```
+
+That shell harness exercises the same task workflow documented below.
+
 ## First local run
 
 You do not need a Pod to start.
@@ -75,6 +94,27 @@ That sequence is the intended local durability proof:
 
 Changing `--data-dir` points the demo at a different local store. No Pod
 connection is required for this restart-safe workflow.
+
+## What this first proof does not prove yet
+
+This first-use path does not yet prove:
+
+- Pod sync
+- remote durability
+- multi-device behaviour
+- broader interoperability claims across other Pod-writing applications
+
+Those concerns belong to the later sync-focused epics. The purpose here is to
+confirm that the library already feels like a normal local-first application
+API before any Solid setup is involved.
+
+## How the demo maps to the library API
+
+- `demo/entities.ts`: demo-owned task and journal entity definitions built with `defineEntity(...)`
+- `demo/app.ts`: demo app wiring built with `createEngine(...)` and the Node-specific `createSqliteStorage(...)` adapter path from `lofipod/node`
+- `demo/cli.ts`: CLI scaffolding that calls the demo app
+- `src/`: library implementation rather than demo scaffolding
+- `docs/QUICKSTART.md`: smallest public API example before the demo layer
 
 Useful files for the first-run path:
 

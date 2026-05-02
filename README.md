@@ -21,9 +21,10 @@ use the in-repo demo to prove the same local-first flow through a small CLI.
 The shortest path is:
 
 1. Read [docs/QUICKSTART.md](docs/QUICKSTART.md) for the minimal local API.
-2. Run the local demo commands from [demo/README.md](demo/README.md).
-3. Add browser or Node persistence when needed.
-4. Attach Pod sync later when you want remote durability and replication.
+2. Run the local todo demo workflow from [demo/README.md](demo/README.md).
+3. Verify that workflow with `npm run test:demo`.
+4. Add browser or Node persistence when needed.
+5. Attach Pod sync later when you want remote durability and replication.
 
 ## The problem
 
@@ -120,16 +121,23 @@ The smallest useful flow is:
 See [docs/QUICKSTART.md](docs/QUICKSTART.md) for a small end-to-end example using
 `defineVocabulary(...)`, `defineEntity<T>(...)`, and `createEngine(...)`.
 
-For a local-only repo workflow without reading internals:
+For the repo's explicit first proof of value, use one local data directory and
+run:
 
 ```bash
-npm run demo -- task add --id task-1 --title "Write docs"
-npm run demo -- task list
-npm run demo -- task done task-1
+npm run demo -- task add --data-dir /tmp/lofipod-demo --id task-1 --title "Write docs" --due 2026-04
+npm run demo -- task get task-1 --data-dir /tmp/lofipod-demo
+npm run demo -- task list --data-dir /tmp/lofipod-demo
+npm run demo -- task done task-1 --data-dir /tmp/lofipod-demo
+npm run demo -- task get task-1 --data-dir /tmp/lofipod-demo
+npm run demo -- task delete task-1 --data-dir /tmp/lofipod-demo
+npm run demo -- task list --data-dir /tmp/lofipod-demo
 ```
 
-The demo commands and file layout are documented in
-[demo/README.md](demo/README.md).
+Each command reopens the same SQLite-backed local store, so this sequence is
+the restart-safe local-first proof path. `npm run test:demo` exercises the
+same workflow automatically. The demo commands, scope notes, and file mapping
+are documented in [demo/README.md](demo/README.md).
 
 ## Project Docs
 
@@ -159,7 +167,7 @@ Common commands:
 
 - `npm test`: fast unit and mocked-sync suite
 - `npm run test:coverage`: source coverage report with enforced thresholds
-- `npm run test:demo`: CLI demo regression harness
+- `npm run test:demo`: CLI demo regression harness for the documented local-first proof path
 - `npm run test:pod`: focused Community Solid Server integration suite
 - `npm run verify`: format, lint, types, and the default fast suite
 
