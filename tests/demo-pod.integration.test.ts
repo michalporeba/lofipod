@@ -125,8 +125,90 @@ describe("demo CLI with Community Solid Server", () => {
     return body;
   }
 
+  function expectStatusOutput(
+    output: string,
+    assertions: {
+      status:
+        | "unconfigured"
+        | "offline"
+        | "syncing"
+        | "idle"
+        | "pending"
+        | RegExp;
+      configured: boolean;
+      pending: number;
+      reachable: boolean;
+      notifications: boolean | RegExp;
+      lastSyncedAt: RegExp | "-";
+      lastFailedAt: RegExp | "-";
+      lastFailureReason: RegExp | string;
+    },
+  ): void {
+    const lines = output.split("\n");
+
+    if (assertions.status instanceof RegExp) {
+      expect(lines[0]).toMatch(
+        new RegExp(
+          `^status=${assertions.status.source} configured=${assertions.configured} pending=${assertions.pending}$`,
+        ),
+      );
+    } else {
+      expect(lines[0]).toBe(
+        `status=${assertions.status} configured=${assertions.configured} pending=${assertions.pending}`,
+      );
+    }
+
+    if (assertions.notifications instanceof RegExp) {
+      expect(lines[1]).toMatch(
+        new RegExp(
+          `^connection reachable=${assertions.reachable} notifications=${assertions.notifications.source}$`,
+        ),
+      );
+    } else {
+      expect(lines[1]).toBe(
+        `connection reachable=${assertions.reachable} notifications=${assertions.notifications}`,
+      );
+    }
+
+    if (assertions.lastSyncedAt === "-") {
+      expect(lines[2]).toBe("lastSyncedAt=-");
+    } else {
+      expect(lines[2]).toMatch(
+        new RegExp(`^lastSyncedAt=${assertions.lastSyncedAt.source}$`),
+      );
+    }
+
+    if (assertions.lastFailedAt === "-") {
+      expect(lines[3]).toBe("lastFailedAt=-");
+    } else {
+      expect(lines[3]).toMatch(
+        new RegExp(`^lastFailedAt=${assertions.lastFailedAt.source}$`),
+      );
+    }
+
+    if (assertions.lastFailureReason instanceof RegExp) {
+      expect(lines[4]).toMatch(
+        new RegExp(
+          `^lastFailureReason=${assertions.lastFailureReason.source}$`,
+        ),
+      );
+      return;
+    }
+
+    expect(lines[4]).toBe(`lastFailureReason=${assertions.lastFailureReason}`);
+  }
+
   function expectSyncedOutput(output: string): void {
-    expect(output).toMatch(/^status=(idle|syncing) configured=true pending=0$/);
+    expectStatusOutput(output, {
+      status: /(idle|syncing)/,
+      configured: true,
+      pending: 0,
+      reachable: true,
+      notifications: /(true|false)/,
+      lastSyncedAt: /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/,
+      lastFailedAt: "-",
+      lastFailureReason: "-",
+    });
   }
 
   it("syncs task and journal data from the demo CLI to the open test Pod", async () => {
@@ -166,7 +248,19 @@ describe("demo CLI with Community Solid Server", () => {
 
     await expect(
       runDemo(["sync", "status", "--data-dir", dataDir]),
-    ).resolves.toBe("status=unconfigured configured=false pending=2");
+    ).resolves.toSatisfy((output: string) => {
+      expectStatusOutput(output, {
+        status: "unconfigured",
+        configured: false,
+        pending: 2,
+        reachable: false,
+        notifications: false,
+        lastSyncedAt: "-",
+        lastFailedAt: "-",
+        lastFailureReason: "-",
+      });
+      return true;
+    });
 
     await expect(
       runDemo([
@@ -177,7 +271,19 @@ describe("demo CLI with Community Solid Server", () => {
         "--pod-base-url",
         solidOpenBaseUrl,
       ]),
-    ).resolves.toBe("status=syncing configured=true pending=2");
+    ).resolves.toSatisfy((output: string) => {
+      expectStatusOutput(output, {
+        status: "syncing",
+        configured: true,
+        pending: 2,
+        reachable: false,
+        notifications: /(true|false)/,
+        lastSyncedAt: "-",
+        lastFailedAt: "-",
+        lastFailureReason: "-",
+      });
+      return true;
+    });
 
     const firstSyncOutput = await runDemo([
       "sync",
@@ -207,7 +313,10 @@ describe("demo CLI with Community Solid Server", () => {
         "--pod-base-url",
         solidOpenBaseUrl,
       ]),
-    ).resolves.toMatch(/^status=(idle|syncing) configured=true pending=0$/);
+    ).resolves.toSatisfy((output: string) => {
+      expectSyncedOutput(output);
+      return true;
+    });
 
     const entryResponse = await fetch(
       new URL(`journal-entries/${entryId}.ttl`, solidOpenBaseUrl),

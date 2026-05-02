@@ -1617,6 +1617,13 @@ describe("sync state", () => {
         status: "unconfigured",
         configured: false,
         pendingChanges: 0,
+        connection: {
+          reachable: false,
+          notificationsActive: false,
+          lastSyncedAt: null,
+          lastFailedAt: null,
+          lastFailureReason: null,
+        },
       }),
     );
   });
@@ -1650,6 +1657,13 @@ describe("sync state", () => {
         status: "pending",
         configured: true,
         pendingChanges: 1,
+        connection: {
+          reachable: false,
+          notificationsActive: false,
+          lastSyncedAt: null,
+          lastFailedAt: null,
+          lastFailureReason: null,
+        },
       }),
     );
   });
@@ -1684,6 +1698,13 @@ describe("sync state", () => {
         status: "pending",
         configured: true,
         pendingChanges: 2,
+        connection: {
+          reachable: false,
+          notificationsActive: false,
+          lastSyncedAt: null,
+          lastFailedAt: null,
+          lastFailureReason: null,
+        },
       }),
     );
   });
@@ -1735,6 +1756,13 @@ describe("sync state", () => {
         status: "pending",
         configured: true,
         pendingChanges: 1,
+        connection: {
+          reachable: false,
+          notificationsActive: false,
+          lastSyncedAt: null,
+          lastFailedAt: null,
+          lastFailureReason: null,
+        },
       }),
     );
   });
@@ -1760,6 +1788,13 @@ describe("sync state", () => {
         status: "idle",
         configured: true,
         pendingChanges: 0,
+        connection: {
+          reachable: false,
+          notificationsActive: false,
+          lastSyncedAt: null,
+          lastFailedAt: null,
+          lastFailureReason: null,
+        },
       }),
     );
   });
@@ -1838,6 +1873,13 @@ describe("sync state", () => {
           status: "syncing",
           configured: true,
           pendingChanges: 1,
+          connection: {
+            reachable: false,
+            notificationsActive: false,
+            lastSyncedAt: null,
+            lastFailedAt: null,
+            lastFailureReason: null,
+          },
         }),
       );
     });

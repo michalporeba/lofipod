@@ -81,4 +81,10 @@ The task example above matches the current canonical task resource the demo
 projects to the Pod. Task resources stay intentionally shallow and do not carry
 journal-only metadata such as `dct:created` or `dct:modified`.
 
+For Story 2's sync inspection path, the important point is that this Turtle is
+the current Solid-specific canonical output of the demo's task mapping, not a
+special core-only debug format. Inspecting `tasks/<id>.ttl` lets a developer
+see user-controlled Pod data directly while the `lofipod` core stays
+storage-agnostic and adapter-driven.
+
 See [lifegraph-demo.ttl](lifegraph-demo.ttl) for the ontology draft itself.

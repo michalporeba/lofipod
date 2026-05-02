@@ -193,6 +193,71 @@ library's long-lived attached-engine model, retry happens in the background
 when connectivity returns; in this demo, later `sync` commands resume that
 work without requiring you to reconstruct local changes by hand.
 
+### Inspecting sync state
+
+`sync status` is the demo's supported inspection path for the library's public
+`engine.sync.state()` surface. It reports:
+
+- `status`, `configured`, and `pending` on the first line
+- the last known connection fields on the following lines:
+  - `reachable`
+  - `notifications`
+  - `lastSyncedAt`
+  - `lastFailedAt`
+  - `lastFailureReason`
+
+Unset values are rendered as `-`. This output is intentionally a thin
+presentation of the public sync-state contract, not a demo-only diagnostics
+model.
+
+Example before any Pod attachment:
+
+```text
+status=unconfigured configured=false pending=1
+connection reachable=false notifications=false
+lastSyncedAt=-
+lastFailedAt=-
+lastFailureReason=-
+```
+
+Example after a successful sync:
+
+```text
+status=idle configured=true pending=0
+connection reachable=true notifications=false
+lastSyncedAt=2026-05-02T12:00:00.000Z
+lastFailedAt=-
+lastFailureReason=-
+```
+
+`reachable` is the last known sync result, not a foreground liveness probe.
+The local-first commands still work even when the last known remote state is
+offline.
+
+### Inspecting canonical Pod output
+
+The demo's canonical Pod output is Solid-specific transport state layered on
+top of the storage-agnostic `lofipod` core. The core library remains local-
+first and adapter-driven; the canonical Turtle path below is specific to the
+current Solid Pod adapter and the demo's task mapping.
+
+To inspect a synced task resource:
+
+1. create or update a task locally
+2. run `sync now --data-dir <dir> --pod-base-url <url>`
+3. read `tasks/<id>.ttl` from the target Pod
+
+The canonical task Turtle should contain:
+
+- the task subject URI `https://michalporeba.com/demo/id/task/<id>`
+- RDF type `mlg:Task`
+- `schema:name` for the task title
+- `mlg:status` pointing at `mlg:Todo` or `mlg:Done`
+- optional `mlg:due` with datatype `mlg:edtf`
+
+Task resources intentionally do not include journal-only fields such as
+`dct:created` or `dct:modified`.
+
 ### Fresh-local recovery
 
 `sync bootstrap` is the explicit first-attach recovery tool for a fresh local

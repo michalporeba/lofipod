@@ -70,6 +70,22 @@ function formatJournalEntry(entry: JournalEntry): string {
   return `${entry.id} date=${entry.entryDate}${related} ${entry.title}`;
 }
 
+function formatNullableValue(value: string | null): string {
+  return value ?? "-";
+}
+
+function formatSyncStateOutput(
+  state: Awaited<ReturnType<DemoApp["syncState"]>>,
+): string {
+  return [
+    `status=${state.status} configured=${state.configured} pending=${state.pendingChanges}`,
+    `connection reachable=${state.connection.reachable} notifications=${state.connection.notificationsActive}`,
+    `lastSyncedAt=${formatNullableValue(state.connection.lastSyncedAt)}`,
+    `lastFailedAt=${formatNullableValue(state.connection.lastFailedAt)}`,
+    `lastFailureReason=${formatNullableValue(state.connection.lastFailureReason)}`,
+  ].join("\n");
+}
+
 export function renderHelp(): string {
   return [
     "lifegraph-demo",
@@ -239,9 +255,7 @@ export async function runCli(
       }
 
       const state = await app.syncState();
-      output.stdout(
-        `status=${state.status} configured=${state.configured} pending=${state.pendingChanges}`,
-      );
+      output.stdout(formatSyncStateOutput(state));
       return 0;
     }
 
@@ -258,9 +272,7 @@ export async function runCli(
       await attachPodSync(app, options);
       await app.syncNow();
       const state = await app.syncState();
-      output.stdout(
-        `status=${state.status} configured=${state.configured} pending=${state.pendingChanges}`,
-      );
+      output.stdout(formatSyncStateOutput(state));
       return 0;
     }
 
