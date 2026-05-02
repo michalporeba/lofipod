@@ -275,7 +275,7 @@ GPT-5 Codex
 
 ### Debug Log References
 
-- `python3 /media/michal/data/code/lofipod/_bmad/scripts/resolve_customization.py --skill /media/michal/data/code/lofipod/.agents/skills/bmad-create-story --key workflow`
+- `python3 /media/michal/data/code/lofipod/_bmad/scripts/resolve_customization.py --skill /media/michal/data/code/lofipod/.agents/skills/bmad-dev-story --key workflow`
 - `cat README.md`
 - `cat docs/ADR.md`
 - `cat docs/API.md`
@@ -319,6 +319,7 @@ GPT-5 Codex
 - Added Pod integration coverage that proves polling-based background retry projects preserved local changes after temporary Pod failure without manual recovery steps.
 - Updated the demo README to explain offline degradation and later background resumption as the normal operating model.
 - Verified the story with `npm run verify`, `npm run build`, `npm run test:demo`, and `npm run test:pod`.
+- Tightened the Story 2.5 regressions so they prove non-blocking local CRUD during slow sync failure, polling-driven recovery after attach, and preserved delete projection after reconnect.
 
 ### File List
 
@@ -331,4 +332,4 @@ GPT-5 Codex
 ## Change Log
 
 - 2026-05-02: Created Story 2.5 with implementation context for offline local use and reconnect recovery.
-- 2026-05-02: Added offline CRUD and reconnect retry regression coverage, updated demo guidance, and moved the story to review.
+- 2026-05-02: Added offline CRUD and reconnect retry regression coverage, updated demo guidance, moved the story to review, and tightened the proofs after adversarial review.

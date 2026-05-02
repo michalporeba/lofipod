@@ -183,12 +183,15 @@ Node-side Pod adapter.
 
 Temporary Pod or network failure is expected to degrade to continued local
 use, not application failure. The demo's local CRUD commands still commit to
-the same SQLite-backed state first, and pending sync work is retried later by
-the normal background flow when connectivity returns.
+the same SQLite-backed state first, so interruption does not block ordinary
+task or journal edits.
 
-That means ordinary use does not require manual sync choreography to preserve
-local changes. `sync now` and `sync status` are inspection and forcing tools,
-not required steps for day-to-day local task entry.
+This CLI demo is process-based rather than a long-lived app shell. Ordinary
+`task ...` and `journal ...` commands stay local, while `sync ...` commands
+reattach the Pod adapter against the same persisted local state. In the
+library's long-lived attached-engine model, retry happens in the background
+when connectivity returns; in this demo, later `sync` commands resume that
+work without requiring you to reconstruct local changes by hand.
 
 ### Fresh-local recovery
 

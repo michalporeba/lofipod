@@ -1917,41 +1917,65 @@ describe("sync state", () => {
     );
   });
 
-  it("keeps local CRUD working while background sync is offline", async () => {
+  it("keeps local CRUD non-blocking during slow sync failure and preserves a later delete", async () => {
     const { entity } = createEventFixture();
+    const saveFailureGate = createDeferred<void>();
+    const deleteFailureGate = createDeferred<void>();
+    const deletionAttempts: string[] = [];
+    const logRequests: Array<{
+      entityId: string;
+      assertions: Triple[];
+      retractions: Triple[];
+    }> = [];
+    let phase: "save" | "delete" | "recover" = "save";
     const engine = createEngine({
       entities: [entity],
       pod,
       sync: {
         adapter: {
           async applyEntityPatch() {
-            throw new Error("temporary network failure");
+            if (phase === "save") {
+              await saveFailureGate.promise;
+              throw new Error("temporary network failure");
+            }
+
+            throw new Error("save patch should not be retried after delete");
           },
-          async deleteEntityResource() {
-            throw new Error("temporary network failure");
+          async deleteEntityResource(request) {
+            deletionAttempts.push(request.path);
+
+            if (phase === "delete") {
+              await deleteFailureGate.promise;
+              throw new Error("temporary network failure");
+            }
           },
-          async appendLogEntry() {
-            throw new Error("temporary network failure");
+          async appendLogEntry(request) {
+            logRequests.push({
+              entityId: request.entityId,
+              assertions: request.assertions,
+              retractions: request.retractions,
+            });
           },
         },
       },
     });
 
     await expect(
-      engine.save("event", {
-        id: "ev-local-only",
-        title: "Local-first",
-        time: {
-          year: 2024,
-        },
-      }),
-    ).resolves.toEqual({
-      id: "ev-local-only",
-      title: "Local-first",
-      time: {
-        year: 2024,
-      },
-    });
+      Promise.race([
+        engine
+          .save("event", {
+            id: "ev-local-only",
+            title: "Local-first",
+            time: {
+              year: 2024,
+            },
+          })
+          .then(() => "saved"),
+        new Promise<string>((resolve) => {
+          setTimeout(() => resolve("timeout"), 50);
+        }),
+      ]),
+    ).resolves.toBe("saved");
 
     await expect(engine.get("event", "ev-local-only")).resolves.toEqual({
       id: "ev-local-only",
@@ -1970,6 +1994,7 @@ describe("sync state", () => {
       },
     ]);
 
+    saveFailureGate.resolve();
     await waitForExpectation(async () => {
       await expect(engine.sync.state()).resolves.toEqual(
         expectedSyncState({
@@ -1985,59 +2010,69 @@ describe("sync state", () => {
       );
     });
 
+    phase = "delete";
     await expect(
-      engine.delete("event", "ev-local-only"),
-    ).resolves.toBeUndefined();
+      Promise.race([
+        engine.delete("event", "ev-local-only").then(() => "deleted"),
+        new Promise<string>((resolve) => {
+          setTimeout(() => resolve("timeout"), 50);
+        }),
+      ]),
+    ).resolves.toBe("deleted");
     await expect(engine.get("event", "ev-local-only")).resolves.toBeNull();
     await expect(engine.list("event")).resolves.toEqual([]);
 
+    deleteFailureGate.resolve();
     await waitForExpectation(async () => {
-      const state = await engine.sync.state();
-
-      expect(state.status).toBe("offline");
-      expect(state.configured).toBe(true);
-      expect(state.pendingChanges).toBeGreaterThan(0);
-      expect(state.connection.reachable).toBe(false);
-      expect(state.connection.lastFailedAt).toMatch(ISO_TIMESTAMP_PATTERN);
-      expect(state.connection.lastFailureReason).toBe(
-        "temporary network failure",
+      await expect(engine.sync.state()).resolves.toEqual(
+        expectedSyncState({
+          status: "offline",
+          configured: true,
+          pendingChanges: 1,
+          connection: {
+            reachable: false,
+            lastFailedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+            lastFailureReason: "temporary network failure",
+          },
+        }),
       );
     });
+
+    phase = "recover";
+    await expect(engine.sync.now()).resolves.toBeUndefined();
+
+    expect(deletionAttempts).toEqual([
+      "events/ev-local-only.ttl",
+      "events/ev-local-only.ttl",
+    ]);
+    expect(logRequests).toHaveLength(1);
+    expect(logRequests[0]).toMatchObject({
+      entityId: "ev-local-only",
+      assertions: [],
+    });
+    expect(logRequests[0]?.retractions).toHaveLength(4);
+    await expect(engine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "idle",
+        configured: true,
+        pendingChanges: 0,
+        connection: {
+          reachable: true,
+          lastSyncedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+        },
+      }),
+    );
   });
 
-  it("retries preserved pending changes automatically after polling detects recovery", async () => {
+  it("retries preserved pending changes automatically on a later poll after attach recovers", async () => {
     const { entity } = createEventFixture();
-    let shouldFail = true;
-    let patchAttempts = 0;
-    let logAttempts = 0;
     const engine = createEngine({
       entities: [entity],
       pod,
-      sync: {
-        adapter: {
-          async applyEntityPatch(request) {
-            patchAttempts += 1;
-
-            if (shouldFail) {
-              throw new Error("temporary network failure");
-            }
-
-            expect(request.path).toBe("events/ev-poll-retry.ttl");
-          },
-          async appendLogEntry(request) {
-            logAttempts += 1;
-
-            if (shouldFail) {
-              throw new Error("temporary network failure");
-            }
-
-            expect(request.entityId).toBe("ev-poll-retry");
-          },
-          subscribeToContainer: undefined,
-        },
-        pollIntervalMs: 25,
-      },
     });
+    let shouldFail = true;
+    let patchAttempts = 0;
+    let logAttempts = 0;
 
     await engine.save("event", {
       id: "ev-poll-retry",
@@ -2047,6 +2082,28 @@ describe("sync state", () => {
       },
     });
 
+    await engine.sync.attach({
+      adapter: {
+        async applyEntityPatch(request) {
+          patchAttempts += 1;
+
+          if (shouldFail) {
+            throw new Error("temporary network failure");
+          }
+
+          expect(request.path).toBe("events/ev-poll-retry.ttl");
+        },
+        async appendLogEntry(request) {
+          logAttempts += 1;
+          expect(request.entityId).toBe("ev-poll-retry");
+        },
+        subscribeToContainer: undefined,
+      },
+      podBaseUrl: "https://pod.example/",
+      logBasePath: pod.logBasePath!,
+      pollIntervalMs: 100,
+    });
+
     await waitForExpectation(async () => {
       await expect(engine.sync.state()).resolves.toEqual(
         expectedSyncState({
@@ -2060,9 +2117,10 @@ describe("sync state", () => {
           },
         }),
       );
+      expect(patchAttempts).toBe(1);
+      expect(logAttempts).toBe(0);
     });
 
-    expect(patchAttempts).toBeGreaterThan(0);
     shouldFail = false;
 
     await waitForExpectation(async () => {
@@ -2077,7 +2135,7 @@ describe("sync state", () => {
           },
         }),
       );
-      expect(patchAttempts).toBeGreaterThan(1);
+      expect(patchAttempts).toBe(2);
       expect(logAttempts).toBe(1);
     }, 5_000);
   });

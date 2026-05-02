@@ -208,39 +208,21 @@ describe("Community Solid Server auto sync", () => {
     }, 15_000);
   }, 30_000);
 
-  it("retries pending local changes automatically after temporary Pod failure", async () => {
+  it("retries pending local changes automatically on a later poll after attach recovers", async () => {
     const entityId = `ev-reconnect-${runId}`;
     const basePath = `events-reconnect-${runId}/`;
     const logBasePath = `apps/reconnect-${runId}/log/`;
     const entity = createScopedEntity(basePath);
     const adapter = createPollingOnlyAdapter();
     let shouldFail = true;
+    let patchAttempts = 0;
+    const appendedPaths: string[] = [];
     const engine = createEngine({
       entities: [entity],
       pod: {
         logBasePath,
       },
       storage: createMemoryStorage(),
-      sync: {
-        adapter: {
-          ...adapter,
-          async applyEntityPatch(request) {
-            if (shouldFail) {
-              throw new Error("temporary Pod outage");
-            }
-
-            await adapter.applyEntityPatch(request);
-          },
-          async appendLogEntry(request) {
-            if (shouldFail) {
-              throw new Error("temporary Pod outage");
-            }
-
-            await adapter.appendLogEntry(request);
-          },
-        },
-        pollIntervalMs: 250,
-      },
     });
 
     await engine.save("event", {
@@ -249,6 +231,28 @@ describe("Community Solid Server auto sync", () => {
       time: {
         year: 2029,
       },
+    });
+
+    await engine.sync.attach({
+      adapter: {
+        ...adapter,
+        async applyEntityPatch(request) {
+          patchAttempts += 1;
+
+          if (shouldFail) {
+            throw new Error("temporary Pod outage");
+          }
+
+          await adapter.applyEntityPatch(request);
+        },
+        async appendLogEntry(request) {
+          appendedPaths.push(request.path);
+          await adapter.appendLogEntry(request);
+        },
+      },
+      podBaseUrl: solidOpenBaseUrl,
+      logBasePath,
+      pollIntervalMs: 250,
     });
 
     await waitForExpectation(async () => {
@@ -260,6 +264,8 @@ describe("Community Solid Server auto sync", () => {
           lastFailureReason: "temporary Pod outage",
         },
       });
+      expect(patchAttempts).toBe(1);
+      expect(appendedPaths).toHaveLength(0);
     });
 
     shouldFail = false;
@@ -275,6 +281,8 @@ describe("Community Solid Server auto sync", () => {
     }, 15_000);
 
     await waitForExpectation(async () => {
+      expect(patchAttempts).toBe(2);
+      expect(appendedPaths).toHaveLength(1);
       await expect(engine.sync.state()).resolves.toMatchObject({
         status: "idle",
         pendingChanges: 0,
