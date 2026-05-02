@@ -20,6 +20,7 @@ import {
   createRemoteProjectionHelpers,
   inferRootUri,
   rememberObservedRemoteChangeIds,
+  requireLogBasePath,
 } from "./support.js";
 
 export async function bootstrapFromCanonicalResources(
@@ -165,7 +166,9 @@ export async function bootstrapFromCanonicalResources(
     }
   }
 
-  const remoteEntries = await config.sync?.adapter.listLogEntries?.();
+  const remoteEntries = await config.sync?.adapter.listLogEntries?.({
+    logBasePath: requireLogBasePath(config),
+  });
 
   if (remoteEntries) {
     await rememberObservedRemoteChangeIds(

@@ -2860,6 +2860,13 @@ describe("logging", () => {
         }
 
         if (
+          method === "GET" &&
+          url === "https://pod.example/apps/my-journal/log/"
+        ) {
+          return new Response("", { status: 404 });
+        }
+
+        if (
           method === "HEAD" &&
           url === "https://pod.example/events/ev-logger.ttl"
         ) {
@@ -2998,6 +3005,13 @@ describe("logging", () => {
         }
 
         if (method === "GET" && url === "https://pod.example/events/") {
+          return new Response("", { status: 404 });
+        }
+
+        if (
+          method === "GET" &&
+          url === "https://pod.example/apps/my-journal/log/"
+        ) {
           return new Response("", { status: 404 });
         }
 

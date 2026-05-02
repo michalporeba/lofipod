@@ -6,6 +6,7 @@ import { replayRemoteLogEntries } from "./remote-pull.js";
 import { syncPendingChanges } from "./remote-push.js";
 
 export { bootstrapFromCanonicalResources } from "./remote-bootstrap.js";
+export { replayRemoteLogEntries } from "./remote-pull.js";
 
 export async function syncNow(
   storage: EngineStorage,

@@ -57,6 +57,7 @@ export function parseCanonicalTriples(
 export function parseContainedResourcePaths(
   containerBody: string,
   containerUrl: string,
+  options: { includeContainers?: boolean } = {},
 ) {
   const paths = new Set<string>();
   const quads = parseRdf(containerBody, {
@@ -75,9 +76,17 @@ export function parseContainedResourcePaths(
 
     const resourceUrl = new URL(quad.object.value, containerUrl);
 
-    if (!resourceUrl.pathname.endsWith("/")) {
-      paths.add(resourceUrl.pathname.replace(/^\/+/, ""));
+    const path = resourceUrl.pathname.replace(/^\/+/, "");
+
+    if (resourceUrl.pathname.endsWith("/")) {
+      if (options.includeContainers) {
+        paths.add(path);
+      }
+
+      continue;
     }
+
+    paths.add(path);
   }
 
   return Array.from(paths);

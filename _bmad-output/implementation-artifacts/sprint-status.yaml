@@ -35,31 +35,31 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-04-26T13:37:20+01:00"
-last_updated: "2026-05-02T14:10:33+01:00"
+last_updated: "2026-05-02T22:00:00+01:00"
 project: "lofipod"
 project_key: "NOKEY"
 tracking_system: "file-system"
 story_location: "{project-root}/_bmad-output/implementation-artifacts"
 
 development_status:
-  epic-1: in-progress
+  epic-1: done
   1-1-explain-the-local-first-promise-and-first-run-path: done
-  1-2-define-a-todo-entity-through-the-local-public-api: review
-  1-3-build-local-crud-for-the-in-repo-todo-demo: review
-  1-4-persist-the-todo-demo-across-restart: review
-  1-5-verify-and-document-the-todo-demo-as-the-first-proof-of-value: review
+  1-2-define-a-todo-entity-through-the-local-public-api: done
+  1-3-build-local-crud-for-the-in-repo-todo-demo: done
+  1-4-persist-the-todo-demo-across-restart: done
+  1-5-verify-and-document-the-todo-demo-as-the-first-proof-of-value: done
   epic-1-retrospective: optional
-  epic-2: in-progress
-  2-1-attach-pod-sync-to-the-todo-demo-without-changing-local-crud: review
-  2-2-add-todo-ontology-mapping-and-project-canonical-pod-resources: review
-  2-3-import-pod-backed-todo-data-into-fresh-local-state: review
-  2-4-handle-first-attach-when-local-and-remote-todo-data-both-exist: review
-  2-5-keep-local-use-working-through-offline-and-reconnect-cycles: review
-  2-6-show-inspectable-sync-state-and-canonical-pod-output: review
-  2-7-demonstrate-multi-device-todo-consistency-through-the-in-repo-workflow: backlog
+  epic-2: done
+  2-1-attach-pod-sync-to-the-todo-demo-without-changing-local-crud: done
+  2-2-add-todo-ontology-mapping-and-project-canonical-pod-resources: done
+  2-3-import-pod-backed-todo-data-into-fresh-local-state: done
+  2-4-handle-first-attach-when-local-and-remote-todo-data-both-exist: done
+  2-5-keep-local-use-working-through-offline-and-reconnect-cycles: done
+  2-6-show-inspectable-sync-state-and-canonical-pod-output: done
+  2-7-demonstrate-multi-device-todo-consistency-through-the-in-repo-workflow: done
   epic-2-retrospective: optional
-  epic-3: backlog
-  3-1-replay-compatible-remote-changes-from-another-lofipod-client: backlog
+  epic-3: in-progress
+  3-1-replay-compatible-remote-changes-from-another-lofipod-client: ready-for-dev
   3-2-reconcile-supported-canonical-remote-changes-after-attach: backlog
   3-3-detect-and-classify-unsupported-or-unsafe-remote-edits: backlog
   3-4-apply-documented-policy-responses-to-unsupported-remote-changes: backlog

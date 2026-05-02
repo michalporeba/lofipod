@@ -12,7 +12,9 @@ const solidOpenBaseUrl =
   process.env.SOLID_OPEN_BASE_URL ?? "http://localhost:3400/";
 
 describe("Community Solid Server canonical reconciliation", () => {
-  const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  function createRunId(): string {
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
 
   beforeAll(async () => {
     await waitForSolidServer(solidOpenBaseUrl);
@@ -124,6 +126,7 @@ describe("Community Solid Server canonical reconciliation", () => {
 
   function createSyncedEngine() {
     const { entity } = createEventFixture();
+    const runId = createRunId();
     const basePath = `events-${runId}/`;
     const logBasePath = `apps/my-journal-${runId}/log/`;
     const realAdapter = createSolidPodAdapter({
@@ -158,6 +161,7 @@ describe("Community Solid Server canonical reconciliation", () => {
   }
 
   it("reconciles an external canonical update and then appends it to the log", async () => {
+    const runId = createRunId();
     const entityId = `ev-external-update-${runId}`;
     const { engine, pod } = createSyncedEngine();
 
@@ -207,6 +211,7 @@ describe("Community Solid Server canonical reconciliation", () => {
   }, 30_000);
 
   it("imports a newly created external canonical resource during sync", async () => {
+    const runId = createRunId();
     const entityId = `ev-external-create-${runId}`;
     const { engine, pod } = createSyncedEngine();
 
@@ -242,6 +247,7 @@ describe("Community Solid Server canonical reconciliation", () => {
   }, 30_000);
 
   it("removes a local entity when its canonical resource is deleted externally", async () => {
+    const runId = createRunId();
     const entityId = `ev-external-delete-${runId}`;
     const { engine, pod } = createSyncedEngine();
 

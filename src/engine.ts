@@ -17,7 +17,13 @@ import {
 } from "./engine/local.js";
 import { createNotificationManager } from "./engine/notifications.js";
 import { createPollingManager } from "./engine/polling.js";
-import { bootstrapFromCanonicalResources, syncNow } from "./engine/remote.js";
+import {
+  bootstrapFromCanonicalResources,
+  replayRemoteLogEntries,
+  syncNow,
+} from "./engine/remote.js";
+import { reconcileCanonicalResources } from "./engine/remote-canonical.js";
+import { syncPendingChanges } from "./engine/remote-push.js";
 import {
   createRuntimeSyncState,
   persistSyncFailure,
@@ -40,6 +46,9 @@ export function createEngine(config: EngineConfig): Engine {
   let currentPodConfig = createRuntimePodConfig(config.pod);
   let currentSyncConfig = config.sync;
   let queuedSync = Promise.resolve();
+  let pendingInitialSyncTimer: ReturnType<typeof setTimeout> | null = null;
+  let pendingBackgroundSyncTimer: ReturnType<typeof setTimeout> | null = null;
+  let startupSyncGeneration = 0;
   const runtimeSyncState = createRuntimeSyncState();
   const syncStateListeners = new Set<(state: SyncState) => void>();
   let lastEmittedSyncState = "";
@@ -132,6 +141,46 @@ export function createEngine(config: EngineConfig): Engine {
     }
   };
 
+  const runStartupSyncCycle = async (
+    expectedGeneration: number,
+  ): Promise<void> => {
+    if (!currentSyncConfig) {
+      return;
+    }
+
+    setSyncing(true);
+
+    try {
+      await syncPendingChanges(storage, entities, runtimeConfig());
+      await replayRemoteLogEntries(storage, entities, runtimeConfig());
+      await new Promise((resolve) => {
+        setTimeout(resolve, 0);
+      });
+
+      if (expectedGeneration !== startupSyncGeneration) {
+        return;
+      }
+
+      await reconcileCanonicalResources(storage, entities, runtimeConfig());
+      await persistSyncSuccess(storage, createTimestamp());
+      emitSyncStateChange();
+    } catch (error) {
+      await persistSyncFailure(
+        storage,
+        createTimestamp(),
+        error instanceof Error ? error.message : String(error),
+      );
+      if (logger) {
+        logWarn(logger, "sync:startup-failure", {
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      }
+      emitSyncStateChange();
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const enqueueSyncCycle = (): Promise<void> => {
     const task = queuedSync
       .catch(() => {
@@ -158,7 +207,48 @@ export function createEngine(config: EngineConfig): Engine {
       return;
     }
 
-    void runSyncNow(true);
+    if (pendingBackgroundSyncTimer !== null) {
+      clearTimeout(pendingBackgroundSyncTimer);
+    }
+
+    pendingBackgroundSyncTimer = setTimeout(() => {
+      pendingBackgroundSyncTimer = null;
+      void runSyncNow(true);
+    }, 0);
+  };
+  const clearPendingInitialSync = (): void => {
+    if (pendingInitialSyncTimer === null) {
+      return;
+    }
+
+    clearTimeout(pendingInitialSyncTimer);
+    pendingInitialSyncTimer = null;
+  };
+  const clearPendingBackgroundSync = (): void => {
+    if (pendingBackgroundSyncTimer === null) {
+      return;
+    }
+
+    clearTimeout(pendingBackgroundSyncTimer);
+    pendingBackgroundSyncTimer = null;
+  };
+  const scheduleInitialSync = (): void => {
+    if (
+      pendingInitialSyncTimer !== null ||
+      !currentSyncConfig ||
+      !currentPodConfig?.logBasePath
+    ) {
+      return;
+    }
+
+    pendingInitialSyncTimer = setTimeout(() => {
+      pendingInitialSyncTimer = null;
+      const generation = startupSyncGeneration;
+      void runStartupSyncCycle(generation);
+    }, 0);
+  };
+  const supersedeStartupSync = (): void => {
+    startupSyncGeneration += 1;
   };
   const notifications = createNotificationManager({
     entities,
@@ -176,11 +266,14 @@ export function createEngine(config: EngineConfig): Engine {
   if (currentSyncConfig && currentPodConfig?.logBasePath) {
     void notifications.start();
     polling.start();
-    queueBackgroundSync();
+    scheduleInitialSync();
   }
 
   return {
     async save<T>(entityName: string, entity: T): Promise<T> {
+      supersedeStartupSync();
+      clearPendingInitialSync();
+      clearPendingBackgroundSync();
       const saved = await saveEntity(
         storage,
         requireEntity(entityName) as EntityDefinition<T>,
@@ -194,12 +287,18 @@ export function createEngine(config: EngineConfig): Engine {
     },
 
     async delete(entityName: string, id: string): Promise<void> {
+      supersedeStartupSync();
+      clearPendingInitialSync();
+      clearPendingBackgroundSync();
       await deleteEntity(storage, requireEntity(entityName), id);
       emitSyncStateChange();
       queueBackgroundSync();
     },
 
     async dispose(): Promise<void> {
+      supersedeStartupSync();
+      clearPendingInitialSync();
+      clearPendingBackgroundSync();
       polling.stop();
       await notifications.stop();
     },
@@ -225,6 +324,8 @@ export function createEngine(config: EngineConfig): Engine {
 
     sync: {
       async attach(syncConfig): Promise<void> {
+        clearPendingInitialSync();
+        clearPendingBackgroundSync();
         currentPodConfig = {
           podBaseUrl: syncConfig.podBaseUrl,
           logBasePath: normalizeLogBasePath(syncConfig.logBasePath),
@@ -249,9 +350,11 @@ export function createEngine(config: EngineConfig): Engine {
           });
         });
 
-        await notifications.start();
-        polling.start();
-        queueBackgroundSync();
+        if (syncConfig.startBackground !== false) {
+          await notifications.start();
+          polling.start();
+          scheduleInitialSync();
+        }
         if (logger) {
           logInfo(logger, "sync:attached", {
             podBaseUrl: syncConfig.podBaseUrl,
@@ -262,6 +365,9 @@ export function createEngine(config: EngineConfig): Engine {
       },
 
       async detach(): Promise<void> {
+        supersedeStartupSync();
+        clearPendingInitialSync();
+        clearPendingBackgroundSync();
         polling.stop();
         await notifications.stop();
         currentPodConfig = undefined;
@@ -298,12 +404,30 @@ export function createEngine(config: EngineConfig): Engine {
       },
 
       async now(): Promise<void> {
+        supersedeStartupSync();
+        clearPendingInitialSync();
+        clearPendingBackgroundSync();
         return runSyncNow(false);
       },
 
       async bootstrap(): Promise<BootstrapResult> {
         if (!currentSyncConfig) {
           throw new Error("Sync adapter is not attached.");
+        }
+
+        const pendingChanges = storage.listPendingChanges
+          ? await storage.listPendingChanges()
+          : (await storage.listChanges()).filter(
+              (change) => !change.entityProjected || !change.logProjected,
+            );
+
+        if (pendingChanges.length > 0) {
+          clearPendingInitialSync();
+          clearPendingBackgroundSync();
+        } else {
+          await new Promise((resolve) => {
+            setTimeout(resolve, 0);
+          });
         }
 
         return bootstrapFromCanonicalResources(

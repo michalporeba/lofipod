@@ -27,6 +27,7 @@ export type DemoPodSyncOptions = {
   logBasePath?: string;
   authorization?: string;
   fetch?: typeof fetch;
+  startBackground?: boolean;
 };
 
 type CreateDemoPodSyncOptions = {
@@ -127,6 +128,7 @@ export function createDemoApp(options: CreateDemoAppOptions = {}): DemoApp {
         }),
         podBaseUrl: syncOptions.pod.podBaseUrl,
         logBasePath: syncOptions.pod.logBasePath,
+        startBackground: options.startBackground,
       });
     },
 

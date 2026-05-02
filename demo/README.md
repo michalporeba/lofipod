@@ -288,3 +288,44 @@ Bootstrap stays additive by design:
 
 That keeps the first remote recovery story small and inspectable while
 preserving the local-first operational model after import.
+
+### Two-device workflow
+
+The repo now includes a concrete two-directory todo workflow for demonstrating
+supported multi-device consistency over one shared Pod dataset.
+
+Use one shared log path and two local data directories:
+
+```bash
+export DEMO_POD_BASE_URL="http://localhost:3400/"
+export DEMO_LOG_BASE_PATH="apps/lifegraph-demo-demo/log/"
+
+npm run demo -- task add --data-dir /tmp/lofipod-a --id task-1 --title "Shared task" --due 2026-04
+npm run demo -- sync now --data-dir /tmp/lofipod-a --pod-base-url "$DEMO_POD_BASE_URL" --log-base-path "$DEMO_LOG_BASE_PATH"
+
+npm run demo -- sync bootstrap --data-dir /tmp/lofipod-b --pod-base-url "$DEMO_POD_BASE_URL" --log-base-path "$DEMO_LOG_BASE_PATH"
+npm run demo -- task get task-1 --data-dir /tmp/lofipod-b
+
+# Flush the imported bootstrap state so the second directory is ready to
+# participate in ongoing log-based sync.
+npm run demo -- sync now --data-dir /tmp/lofipod-b --pod-base-url "$DEMO_POD_BASE_URL" --log-base-path "$DEMO_LOG_BASE_PATH"
+
+npm run demo -- task done task-1 --data-dir /tmp/lofipod-a
+npm run demo -- sync now --data-dir /tmp/lofipod-a --pod-base-url "$DEMO_POD_BASE_URL" --log-base-path "$DEMO_LOG_BASE_PATH"
+npm run demo -- sync now --data-dir /tmp/lofipod-b --pod-base-url "$DEMO_POD_BASE_URL" --log-base-path "$DEMO_LOG_BASE_PATH"
+npm run demo -- task get task-1 --data-dir /tmp/lofipod-b
+```
+
+What this proves:
+
+1. the first local directory can create and sync a task to canonical Pod data
+2. a second fresh local directory can recover that existing task from the Pod
+3. later changes from the first directory become visible in the second after
+   the second directory resumes sync against the same dataset
+
+This CLI proof is intentionally process-based. Each `sync ...` command reopens
+local state, reattaches the runtime Pod adapter, and advances sync work for
+that command invocation. In a long-lived attached engine, the same remote push,
+pull, and retry behavior runs automatically in the background; that attached
+model is covered separately by the focused integration suite in
+`tests/pod-auto-sync.integration.test.ts`.

@@ -12,6 +12,7 @@ import {
   findRdfType,
   parseCanonicalTriples,
   parseContainedResourcePaths,
+  parseLogEntryNTriples,
   serializeCanonicalTriples,
   serializeLogEntry,
 } from "./solid-rdf.js";
@@ -25,8 +26,6 @@ type SolidPodAdapterOptions = {
 
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 const MISSING_CONTAINER_VERSION = "urn:lofipod:container:missing";
-const NO_VALIDATOR_CONTAINER_VERSION = "urn:lofipod:container:no-validator";
-
 export { parseCanonicalTriples, parseLogEntryNTriples } from "./solid-rdf.js";
 
 export function createSolidPodAdapter(
@@ -159,6 +158,92 @@ export function createSolidPodAdapter(
     return results;
   };
 
+  const listLogEntries = async (input?: { logBasePath: string }) => {
+    if (!input?.logBasePath) {
+      throw new Error("Log base path is required for remote log discovery.");
+    }
+
+    const containerPath = input.logBasePath;
+    const containerUrl = http.joinUrl(containerPath);
+    const containerResponse = await http.rawRequest(
+      containerPath,
+      {
+        headers: {
+          ...http.authHeaders,
+          Accept: "text/turtle",
+        },
+      },
+      `List log containers for ${containerPath}`,
+    );
+
+    if (containerResponse.status === 404) {
+      return [];
+    }
+
+    if (!containerResponse.ok) {
+      const body = await containerResponse.text().catch(() => "");
+      throw new Error(
+        `List log containers for ${containerPath} failed with ${containerResponse.status}${body ? `: ${body}` : ""}`,
+      );
+    }
+
+    const containerBody = await containerResponse.text();
+    const logContainerPaths = parseContainedResourcePaths(
+      containerBody,
+      containerUrl,
+      { includeContainers: true },
+    )
+      .filter((path) => path.startsWith(containerPath))
+      .filter((path) => path.endsWith("/"))
+      .sort((left, right) => left.localeCompare(right));
+    const entries: PodLogAppendRequest[] = [];
+
+    for (const logContainerPath of logContainerPaths) {
+      const logContainerUrl = http.joinUrl(logContainerPath);
+      const logContainerBody = await http.readText(
+        logContainerPath,
+        {
+          headers: {
+            ...http.authHeaders,
+            Accept: "text/turtle",
+          },
+        },
+        `List log entries for ${logContainerPath}`,
+      );
+      const entryPaths = parseContainedResourcePaths(
+        logContainerBody,
+        logContainerUrl,
+      )
+        .filter((path) => path.startsWith(logContainerPath))
+        .filter((path) => path.endsWith(".nt"))
+        .sort((left, right) => left.localeCompare(right));
+
+      for (const path of entryPaths) {
+        const body = await http.readText(
+          path,
+          {
+            headers: {
+              ...http.authHeaders,
+              Accept: "application/n-triples",
+            },
+          },
+          `Read remote log entry ${path}`,
+        );
+
+        entries.push(parseLogEntryNTriples(body, path));
+      }
+    }
+
+    entries.sort(
+      (left, right) =>
+        left.timestamp.localeCompare(right.timestamp) ||
+        left.changeId.localeCompare(right.changeId) ||
+        left.path.localeCompare(right.path),
+    );
+
+    return entries;
+  };
+
   return {
     setLogger(nextLogger) {
       logger = nextLogger;
@@ -243,6 +328,10 @@ export function createSolidPodAdapter(
       return listCanonicalEntities(input);
     },
 
+    async listLogEntries(input) {
+      return listLogEntries(input);
+    },
+
     async checkCanonicalResources(input) {
       const container = await readContainerVersion(
         input.basePath,
@@ -250,10 +339,8 @@ export function createSolidPodAdapter(
       );
       const version = !container.exists
         ? MISSING_CONTAINER_VERSION
-        : (container.version ?? NO_VALIDATOR_CONTAINER_VERSION);
-      const unchanged =
-        version !== NO_VALIDATOR_CONTAINER_VERSION &&
-        version === input.previousVersion;
+        : container.version;
+      const unchanged = version !== null && version === input.previousVersion;
 
       if (unchanged) {
         return {

@@ -9,6 +9,7 @@ import type { EngineStorage } from "./support.js";
 import {
   createRemoteProjectionHelpers,
   readObservedRemoteChangeIds,
+  requireLogBasePath,
   requireEntityDefinition,
 } from "./support.js";
 
@@ -17,7 +18,9 @@ export async function replayRemoteLogEntries(
   entities: Map<string, EntityDefinition<unknown>>,
   config: EngineConfig,
 ): Promise<number> {
-  const remoteEntries = await config.sync?.adapter.listLogEntries?.();
+  const remoteEntries = await config.sync?.adapter.listLogEntries?.({
+    logBasePath: requireLogBasePath(config),
+  });
 
   if (!remoteEntries) {
     return 0;

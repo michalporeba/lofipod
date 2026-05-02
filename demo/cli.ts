@@ -131,6 +131,7 @@ function readPodSyncOptions(
 async function attachPodSync(
   app: DemoApp,
   options: Record<string, string | boolean>,
+  startBackground = true,
 ): Promise<void> {
   const syncOptions = readPodSyncOptions(options);
 
@@ -138,7 +139,16 @@ async function attachPodSync(
     throw new Error("Missing required option: --pod-base-url");
   }
 
-  await app.attachPodSync(syncOptions);
+  await app.attachPodSync({
+    ...syncOptions,
+    startBackground,
+  });
+}
+
+async function waitForNextTask(): Promise<void> {
+  await new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
 }
 
 export async function runCli(
@@ -252,6 +262,7 @@ export async function runCli(
     if (resource === "sync" && command === "status") {
       if (readPodSyncOptions(options)) {
         await attachPodSync(app, options);
+        await waitForNextTask();
       }
 
       const state = await app.syncState();
@@ -260,7 +271,7 @@ export async function runCli(
     }
 
     if (resource === "sync" && command === "bootstrap") {
-      await attachPodSync(app, options);
+      await attachPodSync(app, options, false);
       const result = await app.syncBootstrap();
       output.stdout(
         `imported=${result.imported} skipped=${result.skipped} reconciled=${result.reconciled.length} unsupported=${result.unsupported.length} collisions=${result.collisions.length}`,
@@ -269,7 +280,7 @@ export async function runCli(
     }
 
     if (resource === "sync" && command === "now") {
-      await attachPodSync(app, options);
+      await attachPodSync(app, options, false);
       await app.syncNow();
       const state = await app.syncState();
       output.stdout(formatSyncStateOutput(state));

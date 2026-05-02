@@ -14,6 +14,7 @@ const solidOpenBaseUrl =
 
 describe("demo CLI with Community Solid Server", () => {
   const tempDirectories: string[] = [];
+  const trackedPodPaths: string[] = [];
   const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   beforeAll(async () => {
@@ -26,12 +27,33 @@ describe("demo CLI with Community Solid Server", () => {
         .splice(0)
         .map((directory) => rm(directory, { recursive: true, force: true })),
     );
+    await Promise.all(
+      trackedPodPaths.splice(0).map(async (path) => {
+        const response = await fetch(new URL(path, solidOpenBaseUrl), {
+          method: "DELETE",
+        });
+
+        if (!response.ok && response.status !== 404) {
+          throw new Error(
+            `Failed to delete resource ${path}: ${response.status}`,
+          );
+        }
+      }),
+    );
   });
 
   async function createDataDir(): Promise<string> {
     const directory = await mkdtemp(join(tmpdir(), "lofipod-demo-pod-"));
     tempDirectories.push(directory);
     return directory;
+  }
+
+  function createLogBasePath(name: string): string {
+    return `apps/${name}-${runId}/log/`;
+  }
+
+  function trackPodResource(path: string): void {
+    trackedPodPaths.push(path);
   }
 
   async function runDemo(args: string[]): Promise<string> {
@@ -97,10 +119,9 @@ describe("demo CLI with Community Solid Server", () => {
       statusTerm: "Todo" | "Done";
       due?: string;
     },
+    baseUrl = solidOpenBaseUrl,
   ): Promise<string> {
-    const response = await fetch(
-      new URL(`tasks/${taskId}.ttl`, solidOpenBaseUrl),
-    );
+    const response = await fetch(new URL(`tasks/${taskId}.ttl`, baseUrl));
     const body = await response.text();
 
     expect(response.ok).toBe(true);
@@ -215,6 +236,10 @@ describe("demo CLI with Community Solid Server", () => {
     const taskId = `task-1-${runId}`;
     const entryId = `entry-1-${runId}`;
     const dataDir = await createDataDir();
+    const logBasePath = createLogBasePath("demo-pod-sync");
+
+    trackPodResource(`tasks/${taskId}.ttl`);
+    trackPodResource(`journal-entries/${entryId}.ttl`);
 
     await runDemo([
       "task",
@@ -270,6 +295,8 @@ describe("demo CLI with Community Solid Server", () => {
         dataDir,
         "--pod-base-url",
         solidOpenBaseUrl,
+        "--log-base-path",
+        logBasePath,
       ]),
     ).resolves.toSatisfy((output: string) => {
       expectStatusOutput(output, {
@@ -292,6 +319,8 @@ describe("demo CLI with Community Solid Server", () => {
       dataDir,
       "--pod-base-url",
       solidOpenBaseUrl,
+      "--log-base-path",
+      logBasePath,
     ]);
     expectSyncedOutput(firstSyncOutput);
 
@@ -312,6 +341,8 @@ describe("demo CLI with Community Solid Server", () => {
         dataDir,
         "--pod-base-url",
         solidOpenBaseUrl,
+        "--log-base-path",
+        logBasePath,
       ]),
     ).resolves.toSatisfy((output: string) => {
       expectSyncedOutput(output);
@@ -333,6 +364,9 @@ describe("demo CLI with Community Solid Server", () => {
   it("updates and deletes the canonical task resource through the local-first demo flow", async () => {
     const taskId = `task-lifecycle-${runId}`;
     const dataDir = await createDataDir();
+    const logBasePath = createLogBasePath("demo-pod-lifecycle");
+
+    trackPodResource(`tasks/${taskId}.ttl`);
 
     await runDemo([
       "task",
@@ -355,6 +389,8 @@ describe("demo CLI with Community Solid Server", () => {
         dataDir,
         "--pod-base-url",
         solidOpenBaseUrl,
+        "--log-base-path",
+        logBasePath,
       ]),
     );
 
@@ -381,6 +417,8 @@ describe("demo CLI with Community Solid Server", () => {
         dataDir,
         "--pod-base-url",
         solidOpenBaseUrl,
+        "--log-base-path",
+        logBasePath,
       ]),
     );
 
@@ -405,6 +443,8 @@ describe("demo CLI with Community Solid Server", () => {
         dataDir,
         "--pod-base-url",
         solidOpenBaseUrl,
+        "--log-base-path",
+        logBasePath,
       ]),
     );
 
@@ -418,6 +458,10 @@ describe("demo CLI with Community Solid Server", () => {
     const taskId = `task-remote-${runId}`;
     const entryId = `entry-remote-${runId}`;
     const dataDir = await createDataDir();
+    const logBasePath = createLogBasePath("demo-pod-bootstrap");
+
+    trackPodResource(`tasks/${taskId}.ttl`);
+    trackPodResource(`journal-entries/${entryId}.ttl`);
 
     await putExternalResource(
       `tasks/${taskId}.ttl`,
@@ -453,6 +497,8 @@ describe("demo CLI with Community Solid Server", () => {
         dataDir,
         "--pod-base-url",
         solidOpenBaseUrl,
+        "--log-base-path",
+        logBasePath,
       ]),
     ).resolves.toMatch(
       /^imported=\d+ skipped=0 reconciled=0 unsupported=0 collisions=0$/,
@@ -469,5 +515,121 @@ describe("demo CLI with Community Solid Server", () => {
     ).resolves.toContain(
       `${entryId} date=2022 task=${taskId} Imported journal`,
     );
+  }, 30_000);
+
+  it("demonstrates multi-device task convergence through the documented two-directory workflow", async () => {
+    const taskId = `task-multi-device-${runId}`;
+    const firstDataDir = await createDataDir();
+    const secondDataDir = await createDataDir();
+    const sharedLogBasePath = `apps/lifegraph-demo-${runId}/log/`;
+
+    trackPodResource(`tasks/${taskId}.ttl`);
+
+    await expect(
+      runDemo(["task", "list", "--data-dir", secondDataDir]),
+    ).resolves.toBe("no tasks");
+
+    await expect(
+      runDemo([
+        "task",
+        "add",
+        "--data-dir",
+        firstDataDir,
+        "--id",
+        taskId,
+        "--title",
+        "Shared task",
+        "--due",
+        "2026-04",
+      ]),
+    ).resolves.toBe(`created ${taskId} [todo] Shared task due=2026-04`);
+
+    expectSyncedOutput(
+      await runDemo([
+        "sync",
+        "now",
+        "--data-dir",
+        firstDataDir,
+        "--pod-base-url",
+        solidOpenBaseUrl,
+        "--log-base-path",
+        sharedLogBasePath,
+      ]),
+    );
+
+    await expectTaskResource(taskId, {
+      title: "Shared task",
+      statusTerm: "Todo",
+      due: "2026-04",
+    });
+
+    await expect(
+      runDemo([
+        "sync",
+        "bootstrap",
+        "--data-dir",
+        secondDataDir,
+        "--pod-base-url",
+        solidOpenBaseUrl,
+        "--log-base-path",
+        sharedLogBasePath,
+      ]),
+    ).resolves.toMatch(
+      /^imported=\d+ skipped=\d+ reconciled=\d+ unsupported=0 collisions=0$/,
+    );
+
+    await expect(
+      runDemo(["task", "get", taskId, "--data-dir", secondDataDir]),
+    ).resolves.toBe(`${taskId} [todo] Shared task due=2026-04`);
+    expectSyncedOutput(
+      await runDemo([
+        "sync",
+        "now",
+        "--data-dir",
+        secondDataDir,
+        "--pod-base-url",
+        solidOpenBaseUrl,
+        "--log-base-path",
+        sharedLogBasePath,
+      ]),
+    );
+
+    await expect(
+      runDemo(["task", "done", taskId, "--data-dir", firstDataDir]),
+    ).resolves.toBe(`completed ${taskId} [done] Shared task due=2026-04`);
+
+    expectSyncedOutput(
+      await runDemo([
+        "sync",
+        "now",
+        "--data-dir",
+        firstDataDir,
+        "--pod-base-url",
+        solidOpenBaseUrl,
+        "--log-base-path",
+        sharedLogBasePath,
+      ]),
+    );
+
+    await expect(
+      runDemo(["task", "get", taskId, "--data-dir", secondDataDir]),
+    ).resolves.toBe(`${taskId} [todo] Shared task due=2026-04`);
+
+    expectSyncedOutput(
+      await runDemo([
+        "sync",
+        "now",
+        "--data-dir",
+        secondDataDir,
+        "--pod-base-url",
+        solidOpenBaseUrl,
+        "--log-base-path",
+        sharedLogBasePath,
+      ]),
+    );
+
+    await expect(
+      runDemo(["task", "get", taskId, "--data-dir", secondDataDir]),
+    ).resolves.toBe(`${taskId} [done] Shared task due=2026-04`);
   }, 30_000);
 });

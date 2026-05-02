@@ -126,7 +126,9 @@ export type PodSyncAdapter = {
     path: string;
   }): Promise<void>;
   appendLogEntry(request: PodLogAppendRequest): Promise<void>;
-  listLogEntries?(): Promise<PodLogAppendRequest[]>;
+  listLogEntries?(input?: {
+    logBasePath: string;
+  }): Promise<PodLogAppendRequest[]>;
   listCanonicalEntities?(input: {
     entityName: string;
     basePath: string;
@@ -195,6 +197,7 @@ export type SyncAttachConfig = {
   podBaseUrl: string;
   logBasePath: string;
   pollIntervalMs?: number;
+  startBackground?: boolean;
 };
 
 export type SyncState = {
