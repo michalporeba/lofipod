@@ -141,6 +141,20 @@ Supported local task CRUD commands:
 
 The demo can also project its local-first data to a Solid Pod.
 
+The intended pattern is additive:
+
+1. create and use the same SQLite-backed demo locally first
+2. supply Pod runtime inputs only for a sync command
+3. let that command attach sync to the existing local app through `engine.sync.attach(...)`
+
+`createEngine(...)` stays environment-neutral in the root package. The demo's
+Node-specific wiring lives in `demo/app.ts`, where `createSqliteStorage(...)`
+and `createSolidPodAdapter(...)` both come from `lofipod/node`.
+
+Persisted Pod config can survive in local state after an attach, but that does
+not create a live network connection by itself. Each CLI process still has to
+provide a runtime adapter before sync can run.
+
 Use:
 
 - `sync bootstrap --pod-base-url <url>`
@@ -149,3 +163,7 @@ Use:
 
 The log path defaults to `apps/lifegraph-demo/log/` and can be overridden with
 `--log-base-path`.
+
+The local task and journal commands keep the same local-first behavior whether
+or not Pod env vars are present. Only the `sync ...` commands attach the
+Node-side Pod adapter.

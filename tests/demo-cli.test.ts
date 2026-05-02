@@ -374,6 +374,85 @@ describe("demo CLI", () => {
     });
   });
 
+  it("keeps local CRUD local-first even when Pod env vars are present", async () => {
+    const dataDir = await createDataDir();
+    const previousPodBaseUrl = process.env.LIFEGRAPH_DEMO_POD_BASE_URL;
+    const previousAuthorization = process.env.LIFEGRAPH_DEMO_AUTHORIZATION;
+
+    process.env.LIFEGRAPH_DEMO_POD_BASE_URL = "http://127.0.0.1:1/";
+    process.env.LIFEGRAPH_DEMO_AUTHORIZATION = "Bearer demo-token";
+
+    try {
+      await expect(
+        runWithCapturedOutput([
+          "task",
+          "add",
+          "--data-dir",
+          dataDir,
+          "--id",
+          "task-1",
+          "--title",
+          "Stay local first",
+        ]),
+      ).resolves.toMatchObject({
+        exitCode: 0,
+        stdout: ["created task-1 [todo] Stay local first"],
+        stderr: [],
+      });
+
+      await expect(
+        runWithCapturedOutput(["task", "list", "--data-dir", dataDir]),
+      ).resolves.toMatchObject({
+        exitCode: 0,
+        stdout: ["task-1 [todo] Stay local first"],
+        stderr: [],
+      });
+    } finally {
+      if (previousPodBaseUrl === undefined) {
+        delete process.env.LIFEGRAPH_DEMO_POD_BASE_URL;
+      } else {
+        process.env.LIFEGRAPH_DEMO_POD_BASE_URL = previousPodBaseUrl;
+      }
+
+      if (previousAuthorization === undefined) {
+        delete process.env.LIFEGRAPH_DEMO_AUTHORIZATION;
+      } else {
+        process.env.LIFEGRAPH_DEMO_AUTHORIZATION = previousAuthorization;
+      }
+    }
+  });
+
+  it("requires an explicit attach step before sync becomes configured", async () => {
+    const dataDir = await createDataDir();
+    const app = createDemoApp({ dataDir });
+
+    await app.addTask({
+      id: "task-1",
+      title: "Prepare April review",
+    });
+
+    await expect(app.syncState()).resolves.toMatchObject({
+      configured: false,
+      pendingChanges: 1,
+      status: "unconfigured",
+    });
+
+    await app.attachPodSync({
+      podBaseUrl: "https://pod.example/",
+      fetch: async () =>
+        new Response("", {
+          status: 404,
+        }),
+    });
+
+    await expect(app.syncState()).resolves.toMatchObject({
+      configured: true,
+      pendingChanges: 1,
+    });
+
+    await app.close();
+  });
+
   it("shows help for the top-level command", async () => {
     await expect(runWithCapturedOutput([])).resolves.toMatchObject({
       exitCode: 0,

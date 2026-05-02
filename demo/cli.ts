@@ -1,4 +1,4 @@
-import { createDemoApp } from "./app.js";
+import { createDemoApp, type DemoApp, type DemoPodSyncOptions } from "./app.js";
 import type { JournalEntry, Task } from "./entities.js";
 
 type Output = {
@@ -74,6 +74,7 @@ export function renderHelp(): string {
   return [
     "lifegraph-demo",
     "Local state is persisted in SQLite under the default cache directory or the provided --data-dir.",
+    "Sync commands attach the Node-side Solid adapter at runtime; task and journal commands stay local-first.",
     "",
     "Commands:",
     "  task add --title <title> [--due <edtf>] [--id <id>] [--data-dir <dir>]",
@@ -87,6 +88,41 @@ export function renderHelp(): string {
     "  sync status [--data-dir <dir>] [--pod-base-url <url>] [--log-base-path <path>]",
     "  sync now [--data-dir <dir>] --pod-base-url <url> [--log-base-path <path>]",
   ].join("\n");
+}
+
+function readPodSyncOptions(
+  options: Record<string, string | boolean>,
+): DemoPodSyncOptions | undefined {
+  const podBaseUrl =
+    optionAsString(options, "pod-base-url") ??
+    process.env.LIFEGRAPH_DEMO_POD_BASE_URL;
+
+  if (!podBaseUrl) {
+    return undefined;
+  }
+
+  return {
+    podBaseUrl,
+    logBasePath:
+      optionAsString(options, "log-base-path") ??
+      process.env.LIFEGRAPH_DEMO_LOG_BASE_PATH,
+    authorization:
+      optionAsString(options, "authorization") ??
+      process.env.LIFEGRAPH_DEMO_AUTHORIZATION,
+  };
+}
+
+async function attachPodSync(
+  app: DemoApp,
+  options: Record<string, string | boolean>,
+): Promise<void> {
+  const syncOptions = readPodSyncOptions(options);
+
+  if (!syncOptions) {
+    throw new Error("Missing required option: --pod-base-url");
+  }
+
+  await app.attachPodSync(syncOptions);
 }
 
 export async function runCli(
@@ -110,22 +146,6 @@ export async function runCli(
 
   const app = createDemoApp({
     dataDir: optionAsString(options, "data-dir"),
-    pod:
-      optionAsString(options, "pod-base-url") ||
-      process.env.LIFEGRAPH_DEMO_POD_BASE_URL
-        ? {
-            podBaseUrl:
-              optionAsString(options, "pod-base-url") ??
-              process.env.LIFEGRAPH_DEMO_POD_BASE_URL ??
-              "",
-            logBasePath:
-              optionAsString(options, "log-base-path") ??
-              process.env.LIFEGRAPH_DEMO_LOG_BASE_PATH,
-            authorization:
-              optionAsString(options, "authorization") ??
-              process.env.LIFEGRAPH_DEMO_AUTHORIZATION,
-          }
-        : undefined,
   });
 
   try {
@@ -214,6 +234,10 @@ export async function runCli(
     }
 
     if (resource === "sync" && command === "status") {
+      if (readPodSyncOptions(options)) {
+        await attachPodSync(app, options);
+      }
+
       const state = await app.syncState();
       output.stdout(
         `status=${state.status} configured=${state.configured} pending=${state.pendingChanges}`,
@@ -222,13 +246,7 @@ export async function runCli(
     }
 
     if (resource === "sync" && command === "bootstrap") {
-      if (
-        !optionAsString(options, "pod-base-url") &&
-        !process.env.LIFEGRAPH_DEMO_POD_BASE_URL
-      ) {
-        throw new Error("Missing required option: --pod-base-url");
-      }
-
+      await attachPodSync(app, options);
       const result = await app.syncBootstrap();
       output.stdout(
         `imported=${result.imported} skipped=${result.skipped} collisions=${result.collisions.length}`,
@@ -237,13 +255,7 @@ export async function runCli(
     }
 
     if (resource === "sync" && command === "now") {
-      if (
-        !optionAsString(options, "pod-base-url") &&
-        !process.env.LIFEGRAPH_DEMO_POD_BASE_URL
-      ) {
-        throw new Error("Missing required option: --pod-base-url");
-      }
-
+      await attachPodSync(app, options);
       await app.syncNow();
       const state = await app.syncState();
       output.stdout(

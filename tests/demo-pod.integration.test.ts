@@ -126,6 +126,10 @@ describe("demo CLI with Community Solid Server", () => {
     ]);
 
     await expect(
+      runDemo(["sync", "status", "--data-dir", dataDir]),
+    ).resolves.toBe("status=unconfigured configured=false pending=2");
+
+    await expect(
       runDemo([
         "sync",
         "status",
