@@ -58,15 +58,18 @@ Story 1.3 is not about inventing a second demo or redesigning the engine. The re
 #### `demo/app.ts`
 
 Current state:
+
 - `createDemoApp(...)` already creates a SQLite-backed engine and optionally attaches Pod sync.
 - The task-facing API currently exposes only `addTask(...)`, `listTasks()`, and `completeTask(...)`.
 - `completeTask(...)` proves that update behavior is already expected to flow through `engine.get(...)` plus `engine.save(...)`.
 
 What this story likely changes:
+
 - Add the missing task read and delete paths to `DemoApp`.
 - Possibly add a broader bounded task-update helper if the CLI needs it, but keep `task done` as a valid small update path unless a better replacement is justified.
 
 What must be preserved:
+
 - SQLite-backed local storage setup.
 - Existing sync methods and `pod` option handling.
 - Journal-entry creation and validation against existing tasks.
@@ -76,15 +79,18 @@ Source: [demo/app.ts](/media/michal/data/code/lofipod/demo/app.ts:31)
 #### `demo/cli.ts`
 
 Current state:
+
 - Help text advertises `task add`, `task list`, and `task done`, but no task delete or single-task read command.
 - The CLI already follows a stable `resource + verb + options` grammar with consistent human-readable output.
 - `task done` is the current update path; `journal` and `sync` commands already exist and should not be disturbed by task CRUD additions.
 
 What this story likely changes:
+
 - Add the missing task commands needed to make the local demo a complete CRUD walkthrough.
 - Update help text and output expectations to match the implemented workflow.
 
 What must be preserved:
+
 - Current output style for success and error cases.
 - Separation between CLI shell logic and demo application logic.
 - Existing `journal` and `sync` command behavior.
@@ -94,14 +100,17 @@ Source: [demo/cli.ts](/media/michal/data/code/lofipod/demo/cli.ts:73)
 #### `demo/README.md`
 
 Current state:
+
 - The documented first local run shows only add, list, and done.
 - The README already frames the task flow as the repo's main local-first proof of value and explicitly says a Pod is not needed to start.
 
 What this story likely changes:
+
 - Expand the first-run section so a developer can see the full supported local CRUD loop from the docs alone.
 - Keep the docs focused on the CLI workflow rather than pushing the user into internals.
 
 What must be preserved:
+
 - Local-only first-run framing.
 - Clear separation between local CRUD and later sync steps.
 - The repo's task-as-todo terminology decision from Story 1.2.
@@ -111,13 +120,16 @@ Source: [demo/README.md](/media/michal/data/code/lofipod/demo/README.md:39)
 #### `tests/demo-cli.test.ts`
 
 Current state:
+
 - Covers task creation, task listing, task completion, journal commands, restart persistence, help output, and basic sync status/validation.
 - Does not currently verify task deletion or any explicit single-task read command.
 
 What this story likely changes:
+
 - Add regression coverage for the missing task CRUD operations and any new CLI output.
 
 What must be preserved:
+
 - Persistence-across-restart regression.
 - Existing journal and sync smoke tests.
 - Behavior-first testing through the documented CLI path.
@@ -142,11 +154,13 @@ Source: [1-2-define-a-todo-entity-through-the-local-public-api.md](/media/michal
 ### Git Intelligence
 
 Recent commits:
+
 - `00a7745` `simplifying the demo entity`
 - `55d97c7` `story 1.1`
 - `ac3cd59` `planning the work with bmad-method`
 
 Actionable takeaways:
+
 - The latest repo change simplified the demo entity and added focused demo-entity coverage, so Story 1.3 should build on the current task shape instead of broadening it again.
 - Story 1.1 and Story 1.2 both invested in the first-run path; Story 1.3 should keep one coherent onboarding path instead of splitting docs between multiple ways to prove local-first value.
 
@@ -182,6 +196,7 @@ Source: `git log --oneline -5`, `git show --stat --oneline --summary 00a7745`
 - Demo workflow docs: [demo/README.md](/media/michal/data/code/lofipod/demo/README.md:1)
 
 Detected variances and rationale:
+
 - No separate UX artifact exists in `_bmad-output/planning-artifacts`, so the story uses the epics, PRD, project context, and live docs/demo code as the source of developer-experience guidance.
 - The live repo already contains persistence behavior planned for Story 1.4. This story should preserve that implementation while staying scoped to exposing full local CRUD cleanly.
 

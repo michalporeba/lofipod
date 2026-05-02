@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-04-26T13:37:20+01:00"
-last_updated: "2026-05-02T09:27:00+01:00"
+last_updated: "2026-05-02T10:54:00+01:00"
 project: "lofipod"
 project_key: "NOKEY"
 tracking_system: "file-system"
@@ -46,7 +46,7 @@ development_status:
   1-1-explain-the-local-first-promise-and-first-run-path: done
   1-2-define-a-todo-entity-through-the-local-public-api: review
   1-3-build-local-crud-for-the-in-repo-todo-demo: review
-  1-4-persist-the-todo-demo-across-restart: backlog
+  1-4-persist-the-todo-demo-across-restart: review
   1-5-verify-and-document-the-todo-demo-as-the-first-proof-of-value: backlog
   epic-1-retrospective: optional
   epic-2: backlog

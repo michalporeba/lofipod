@@ -73,6 +73,7 @@ function formatJournalEntry(entry: JournalEntry): string {
 export function renderHelp(): string {
   return [
     "lifegraph-demo",
+    "Local state is persisted in SQLite under the default cache directory or the provided --data-dir.",
     "",
     "Commands:",
     "  task add --title <title> [--due <edtf>] [--id <id>] [--data-dir <dir>]",

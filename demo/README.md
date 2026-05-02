@@ -36,6 +36,11 @@ by default under a cache directory such as:
 - `$XDG_CACHE_HOME/lifegraph-demo`
 - or `~/.cache/lifegraph-demo`
 
+The persisted database file is `state.sqlite` inside that directory. Every
+`task` and `journal` command reopens the same local store, so restart-safe
+state is demonstrated by running the next command with the same default
+location or the same explicit `--data-dir`.
+
 ## First local run
 
 You do not need a Pod to start.
@@ -56,8 +61,20 @@ If you want an isolated local state directory for inspection:
 npm run demo -- task add --data-dir /tmp/lofipod-demo --title "Prepare April review" --id task-1 --due 2026-04
 npm run demo -- task get task-1 --data-dir /tmp/lofipod-demo
 npm run demo -- task list --data-dir /tmp/lofipod-demo
+npm run demo -- task done task-1 --data-dir /tmp/lofipod-demo
+npm run demo -- task list --data-dir /tmp/lofipod-demo
 npm run demo -- task delete task-1 --data-dir /tmp/lofipod-demo
 ```
+
+That sequence is the intended local durability proof:
+
+1. write to `/tmp/lofipod-demo/state.sqlite`
+2. stop after any command
+3. run the next command later with the same `--data-dir`
+4. confirm that `task get` or `task list` shows the latest saved state
+
+Changing `--data-dir` points the demo at a different local store. No Pod
+connection is required for this restart-safe workflow.
 
 Useful files for the first-run path:
 

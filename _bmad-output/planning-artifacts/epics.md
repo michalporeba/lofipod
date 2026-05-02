@@ -192,22 +192,27 @@ FR50: Epic 4, Epic 5 - grow toward broader cross-application reuse without redef
 ## Epic List
 
 ### Epic 1: Fast First Local-First Success
+
 Developers can install lofipod, understand the core mental model, define shallow entities, persist data locally, and reach a fast first proof of value through clear API ergonomics and onboarding documentation.
 **FRs covered:** FR1, FR2, FR3, FR5, FR6, FR7, FR8, FR9, FR10, FR11, FR12, FR14, FR15, FR16, FR17, FR18
 
 ### Epic 2: Background Pod Sync Without Sync Choreography
+
 Developers can attach a Solid Pod and gain background synchronization, canonical Pod visibility, and multi-device consistency without changing the local-first programming model or manually orchestrating sync flows.
 **FRs covered:** FR4, FR13, FR20, FR21, FR22, FR23, FR24, FR25, FR26, FR27, FR46, FR47, FR49
 
 ### Epic 3: Trust, Recovery, and Explainability Under Failure
+
 Developers can trust lofipod in real-world failure conditions because sync interruptions, foreign changes, retries, and recovery behavior are visible, diagnosable, and handled predictably within the supported model.
 **FRs covered:** FR19, FR33, FR34, FR35, FR36, FR37, FR38, FR40, FR41, FR43, FR44, FR45
 
 ### Epic 4: Safe Evolution of Data and Application Semantics
+
 Developers can change their application model over time, preserve trust in existing data, and retain portable canonical semantics that support future reuse without data loss in supported scenarios.
 **FRs covered:** FR27, FR28, FR29, FR30, FR31, FR32, FR39, FR42, FR46, FR47, FR50
 
 ### Epic 5: Adoption Hardening for Teams and LLM-Assisted Builders
+
 Developers and teams can evaluate, adopt, and keep using lofipod confidently through strong public docs, reference guidance, stable examples, compatibility clarity, and a product surface that stays understandable without hidden internals.
 **FRs covered:** FR5, FR13, FR14, FR40, FR48, FR49, FR50
 

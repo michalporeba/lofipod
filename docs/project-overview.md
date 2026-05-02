@@ -22,17 +22,17 @@ adapters project canonical data to a Pod in the background.
 
 ## Technology Stack Summary
 
-| Category | Technology | Version | Justification |
-| --- | --- | --- | --- |
-| Language | TypeScript | `^6.0.3` | Main implementation language with strict typing |
-| Runtime | Node.js | `>=24` | Development and CI target |
-| Packaging | tsup + `tsc` | `^8.3.5` / built-in | Dual ESM/CJS bundles and declaration output |
-| Core RDF | `n3` | `^2.0.3` | RDF parsing and serialization |
-| Node Storage | `better-sqlite3` | `^12.8.0` | SQLite-backed local storage adapter |
-| Browser Storage | IndexedDB | platform API | Browser persistence entrypoint |
-| Testing | Vitest | `^4.1.4` | Unit, mocked sync, and integration suites |
-| Lint/Format | ESLint, Prettier | current repo config | Enforced code quality and formatting |
-| CI/CD | GitHub Actions | workflow files | Verify, build, demo, pod tests, publish |
+| Category        | Technology       | Version             | Justification                                   |
+| --------------- | ---------------- | ------------------- | ----------------------------------------------- |
+| Language        | TypeScript       | `^6.0.3`            | Main implementation language with strict typing |
+| Runtime         | Node.js          | `>=24`              | Development and CI target                       |
+| Packaging       | tsup + `tsc`     | `^8.3.5` / built-in | Dual ESM/CJS bundles and declaration output     |
+| Core RDF        | `n3`             | `^2.0.3`            | RDF parsing and serialization                   |
+| Node Storage    | `better-sqlite3` | `^12.8.0`           | SQLite-backed local storage adapter             |
+| Browser Storage | IndexedDB        | platform API        | Browser persistence entrypoint                  |
+| Testing         | Vitest           | `^4.1.4`            | Unit, mocked sync, and integration suites       |
+| Lint/Format     | ESLint, Prettier | current repo config | Enforced code quality and formatting            |
+| CI/CD           | GitHub Actions   | workflow files      | Verify, build, demo, pod tests, publish         |
 
 ## Key Features
 

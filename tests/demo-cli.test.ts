@@ -234,6 +234,69 @@ describe("demo CLI", () => {
     ]);
   });
 
+  it("keeps completed task state across app recreation with the same data directory", async () => {
+    const dataDir = await createDataDir();
+    const firstApp = createDemoApp({
+      dataDir,
+      now() {
+        return "2026-03-29T12:00:00.000Z";
+      },
+    });
+
+    await firstApp.addTask({
+      id: "task-1",
+      title: "Prepare April review",
+      due: "2026-04",
+    });
+    await firstApp.completeTask("task-1");
+
+    const secondApp = createDemoApp({
+      dataDir,
+    });
+
+    await expect(secondApp.getTask("task-1")).resolves.toEqual({
+      id: "task-1",
+      title: "Prepare April review",
+      status: "done",
+      due: "2026-04",
+    });
+
+    await expect(secondApp.listTasks()).resolves.toEqual([
+      {
+        id: "task-1",
+        title: "Prepare April review",
+        status: "done",
+        due: "2026-04",
+      },
+    ]);
+  });
+
+  it("keeps deleted task state across app recreation with the same data directory", async () => {
+    const dataDir = await createDataDir();
+    const firstApp = createDemoApp({
+      dataDir,
+      now() {
+        return "2026-03-29T12:00:00.000Z";
+      },
+    });
+
+    await firstApp.addTask({
+      id: "task-1",
+      title: "Prepare April review",
+      due: "2026-04",
+    });
+    await firstApp.deleteTask("task-1");
+
+    const secondApp = createDemoApp({
+      dataDir,
+    });
+
+    await expect(secondApp.listTasks()).resolves.toEqual([]);
+    await expect(secondApp.getTask("task-1")).rejects.toThrow(
+      "Unknown task: task-1",
+    );
+  });
+
   it("shows help for the top-level command", async () => {
     await expect(runWithCapturedOutput([])).resolves.toMatchObject({
       exitCode: 0,

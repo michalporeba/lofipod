@@ -30,7 +30,7 @@ inputDocuments:
   - /media/michal/data/code/lofipod/docs/development-guide.md
   - /media/michal/data/code/lofipod/docs/deployment-guide.md
   - /media/michal/data/code/lofipod/docs/contribution-guide.md
-workflowType: 'prd'
+workflowType: "prd"
 releaseMode: phased
 documentCounts:
   briefCount: 0
@@ -121,6 +121,7 @@ This section defines the product boundary. Delivery is intentionally phased; seq
 The MVP is defined by practical sufficiency rather than broad feature coverage. It must support a single-user, shallow-entity collection application with deterministic identity, standard CRUD behavior, and no deep graph merges. The proving ground is `y-felin`, but the success condition is architectural trust for the bounded app class rather than app completion alone.
 
 The MVP includes:
+
 - a stable-enough public API for one real application
 - local-first persistence and CRUD over shallow entities
 - background Pod-backed synchronization across multiple devices
@@ -133,6 +134,7 @@ The MVP includes:
 Growth begins when lofipod moves beyond one bounded app class into practical multi-application reuse over shared user-owned data.
 
 Growth scope includes:
+
 - multiple applications sharing the same underlying user-owned data
 - broader handling of external or out-of-band changes
 - stronger examples, guidance, and proof that the model works across more than one application context
@@ -143,6 +145,7 @@ Growth scope includes:
 The long-term vision is a credible ecosystem and public showcase for pragmatic local-first development with user-owned Pod-backed data.
 
 Vision scope includes:
+
 - an ecosystem of applications built on top of lofipod
 - practical demonstrations of cross-application interoperability
 - broader recognition that constrained local-first + Pod-backed development is a viable alternative to both raw Solid tooling and heavyweight sync systems
@@ -150,14 +153,14 @@ Vision scope includes:
 
 ### Scope At A Glance
 
-| Area | In Scope Now | Deferred |
-| --- | --- | --- |
-| App model | Single-user, shallow-entity collection apps | Deep graph merges and broader collaborative models |
-| Sync | Background sync for one bounded app across multiple devices | Broad multi-app interoperability and arbitrary external writers |
-| Conflict handling | CRDT-light resolution within documented constraints | General CRDT semantics outside the bounded model |
-| Schema evolution | One real supported migration path | Broader compatibility machinery across many app families |
-| External changes | One predefined policy-governed Pod-side mutation class | General foreign RDF merge behavior |
-| Ecosystem | Strong docs and one real proving-ground app | Multi-framework breadth and broader ecosystem packaging |
+| Area              | In Scope Now                                                | Deferred                                                        |
+| ----------------- | ----------------------------------------------------------- | --------------------------------------------------------------- |
+| App model         | Single-user, shallow-entity collection apps                 | Deep graph merges and broader collaborative models              |
+| Sync              | Background sync for one bounded app across multiple devices | Broad multi-app interoperability and arbitrary external writers |
+| Conflict handling | CRDT-light resolution within documented constraints         | General CRDT semantics outside the bounded model                |
+| Schema evolution  | One real supported migration path                           | Broader compatibility machinery across many app families        |
+| External changes  | One predefined policy-governed Pod-side mutation class      | General foreign RDF merge behavior                              |
+| Ecosystem         | Strong docs and one real proving-ground app                 | Multi-framework breadth and broader ecosystem packaging         |
 
 ## User Journeys
 
@@ -170,6 +173,7 @@ He considers the alternatives and finds the same friction everywhere. CRDT-orien
 The rising action is evaluation: can he understand the mental model, define a shallow entity, persist it locally, and connect it to his own Solid Pod without getting lost? The climax is the first proof-of-value moment: local reads and writes work, Pod-backed sync works, and the app still feels like an ordinary local tool rather than a distributed systems project. The resolution is confidence that lofipod is understandable enough to adopt and useful enough to keep building on.
 
 This journey reveals requirements for:
+
 - fast onboarding from tutorial to working application
 - a clear mental model of local state, canonical Pod data, and background sync
 - minimal-ceremony setup for the first working entity
@@ -185,6 +189,7 @@ The tension is that most tools either keep data trapped in one application or de
 The climax is a trust moment, not a protocol milestone. The app still behaves like a local tool, yet the data appears on another device and remains visible in the Pod. The resolution is that the developer now has a private, portable tool that serves them directly without relying on a centralized service.
 
 This journey reveals requirements for:
+
 - local-first persistence by default
 - practical CRUD-oriented entity modeling
 - reliable background synchronization across devices
@@ -198,6 +203,7 @@ The app is now in use and contains real personal data. A new feature idea appear
 The tension is not merely whether a migration is technically possible, but whether the system can evolve safely while preserving local state, canonical Pod data, and sync integrity. The climax is the moment the new version opens old data, repairs or migrates what it must, and continues operating without loss. The resolution is confidence that the app can keep evolving without forcing the user to choose between progress and safety.
 
 This journey reveals requirements for:
+
 - safe model evolution and migration paths
 - backward-compatible reads or repair mechanisms
 - no-data-loss guarantees in supported scenarios
@@ -211,6 +217,7 @@ The original app is useful, but a second interface becomes valuable. Perhaps the
 The tension is whether shared data can support multiple applications without forcing every app to inherit full complexity or corrupt shared meaning. The climax is that a second app, with its own interface and priorities, can read and write against the same logical dataset while remaining compatible with the original application. The resolution is that reusable data becomes a practical multi-application capability rather than an abstract interoperability claim.
 
 This journey reveals requirements for:
+
 - multiple application surfaces over shared user-owned data
 - clear compatibility promises in the shared canonical model
 - support for narrower or simpler projections over richer records
@@ -224,6 +231,7 @@ A second builder, such as the original developer’s web-focused friend, wants t
 The tension is whether that promise survives contact with reality. If the second builder must reverse-engineer opaque assumptions or app-private storage, the story fails. The climax is that the second builder succeeds using the documented model and canonical Pod data, without needing privileged access to a central service or hidden implementation knowledge. The resolution is that cross-app compatibility without central coordination becomes credible.
 
 This journey reveals requirements for:
+
 - shared data conventions that are documented and stable
 - canonical representations usable by independent builders
 - browser and CLI compatibility over the same logical model
@@ -237,6 +245,7 @@ Something goes wrong: a device is offline for too long, sync is interrupted, a c
 The real actor is the app developer, sometimes with user-shared evidence, trying to understand and recover from distributed state issues on user-controlled devices and Pods. The climax is not merely finding a bug; it is being able to explain what happened, recover safely, and avoid silent data loss using local inspection tools, privacy-preserving logs, and reproducible sync state. The resolution is that the product can be trusted because failure is diagnosable and recoverable even without a central service.
 
 This journey reveals requirements for:
+
 - privacy-preserving diagnostics and logs
 - local inspection tools for sync and state behavior
 - recovery paths for offline divergence, interrupted sync, and malformed remote state
@@ -250,6 +259,7 @@ Because there is no central service, responsibility boundaries matter more, not 
 The builder needs to integrate access flows that users can actually complete. The user needs to understand that their data is theirs, that app access is intentional, and that privacy is preserved without making the system impossible to use. The climax is a successful onboarding and permission flow that makes decentralized ownership feel usable rather than burdensome. The resolution is a trust model that is concrete, not atmospheric.
 
 This journey reveals requirements for:
+
 - understandable Pod/account setup flows
 - explicit and usable access/permission boundaries
 - clear ownership and control expectations between user, app, and Pod
@@ -263,6 +273,7 @@ A serious local-first developer eventually asks a hard question: if I stop using
 The tension is whether portability is real or merely rhetorical. The climax is the developer confirming that the data remains inspectable, exportable, recoverable, and useful outside the immediate application and outside exclusive dependence on lofipod-specific internals. The resolution is that adopting lofipod does not feel like exchanging one kind of lock-in for another.
 
 This journey reveals requirements for:
+
 - inspectable and portable canonical data
 - recoverability without centralized rescue paths
 - stable enough semantics for migration or exit
@@ -271,6 +282,7 @@ This journey reveals requirements for:
 ### Journey Requirements Summary
 
 These journeys collectively require lofipod to support:
+
 - first-mile onboarding and fast proof of value
 - a clear mental model for local-first state and Pod-backed sync
 - reliable single-app, multi-device synchronization
@@ -346,6 +358,7 @@ The public API must remain simple, explicit, and stable. The core abstraction sh
 TypeScript is the first-class authoring experience, but JavaScript consumption must remain supported. Both Node and browser environments must be treated as first-class targets rather than one being a secondary adaptation of the other. This requires maintaining a clean package boundary between the environment-neutral core and the environment-specific entrypoints.
 
 The developer-facing architecture should preserve:
+
 - a small, explicit public API surface
 - entity-centered application design
 - optional, attachable synchronization rather than mandatory remote coupling
@@ -375,6 +388,7 @@ The developer-facing architecture should preserve:
 Documentation is a core product feature for this project type, not a support artifact. The docs must help a developer understand both the practical workflow and the conceptual value quickly enough to prevent early disengagement.
 
 Required documentation outcomes:
+
 - a strong `README.md` that is concise, approachable, and effective as a first contact document
 - a `Quickstart` that gets a developer from zero to a working mental model quickly
 - a todo-style application tutorial or equivalent end-to-end example
@@ -384,6 +398,7 @@ Required documentation outcomes:
 - documentation updates that stay in lockstep with API changes
 
 The `README.md` has a particularly important role. It must:
+
 - explain the problem clearly before the reader disengages
 - introduce the value proposition in plain language
 - make local-first + Pod-backed sync feel practical rather than academic
@@ -402,6 +417,7 @@ API stability is a defining requirement for this product type.
 ### Implementation Considerations
 
 The product should be shaped so that developers can succeed without needing to think about storage architecture, sync engine design, or RDF internals in their daily workflow. The implementation must therefore privilege:
+
 - boring defaults over flexible but confusing surfaces
 - small public abstractions over broad configuration space
 - examples that map directly to real developer goals
@@ -540,12 +556,14 @@ Phase 1 is intentionally a trust-proof MVP, not an interoperability-proof MVP. T
 ### Phase 1 (MVP)
 
 **Core User Journeys Supported:**
+
 - A developer evaluates lofipod and reaches first proof of value.
 - A developer builds a private local-first application that works across multiple devices.
 - A developer evolves the model without losing live data.
 - A developer understands and diagnoses what the system did after reconnect, migration, or a predefined foreign-change event.
 
 **Phase 1 Exit Criteria:**
+
 - The bounded app class preserves data with no loss in supported scenarios.
 - Multiple devices converge to a consistent end state after offline/reconnect.
 - One real schema evolution path completes with preserved data.
@@ -560,6 +578,7 @@ Phase 1 proves trust under bounded authorship, not general compatibility with ar
 Phase 2 proves that lofipod is not only usable for one application, but is a practical shared-data foundation.
 
 Planned growth features:
+
 - multiple applications sharing the same underlying user-owned data
 - broader external-change interoperability beyond the bounded MVP foreign-change policy
 - harder migration and compatibility scenarios across app surfaces
@@ -572,6 +591,7 @@ Planned growth features:
 Phase 3 expands from product proof to ecosystem proof.
 
 Planned expansion features:
+
 - an ecosystem of applications built on top of lofipod
 - public showcase examples demonstrating practical Solid Pod usage
 - broader recognition of constrained local-first + Pod-backed development as a viable alternative to raw Solid tooling, heavyweight sync systems, and bespoke architectures

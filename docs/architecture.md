@@ -15,14 +15,14 @@ storage, remote sync orchestration, and Solid Pod transport/serialization.
 
 ## Technology Stack
 
-| Area | Technologies |
-| --- | --- |
-| Language/runtime | TypeScript, Node 24+ |
-| Packaging | ESM/CJS export map, tsup, `tsc` |
-| RDF | `n3`, project RDF helper layer |
-| Local persistence | memory adapter, IndexedDB adapter, SQLite adapter |
-| Remote sync | Solid HTTP adapter, Turtle canonical resources, N-Triples log |
-| Quality | Vitest, ESLint, Prettier, GitHub Actions |
+| Area              | Technologies                                                  |
+| ----------------- | ------------------------------------------------------------- |
+| Language/runtime  | TypeScript, Node 24+                                          |
+| Packaging         | ESM/CJS export map, tsup, `tsc`                               |
+| RDF               | `n3`, project RDF helper layer                                |
+| Local persistence | memory adapter, IndexedDB adapter, SQLite adapter             |
+| Remote sync       | Solid HTTP adapter, Turtle canonical resources, N-Triples log |
+| Quality           | Vitest, ESLint, Prettier, GitHub Actions                      |
 
 ## Public API Design
 

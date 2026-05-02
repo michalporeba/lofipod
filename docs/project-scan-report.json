@@ -1,1 +1,146 @@
-{"workflow_version":"1.2.0","timestamps":{"started":"2026-04-25T19:32:58+01:00","last_updated":"2026-04-25T19:33:58+01:00","completed":"2026-04-25T19:33:58+01:00"},"mode":"initial_scan","scan_level":"exhaustive","project_root":"/media/michal/data/code/lofipod","project_knowledge":"/media/michal/data/code/lofipod/docs","completed_steps":[{"step":"step_1","status":"completed","timestamp":"2026-04-25T19:33:05+01:00","outputs":[],"summary":"Classified as a monolith with 1 part: a TypeScript library package with browser and Node adapter entrypoints."},{"step":"step_2","status":"completed","timestamp":"2026-04-25T19:33:10+01:00","outputs":[],"summary":"Inventoried existing repository documentation across root, docs, demo, and GitHub workflow areas."},{"step":"step_3","status":"completed","timestamp":"2026-04-25T19:33:18+01:00","outputs":[],"summary":"Confirmed the primary technology stack as strict TypeScript on Node 24 with tsup, Vitest, n3, and optional SQLite support."},{"step":"step_4","status":"completed","timestamp":"2026-04-25T19:33:28+01:00","outputs":[],"summary":"Completed exhaustive conditional analysis of source, demo, tests, Solid adapter behavior, and automation workflows."},{"step":"step_5","status":"completed","timestamp":"2026-04-25T19:33:35+01:00","outputs":["docs/source-tree-analysis.md"],"summary":"Generated the annotated source tree and critical directory summary."},{"step":"step_6","status":"completed","timestamp":"2026-04-25T19:33:42+01:00","outputs":["docs/development-guide.md","docs/deployment-guide.md","docs/contribution-guide.md"],"summary":"Documented local development, release automation, and contributor expectations."},{"step":"step_8","status":"completed","timestamp":"2026-04-25T19:33:48+01:00","outputs":["docs/architecture.md"],"summary":"Generated the single-part architecture document covering engine, storage, sync, and Solid adapter layers."},{"step":"step_9","status":"completed","timestamp":"2026-04-25T19:33:52+01:00","outputs":["docs/project-overview.md","docs/component-inventory.md"],"summary":"Generated supporting brownfield overview and subsystem inventory documents."},{"step":"step_10","status":"completed","timestamp":"2026-04-25T19:33:56+01:00","outputs":["docs/index.md"],"summary":"Generated the master documentation index as the primary AI retrieval entrypoint."}],"current_step":"completed","findings":{"project_classification":{"repository_type":"monolith","parts_count":1,"primary_language":"TypeScript","architecture_type":"framework-agnostic local-first library"},"technology_stack":[{"part_id":"root","tech_summary":"TypeScript library targeting Node 24+ with tsup bundling, Vitest testing, n3 RDF handling, IndexedDB browser storage, and SQLite Node storage."}],"batches_completed":[{"path":"src","files_scanned":28,"summary":"Scanned core engine, storage adapters, RDF helpers, and Solid transport modules."},{"path":"tests","files_scanned":13,"summary":"Scanned public API, storage, demo, and Pod integration coverage."},{"path":"demo","files_scanned":5,"summary":"Scanned CLI demo app, entities, and ontology assets."},{"path":"docs","files_scanned":8,"summary":"Scanned architecture, API, planning, and testing documents for project context."},{"path":".github/workflows","files_scanned":2,"summary":"Scanned CI and publish workflows for operational documentation."}]},"outputs_generated":["docs/project-scan-report.json","docs/index.md","docs/project-overview.md","docs/source-tree-analysis.md","docs/architecture.md","docs/component-inventory.md","docs/development-guide.md","docs/deployment-guide.md","docs/contribution-guide.md"],"resume_instructions":"Workflow completed. For future updates, rerun document-project and choose full rescan or deep dive.","validation_status":{"last_validated":"2026-04-25T19:33:58+01:00","validation_errors":[]},"project_types":[{"part_id":"root","project_type_id":"library","display_name":"Library"}]}
+{
+  "workflow_version": "1.2.0",
+  "timestamps": {
+    "started": "2026-04-25T19:32:58+01:00",
+    "last_updated": "2026-04-25T19:33:58+01:00",
+    "completed": "2026-04-25T19:33:58+01:00"
+  },
+  "mode": "initial_scan",
+  "scan_level": "exhaustive",
+  "project_root": "/media/michal/data/code/lofipod",
+  "project_knowledge": "/media/michal/data/code/lofipod/docs",
+  "completed_steps": [
+    {
+      "step": "step_1",
+      "status": "completed",
+      "timestamp": "2026-04-25T19:33:05+01:00",
+      "outputs": [],
+      "summary": "Classified as a monolith with 1 part: a TypeScript library package with browser and Node adapter entrypoints."
+    },
+    {
+      "step": "step_2",
+      "status": "completed",
+      "timestamp": "2026-04-25T19:33:10+01:00",
+      "outputs": [],
+      "summary": "Inventoried existing repository documentation across root, docs, demo, and GitHub workflow areas."
+    },
+    {
+      "step": "step_3",
+      "status": "completed",
+      "timestamp": "2026-04-25T19:33:18+01:00",
+      "outputs": [],
+      "summary": "Confirmed the primary technology stack as strict TypeScript on Node 24 with tsup, Vitest, n3, and optional SQLite support."
+    },
+    {
+      "step": "step_4",
+      "status": "completed",
+      "timestamp": "2026-04-25T19:33:28+01:00",
+      "outputs": [],
+      "summary": "Completed exhaustive conditional analysis of source, demo, tests, Solid adapter behavior, and automation workflows."
+    },
+    {
+      "step": "step_5",
+      "status": "completed",
+      "timestamp": "2026-04-25T19:33:35+01:00",
+      "outputs": ["docs/source-tree-analysis.md"],
+      "summary": "Generated the annotated source tree and critical directory summary."
+    },
+    {
+      "step": "step_6",
+      "status": "completed",
+      "timestamp": "2026-04-25T19:33:42+01:00",
+      "outputs": [
+        "docs/development-guide.md",
+        "docs/deployment-guide.md",
+        "docs/contribution-guide.md"
+      ],
+      "summary": "Documented local development, release automation, and contributor expectations."
+    },
+    {
+      "step": "step_8",
+      "status": "completed",
+      "timestamp": "2026-04-25T19:33:48+01:00",
+      "outputs": ["docs/architecture.md"],
+      "summary": "Generated the single-part architecture document covering engine, storage, sync, and Solid adapter layers."
+    },
+    {
+      "step": "step_9",
+      "status": "completed",
+      "timestamp": "2026-04-25T19:33:52+01:00",
+      "outputs": ["docs/project-overview.md", "docs/component-inventory.md"],
+      "summary": "Generated supporting brownfield overview and subsystem inventory documents."
+    },
+    {
+      "step": "step_10",
+      "status": "completed",
+      "timestamp": "2026-04-25T19:33:56+01:00",
+      "outputs": ["docs/index.md"],
+      "summary": "Generated the master documentation index as the primary AI retrieval entrypoint."
+    }
+  ],
+  "current_step": "completed",
+  "findings": {
+    "project_classification": {
+      "repository_type": "monolith",
+      "parts_count": 1,
+      "primary_language": "TypeScript",
+      "architecture_type": "framework-agnostic local-first library"
+    },
+    "technology_stack": [
+      {
+        "part_id": "root",
+        "tech_summary": "TypeScript library targeting Node 24+ with tsup bundling, Vitest testing, n3 RDF handling, IndexedDB browser storage, and SQLite Node storage."
+      }
+    ],
+    "batches_completed": [
+      {
+        "path": "src",
+        "files_scanned": 28,
+        "summary": "Scanned core engine, storage adapters, RDF helpers, and Solid transport modules."
+      },
+      {
+        "path": "tests",
+        "files_scanned": 13,
+        "summary": "Scanned public API, storage, demo, and Pod integration coverage."
+      },
+      {
+        "path": "demo",
+        "files_scanned": 5,
+        "summary": "Scanned CLI demo app, entities, and ontology assets."
+      },
+      {
+        "path": "docs",
+        "files_scanned": 8,
+        "summary": "Scanned architecture, API, planning, and testing documents for project context."
+      },
+      {
+        "path": ".github/workflows",
+        "files_scanned": 2,
+        "summary": "Scanned CI and publish workflows for operational documentation."
+      }
+    ]
+  },
+  "outputs_generated": [
+    "docs/project-scan-report.json",
+    "docs/index.md",
+    "docs/project-overview.md",
+    "docs/source-tree-analysis.md",
+    "docs/architecture.md",
+    "docs/component-inventory.md",
+    "docs/development-guide.md",
+    "docs/deployment-guide.md",
+    "docs/contribution-guide.md"
+  ],
+  "resume_instructions": "Workflow completed. For future updates, rerun document-project and choose full rescan or deep dive.",
+  "validation_status": {
+    "last_validated": "2026-04-25T19:33:58+01:00",
+    "validation_errors": []
+  },
+  "project_types": [
+    {
+      "part_id": "root",
+      "project_type_id": "library",
+      "display_name": "Library"
+    }
+  ]
+}

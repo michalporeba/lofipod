@@ -58,17 +58,20 @@ This story is about making the first bounded entity pattern obvious and reusable
 #### `demo/entities.ts`
 
 Current state:
+
 - Defines `Task` and `JournalEntry` plus the demo-owned `demoVocabulary` helper.
 - `TaskEntity` already uses the supported public surface via `defineEntity<Task>(...)`.
 - The current task graph includes `title`, `status`, and optional `due`.
 - `JournalEntryEntity` references tasks through `aboutTaskId`, so any task-identity or URI changes have downstream impact.
 
 What this story likely changes:
+
 - Make the task/todo entity the explicit minimal local-first example.
 - Possibly simplify naming, structure, or comments so new developers can reuse it as the canonical first entity pattern.
 - If you refactor vocabulary or helper layout, keep the later sync path viable.
 
 What must be preserved:
+
 - Stable identity derivation.
 - Deterministic `toRdf(...)` and `project(...)`.
 - Compatibility with `demo/app.ts`, journal linkage, and later canonical sync stories.
@@ -78,15 +81,18 @@ Source: [demo/entities.ts](/media/michal/data/code/lofipod/demo/entities.ts:1)
 #### `demo/app.ts`
 
 Current state:
+
 - Wires the demo through `createEngine(...)` using `demoEntities` and SQLite-backed local storage.
 - Exposes the concrete local-first operations that Story 1.3 depends on: add/list/complete task plus journal operations.
 - Uses `TaskEntity.kind` as the task storage key and assumes current task fields.
 
 What this story likely changes:
+
 - Align the app API with any deliberate entity rename or simplification.
 - Possibly introduce clearer naming or helper usage so the todo pattern is easier to follow.
 
 What must be preserved:
+
 - Existing local CRUD flow shape.
 - SQLite-backed local persistence wiring.
 - Separation between local app behavior and later Pod sync concerns.
@@ -96,13 +102,16 @@ Source: [demo/app.ts](/media/michal/data/code/lofipod/demo/app.ts:1)
 #### `demo/cli.ts`
 
 Current state:
+
 - The current first-run UX is command-driven and task-centric.
 - `task add`, `task list`, and `task done` are already the first proof-of-value path documented in Story 1.1.
 
 What this story likely changes:
+
 - Only update the CLI if the entity naming or visible workflow must change to satisfy the story cleanly.
 
 What must be preserved:
+
 - The documented commands from Story 1.1 unless you intentionally update docs and tests together.
 - Simple local-first proof-of-value before sync.
 
@@ -111,13 +120,16 @@ Source: [demo/cli.ts](/media/michal/data/code/lofipod/demo/cli.ts:1)
 #### `docs/QUICKSTART.md`
 
 Current state:
+
 - Already shows a minimal local task example through `defineVocabulary(...)`, `defineEntity(...)`, `createEngine(...)`, and `createMemoryStorage()`.
 - This is the clearest existing public example of the entity-definition contract.
 
 What this story likely changes:
+
 - Tighten the relationship between the quick-start `Task` example and the in-repo demo's first entity so they do not feel like separate patterns.
 
 What must be preserved:
+
 - Honest representation of the current API, including explicit RDF mapping.
 - Root-entrypoint, framework-agnostic guidance.
 
@@ -141,11 +153,13 @@ Source: [1-1-explain-the-local-first-promise-and-first-run-path.md](/media/micha
 ### Git Intelligence
 
 Recent commits:
+
 - `55d97c7` `story 1.1`
 - `ac3cd59` `planning the work with bmad-method`
 - `e130515` `design documents`
 
 Actionable takeaways:
+
 - The previous story already changed the public onboarding path, so this story should build directly on those docs instead of creating a competing path.
 - The planning/design work is recent; prefer aligning with the accepted docs and generated planning artifacts rather than inferring a brand-new direction from older code history.
 

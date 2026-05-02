@@ -153,7 +153,9 @@ describe("demo CLI with Community Solid Server", () => {
     const taskBody = await taskResponse.text();
     expect(taskResponse.ok).toBe(true);
     expect(taskBody).toContain("Prepare April review");
-    expect(taskBody).toContain('"2026-04"^^<https://michalporeba.com/ns/lifegraph#edtf>');
+    expect(taskBody).toContain(
+      '"2026-04"^^<https://michalporeba.com/ns/lifegraph#edtf>',
+    );
     expect(taskBody).not.toContain("http://purl.org/dc/terms/created");
     expect(taskBody).not.toContain("http://purl.org/dc/terms/modified");
 
@@ -163,7 +165,9 @@ describe("demo CLI with Community Solid Server", () => {
     const entryBody = await entryResponse.text();
     expect(entryResponse.ok).toBe(true);
     expect(entryBody).toContain("Summary 2022");
-    expect(entryBody).toContain('"2022"^^<https://michalporeba.com/ns/lifegraph#edtf>');
+    expect(entryBody).toContain(
+      '"2022"^^<https://michalporeba.com/ns/lifegraph#edtf>',
+    );
     expect(entryBody).toContain(taskId);
   }, 30_000);
 
