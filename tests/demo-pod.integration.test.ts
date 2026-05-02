@@ -333,6 +333,10 @@ describe("demo CLI with Community Solid Server", () => {
     );
 
     await expect(
+      runDemo(["task", "list", "--data-dir", dataDir]),
+    ).resolves.toBe("no tasks");
+
+    await expect(
       runDemo([
         "sync",
         "bootstrap",
@@ -343,6 +347,9 @@ describe("demo CLI with Community Solid Server", () => {
       ]),
     ).resolves.toMatch(/^imported=\d+ skipped=0 collisions=0$/);
 
+    await expect(
+      runDemo(["task", "get", taskId, "--data-dir", dataDir]),
+    ).resolves.toBe(`${taskId} [todo] Imported task due=2026-04`);
     await expect(
       runDemo(["task", "list", "--data-dir", dataDir]),
     ).resolves.toContain(`${taskId} [todo] Imported task due=2026-04`);

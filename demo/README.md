@@ -180,3 +180,32 @@ The log path defaults to `apps/lifegraph-demo/log/` and can be overridden with
 The local task and journal commands keep the same local-first behavior whether
 or not Pod env vars are present. Only the `sync ...` commands attach the
 Node-side Pod adapter.
+
+### Fresh-local recovery
+
+`sync bootstrap` is the explicit first-attach recovery tool for a fresh local
+state directory. It is not a replacement for ordinary local reads and it is
+not meant to run automatically on every startup.
+
+The intended recovery path is:
+
+1. start with an empty or fresh `--data-dir`
+2. attach the Pod runtime inputs through `sync bootstrap`
+3. import supported canonical entity files such as `tasks/<id>.ttl`
+4. continue using ordinary local commands such as `task get`, `task list`, and
+   `journal list`
+
+Canonical task resources under `tasks/<id>.ttl` are what make this recovery
+path possible. `lofipod` uses the demo entity mapping to project those remote
+graphs back into the same local SQLite-backed state and read model used by
+locally created tasks.
+
+Bootstrap stays additive by design:
+
+- missing local entities are imported
+- graph-identical local entities are skipped
+- differing local and remote entities are reported as collisions instead of
+  being overwritten automatically
+
+That keeps the first remote recovery story small and inspectable while
+preserving the local-first operational model after import.

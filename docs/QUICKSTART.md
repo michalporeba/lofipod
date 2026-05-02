@@ -180,6 +180,9 @@ tasks;
 
 - use the in-repo demo from [../demo/README.md](../demo/README.md) if you want
   an exact local-first CLI flow without reading source files
+- if you later explore the demo's explicit recovery path, `sync bootstrap`
+  imports canonical resources such as `tasks/<id>.ttl` into fresh local state;
+  it is a follow-on sync step, not part of the first local run
 - swap `createMemoryStorage()` for `createIndexedDbStorage(...)` from
   `lofipod/browser` when you want browser persistence
 - use `createSqliteStorage(...)` from `lofipod/node` when you want Node-backed
