@@ -1917,6 +1917,171 @@ describe("sync state", () => {
     );
   });
 
+  it("keeps local CRUD working while background sync is offline", async () => {
+    const { entity } = createEventFixture();
+    const engine = createEngine({
+      entities: [entity],
+      pod,
+      sync: {
+        adapter: {
+          async applyEntityPatch() {
+            throw new Error("temporary network failure");
+          },
+          async deleteEntityResource() {
+            throw new Error("temporary network failure");
+          },
+          async appendLogEntry() {
+            throw new Error("temporary network failure");
+          },
+        },
+      },
+    });
+
+    await expect(
+      engine.save("event", {
+        id: "ev-local-only",
+        title: "Local-first",
+        time: {
+          year: 2024,
+        },
+      }),
+    ).resolves.toEqual({
+      id: "ev-local-only",
+      title: "Local-first",
+      time: {
+        year: 2024,
+      },
+    });
+
+    await expect(engine.get("event", "ev-local-only")).resolves.toEqual({
+      id: "ev-local-only",
+      title: "Local-first",
+      time: {
+        year: 2024,
+      },
+    });
+    await expect(engine.list("event")).resolves.toEqual([
+      {
+        id: "ev-local-only",
+        title: "Local-first",
+        time: {
+          year: 2024,
+        },
+      },
+    ]);
+
+    await waitForExpectation(async () => {
+      await expect(engine.sync.state()).resolves.toEqual(
+        expectedSyncState({
+          status: "offline",
+          configured: true,
+          pendingChanges: 1,
+          connection: {
+            reachable: false,
+            lastFailedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+            lastFailureReason: "temporary network failure",
+          },
+        }),
+      );
+    });
+
+    await expect(
+      engine.delete("event", "ev-local-only"),
+    ).resolves.toBeUndefined();
+    await expect(engine.get("event", "ev-local-only")).resolves.toBeNull();
+    await expect(engine.list("event")).resolves.toEqual([]);
+
+    await waitForExpectation(async () => {
+      const state = await engine.sync.state();
+
+      expect(state.status).toBe("offline");
+      expect(state.configured).toBe(true);
+      expect(state.pendingChanges).toBeGreaterThan(0);
+      expect(state.connection.reachable).toBe(false);
+      expect(state.connection.lastFailedAt).toMatch(ISO_TIMESTAMP_PATTERN);
+      expect(state.connection.lastFailureReason).toBe(
+        "temporary network failure",
+      );
+    });
+  });
+
+  it("retries preserved pending changes automatically after polling detects recovery", async () => {
+    const { entity } = createEventFixture();
+    let shouldFail = true;
+    let patchAttempts = 0;
+    let logAttempts = 0;
+    const engine = createEngine({
+      entities: [entity],
+      pod,
+      sync: {
+        adapter: {
+          async applyEntityPatch(request) {
+            patchAttempts += 1;
+
+            if (shouldFail) {
+              throw new Error("temporary network failure");
+            }
+
+            expect(request.path).toBe("events/ev-poll-retry.ttl");
+          },
+          async appendLogEntry(request) {
+            logAttempts += 1;
+
+            if (shouldFail) {
+              throw new Error("temporary network failure");
+            }
+
+            expect(request.entityId).toBe("ev-poll-retry");
+          },
+          subscribeToContainer: undefined,
+        },
+        pollIntervalMs: 25,
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-poll-retry",
+      title: "Recovered later",
+      time: {
+        year: 2026,
+      },
+    });
+
+    await waitForExpectation(async () => {
+      await expect(engine.sync.state()).resolves.toEqual(
+        expectedSyncState({
+          status: "offline",
+          configured: true,
+          pendingChanges: 1,
+          connection: {
+            reachable: false,
+            lastFailedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+            lastFailureReason: "temporary network failure",
+          },
+        }),
+      );
+    });
+
+    expect(patchAttempts).toBeGreaterThan(0);
+    shouldFail = false;
+
+    await waitForExpectation(async () => {
+      await expect(engine.sync.state()).resolves.toEqual(
+        expectedSyncState({
+          status: "idle",
+          configured: true,
+          pendingChanges: 0,
+          connection: {
+            reachable: true,
+            lastSyncedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+          },
+        }),
+      );
+      expect(patchAttempts).toBeGreaterThan(1);
+      expect(logAttempts).toBe(1);
+    }, 5_000);
+  });
+
   it("fires onStateChange callbacks when sync state changes", async () => {
     const { entity } = createEventFixture();
     const patchGate = createDeferred<void>();

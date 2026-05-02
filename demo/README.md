@@ -181,6 +181,15 @@ The local task and journal commands keep the same local-first behavior whether
 or not Pod env vars are present. Only the `sync ...` commands attach the
 Node-side Pod adapter.
 
+Temporary Pod or network failure is expected to degrade to continued local
+use, not application failure. The demo's local CRUD commands still commit to
+the same SQLite-backed state first, and pending sync work is retried later by
+the normal background flow when connectivity returns.
+
+That means ordinary use does not require manual sync choreography to preserve
+local changes. `sync now` and `sync status` are inspection and forcing tools,
+not required steps for day-to-day local task entry.
+
 ### Fresh-local recovery
 
 `sync bootstrap` is the explicit first-attach recovery tool for a fresh local

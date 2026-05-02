@@ -207,4 +207,81 @@ describe("Community Solid Server auto sync", () => {
       });
     }, 15_000);
   }, 30_000);
+
+  it("retries pending local changes automatically after temporary Pod failure", async () => {
+    const entityId = `ev-reconnect-${runId}`;
+    const basePath = `events-reconnect-${runId}/`;
+    const logBasePath = `apps/reconnect-${runId}/log/`;
+    const entity = createScopedEntity(basePath);
+    const adapter = createPollingOnlyAdapter();
+    let shouldFail = true;
+    const engine = createEngine({
+      entities: [entity],
+      pod: {
+        logBasePath,
+      },
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: {
+          ...adapter,
+          async applyEntityPatch(request) {
+            if (shouldFail) {
+              throw new Error("temporary Pod outage");
+            }
+
+            await adapter.applyEntityPatch(request);
+          },
+          async appendLogEntry(request) {
+            if (shouldFail) {
+              throw new Error("temporary Pod outage");
+            }
+
+            await adapter.appendLogEntry(request);
+          },
+        },
+        pollIntervalMs: 250,
+      },
+    });
+
+    await engine.save("event", {
+      id: entityId,
+      title: "Retry after reconnect",
+      time: {
+        year: 2029,
+      },
+    });
+
+    await waitForExpectation(async () => {
+      await expect(engine.sync.state()).resolves.toMatchObject({
+        status: "offline",
+        pendingChanges: 1,
+        connection: {
+          reachable: false,
+          lastFailureReason: "temporary Pod outage",
+        },
+      });
+    });
+
+    shouldFail = false;
+
+    await waitForExpectation(async () => {
+      const response = await fetch(
+        new URL(`${basePath}${entityId}.ttl`, solidOpenBaseUrl),
+      );
+      const body = await response.text();
+
+      expect(response.ok).toBe(true);
+      expect(body).toContain("Retry after reconnect");
+    }, 15_000);
+
+    await waitForExpectation(async () => {
+      await expect(engine.sync.state()).resolves.toMatchObject({
+        status: "idle",
+        pendingChanges: 0,
+        connection: {
+          reachable: true,
+        },
+      });
+    }, 15_000);
+  }, 30_000);
 });
