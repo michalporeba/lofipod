@@ -67,8 +67,7 @@ This keeps the ontology aligned with the intended app behaviour:
   a mlg:Task ;
   schema:name "Prepare April review" ;
   mlg:status mlg:Todo ;
-  mlg:due "2026-04"^^mlg:edtf ;
-  dct:created "2026-03-29T09:00:00Z" .
+  mlg:due "2026-04"^^mlg:edtf .
 
 <#entry-1>
   a mlg:JournalEntry ;
@@ -77,5 +76,9 @@ This keeps the ontology aligned with the intended app behaviour:
   mlg:entryDate "2022"^^mlg:edtf ;
   dct:created "2026-03-29T09:05:00Z" .
 ```
+
+The task example above matches the current canonical task resource the demo
+projects to the Pod. Task resources stay intentionally shallow and do not carry
+journal-only metadata such as `dct:created` or `dct:modified`.
 
 See [lifegraph-demo.ttl](lifegraph-demo.ttl) for the ontology draft itself.

@@ -17,7 +17,8 @@ The current shape is:
 - a place to keep demo-specific ontology and sample data assets
 
 See [ontology/README.md](ontology/README.md) for the `mlg` ontology subset used
-by the demo.
+by the demo once you want to inspect the canonical Pod mapping. It is not a
+prerequisite for the first local run.
 
 ## App shape
 
@@ -146,6 +147,18 @@ The intended pattern is additive:
 1. create and use the same SQLite-backed demo locally first
 2. supply Pod runtime inputs only for a sync command
 3. let that command attach sync to the existing local app through `engine.sync.attach(...)`
+
+The same `TaskEntity` in [entities.ts](entities.ts) owns both sides of that
+boundary:
+
+- the bounded local task shape stays `id`, `title`, `status`, and optional `due`
+- the sync-scoped canonical mapping projects tasks to `tasks/<id>.ttl`
+- the canonical Turtle uses `mlg:Task`, `schema:name`, `mlg:status`, and
+  optional `mlg:due` with the `mlg:edtf` datatype
+
+That mapping is a demo-owned app choice layered on top of the same local-first
+programming model. You can ignore the ontology files entirely until you want to
+inspect or reuse the Pod-side RDF.
 
 `createEngine(...)` stays environment-neutral in the root package. The demo's
 Node-specific wiring lives in `demo/app.ts`, where `createSqliteStorage(...)`

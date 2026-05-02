@@ -7,6 +7,7 @@ import {
   rdf,
   stringValue,
   type EntityDefinition,
+  type Term,
   type Triple,
   uri,
 } from "../src/index.js";
@@ -77,13 +78,30 @@ function termToStatus(value: Triple[2] | undefined): Task["status"] {
   throw new Error(`Unsupported task status term: ${value.value}`);
 }
 
+function optionalStringValue(value: Term | undefined): string | undefined {
+  if (typeof value === "undefined") {
+    return undefined;
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+
+  return value.value;
+}
+
 // The demo URI layout keeps the entity ID in the final path segment.
 function idFromDemoUri(subject: { value: string }): string {
   return subject.value.split("/").at(-1) ?? "";
 }
 
-// The demo's first entity is intentionally small enough to reuse as the
-// baseline local-first todo pattern before introducing sync-specific details.
+// The demo's first entity stays on the bounded local task shape. This single
+// definition is both the local-first entity contract and the canonical Pod
+// mapping contract that sync projects into `tasks/<id>.ttl`.
 export const TaskEntity: EntityDefinition<Task> = defineEntity<Task>({
   kind: "task",
   pod: {
@@ -91,6 +109,8 @@ export const TaskEntity: EntityDefinition<Task> = defineEntity<Task>({
   },
   rdfType: demoVocabulary.Task,
   id: (task) => task.id,
+  // The URI, RDF type, predicates, and Pod base path below are the demo's
+  // sync-scoped canonical mapping choices layered onto the same local model.
   uri: (task) =>
     demoVocabulary.uri({
       entityName: "task",
@@ -121,10 +141,7 @@ export const TaskEntity: EntityDefinition<Task> = defineEntity<Task>({
       id: idFromDemoUri(subject),
       title: stringValue(graph, subject, schema.name),
       status: termToStatus(objectOf(graph, subject, demoVocabulary.status)),
-      due:
-        typeof objectOf(graph, subject, demoVocabulary.due) === "string"
-          ? String(objectOf(graph, subject, demoVocabulary.due))
-          : undefined,
+      due: optionalStringValue(objectOf(graph, subject, demoVocabulary.due)),
     };
   },
 });

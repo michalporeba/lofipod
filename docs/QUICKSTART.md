@@ -12,6 +12,10 @@ You will:
 This example stays local on purpose. It shows the core model first, without
 adding browser persistence or Pod sync yet.
 
+If you continue into the in-repo demo later, treat its ontology files as a
+sync-focused mapping example rather than a prerequisite for this first local
+walkthrough.
+
 Use the root `lofipod` entrypoint for this example. Browser-only and Node-only
 adapters come later from `lofipod/browser` and `lofipod/node`.
 

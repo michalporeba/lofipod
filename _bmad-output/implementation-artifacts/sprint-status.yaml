@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-04-26T13:37:20+01:00"
-last_updated: "2026-05-02T10:51:00+01:00"
+last_updated: "2026-05-02T11:40:00+01:00"
 project: "lofipod"
 project_key: "NOKEY"
 tracking_system: "file-system"
@@ -51,7 +51,7 @@ development_status:
   epic-1-retrospective: optional
   epic-2: in-progress
   2-1-attach-pod-sync-to-the-todo-demo-without-changing-local-crud: review
-  2-2-add-todo-ontology-mapping-and-project-canonical-pod-resources: backlog
+  2-2-add-todo-ontology-mapping-and-project-canonical-pod-resources: review
   2-3-import-pod-backed-todo-data-into-fresh-local-state: backlog
   2-4-handle-first-attach-when-local-and-remote-todo-data-both-exist: backlog
   2-5-keep-local-use-working-through-offline-and-reconnect-cycles: backlog

@@ -90,6 +90,45 @@ describe("demo CLI with Community Solid Server", () => {
     }
   }
 
+  async function expectTaskResource(
+    taskId: string,
+    assertions: {
+      title: string;
+      statusTerm: "Todo" | "Done";
+      due?: string;
+    },
+  ): Promise<string> {
+    const response = await fetch(
+      new URL(`tasks/${taskId}.ttl`, solidOpenBaseUrl),
+    );
+    const body = await response.text();
+
+    expect(response.ok).toBe(true);
+    expect(body).toContain(`<https://michalporeba.com/demo/id/task/${taskId}>`);
+    expect(body).toContain("a <https://michalporeba.com/ns/lifegraph#Task>");
+    expect(body).toContain(`<https://schema.org/name> "${assertions.title}"`);
+    expect(body).toContain(
+      `<https://michalporeba.com/ns/lifegraph#status> <https://michalporeba.com/ns/lifegraph#${assertions.statusTerm}>`,
+    );
+
+    if (assertions.due) {
+      expect(body).toContain(
+        `"${assertions.due}"^^<https://michalporeba.com/ns/lifegraph#edtf>`,
+      );
+    } else {
+      expect(body).not.toContain("<https://michalporeba.com/ns/lifegraph#due>");
+    }
+
+    expect(body).not.toContain("http://purl.org/dc/terms/created");
+    expect(body).not.toContain("http://purl.org/dc/terms/modified");
+
+    return body;
+  }
+
+  function expectSyncedOutput(output: string): void {
+    expect(output).toMatch(/^status=(idle|syncing) configured=true pending=0$/);
+  }
+
   it("syncs task and journal data from the demo CLI to the open test Pod", async () => {
     const taskId = `task-1-${runId}`;
     const entryId = `entry-1-${runId}`;
@@ -140,6 +179,25 @@ describe("demo CLI with Community Solid Server", () => {
       ]),
     ).resolves.toBe("status=syncing configured=true pending=2");
 
+    const firstSyncOutput = await runDemo([
+      "sync",
+      "now",
+      "--data-dir",
+      dataDir,
+      "--pod-base-url",
+      solidOpenBaseUrl,
+    ]);
+    expectSyncedOutput(firstSyncOutput);
+
+    const taskBody = await expectTaskResource(taskId, {
+      title: "Prepare April review",
+      statusTerm: "Todo",
+      due: "2026-04",
+    });
+    expect(taskBody).not.toContain(
+      "<https://michalporeba.com/ns/lifegraph#Done>",
+    );
+
     await expect(
       runDemo([
         "sync",
@@ -149,19 +207,7 @@ describe("demo CLI with Community Solid Server", () => {
         "--pod-base-url",
         solidOpenBaseUrl,
       ]),
-    ).resolves.toBe("status=idle configured=true pending=0");
-
-    const taskResponse = await fetch(
-      new URL(`tasks/${taskId}.ttl`, solidOpenBaseUrl),
-    );
-    const taskBody = await taskResponse.text();
-    expect(taskResponse.ok).toBe(true);
-    expect(taskBody).toContain("Prepare April review");
-    expect(taskBody).toContain(
-      '"2026-04"^^<https://michalporeba.com/ns/lifegraph#edtf>',
-    );
-    expect(taskBody).not.toContain("http://purl.org/dc/terms/created");
-    expect(taskBody).not.toContain("http://purl.org/dc/terms/modified");
+    ).resolves.toMatch(/^status=(idle|syncing) configured=true pending=0$/);
 
     const entryResponse = await fetch(
       new URL(`journal-entries/${entryId}.ttl`, solidOpenBaseUrl),
@@ -173,6 +219,90 @@ describe("demo CLI with Community Solid Server", () => {
       '"2022"^^<https://michalporeba.com/ns/lifegraph#edtf>',
     );
     expect(entryBody).toContain(taskId);
+  }, 30_000);
+
+  it("updates and deletes the canonical task resource through the local-first demo flow", async () => {
+    const taskId = `task-lifecycle-${runId}`;
+    const dataDir = await createDataDir();
+
+    await runDemo([
+      "task",
+      "add",
+      "--data-dir",
+      dataDir,
+      "--id",
+      taskId,
+      "--title",
+      "Inspect canonical task",
+      "--due",
+      "2026-04",
+    ]);
+
+    expectSyncedOutput(
+      await runDemo([
+        "sync",
+        "now",
+        "--data-dir",
+        dataDir,
+        "--pod-base-url",
+        solidOpenBaseUrl,
+      ]),
+    );
+
+    const createdBody = await expectTaskResource(taskId, {
+      title: "Inspect canonical task",
+      statusTerm: "Todo",
+      due: "2026-04",
+    });
+    expect(createdBody).not.toContain(
+      "<https://michalporeba.com/ns/lifegraph#Done>",
+    );
+
+    await expect(
+      runDemo(["task", "done", taskId, "--data-dir", dataDir]),
+    ).resolves.toBe(
+      `completed ${taskId} [done] Inspect canonical task due=2026-04`,
+    );
+
+    expectSyncedOutput(
+      await runDemo([
+        "sync",
+        "now",
+        "--data-dir",
+        dataDir,
+        "--pod-base-url",
+        solidOpenBaseUrl,
+      ]),
+    );
+
+    const updatedBody = await expectTaskResource(taskId, {
+      title: "Inspect canonical task",
+      statusTerm: "Done",
+      due: "2026-04",
+    });
+    expect(updatedBody).not.toContain(
+      "<https://michalporeba.com/ns/lifegraph#Todo>",
+    );
+
+    await expect(
+      runDemo(["task", "delete", taskId, "--data-dir", dataDir]),
+    ).resolves.toBe(`deleted ${taskId}`);
+
+    expectSyncedOutput(
+      await runDemo([
+        "sync",
+        "now",
+        "--data-dir",
+        dataDir,
+        "--pod-base-url",
+        solidOpenBaseUrl,
+      ]),
+    );
+
+    const deletedResponse = await fetch(
+      new URL(`tasks/${taskId}.ttl`, solidOpenBaseUrl),
+    );
+    expect(deletedResponse.status).toBe(404);
   }, 30_000);
 
   it("bootstraps pre-existing canonical task and journal resources from the Pod", async () => {
