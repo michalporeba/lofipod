@@ -97,6 +97,68 @@ describe("demo CLI", () => {
     });
   });
 
+  it("reads a single existing task through the CLI", async () => {
+    const dataDir = await createDataDir();
+
+    await runWithCapturedOutput([
+      "task",
+      "add",
+      "--data-dir",
+      dataDir,
+      "--id",
+      "task-1",
+      "--title",
+      "Prepare April review",
+      "--due",
+      "2026-04",
+    ]);
+
+    await expect(
+      runWithCapturedOutput(["task", "get", "task-1", "--data-dir", dataDir]),
+    ).resolves.toMatchObject({
+      exitCode: 0,
+      stdout: ["task-1 [todo] Prepare April review due=2026-04"],
+      stderr: [],
+    });
+  });
+
+  it("deletes an existing task through the CLI", async () => {
+    const dataDir = await createDataDir();
+
+    await runWithCapturedOutput([
+      "task",
+      "add",
+      "--data-dir",
+      dataDir,
+      "--id",
+      "task-1",
+      "--title",
+      "Prepare April review",
+    ]);
+
+    await expect(
+      runWithCapturedOutput([
+        "task",
+        "delete",
+        "task-1",
+        "--data-dir",
+        dataDir,
+      ]),
+    ).resolves.toMatchObject({
+      exitCode: 0,
+      stdout: ["deleted task-1"],
+      stderr: [],
+    });
+
+    await expect(
+      runWithCapturedOutput(["task", "list", "--data-dir", dataDir]),
+    ).resolves.toMatchObject({
+      exitCode: 0,
+      stdout: ["no tasks"],
+      stderr: [],
+    });
+  });
+
   it("creates and lists journal entries linked to tasks", async () => {
     const dataDir = await createDataDir();
 

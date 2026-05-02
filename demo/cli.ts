@@ -76,8 +76,10 @@ export function renderHelp(): string {
     "",
     "Commands:",
     "  task add --title <title> [--due <edtf>] [--id <id>] [--data-dir <dir>]",
+    "  task get <id> [--data-dir <dir>]",
     "  task list [--data-dir <dir>]",
     "  task done <id> [--data-dir <dir>]",
+    "  task delete <id> [--data-dir <dir>]",
     "  journal add --title <title> --text <text> --date <edtf> [--task <task-id>] [--id <id>] [--data-dir <dir>]",
     "  journal list [--data-dir <dir>]",
     "  sync bootstrap [--data-dir <dir>] --pod-base-url <url> [--log-base-path <path>]",
@@ -146,6 +148,19 @@ export async function runCli(
       return 0;
     }
 
+    if (resource === "task" && command === "get") {
+      const id =
+        maybeId ?? (typeof options.id === "string" ? options.id : undefined);
+
+      if (!id) {
+        throw new Error("Missing task id.");
+      }
+
+      const task = await app.getTask(id);
+      output.stdout(formatTask(task));
+      return 0;
+    }
+
     if (resource === "task" && command === "done") {
       const id =
         maybeId ?? (typeof options.id === "string" ? options.id : undefined);
@@ -156,6 +171,19 @@ export async function runCli(
 
       const task = await app.completeTask(id);
       output.stdout(`completed ${formatTask(task)}`);
+      return 0;
+    }
+
+    if (resource === "task" && command === "delete") {
+      const id =
+        maybeId ?? (typeof options.id === "string" ? options.id : undefined);
+
+      if (!id) {
+        throw new Error("Missing task id.");
+      }
+
+      await app.deleteTask(id);
+      output.stdout(`deleted ${id}`);
       return 0;
     }
 

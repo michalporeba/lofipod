@@ -33,8 +33,10 @@ export type DemoApp = {
   dataDir: string;
   close(): Promise<void>;
   addTask(input: { id?: string; title: string; due?: string }): Promise<Task>;
+  getTask(id: string): Promise<Task>;
   listTasks(): Promise<Task[]>;
   completeTask(id: string): Promise<Task>;
+  deleteTask(id: string): Promise<void>;
   addJournalEntry(input: {
     id?: string;
     title: string;
@@ -110,6 +112,16 @@ export function createDemoApp(options: CreateDemoAppOptions = {}): DemoApp {
       return engine.save<Task>(TaskEntity.kind, task);
     },
 
+    async getTask(id) {
+      const task = await engine.get<Task>(TaskEntity.kind, id);
+
+      if (!task) {
+        throw new Error(`Unknown task: ${id}`);
+      }
+
+      return task;
+    },
+
     async listTasks() {
       return engine.list<Task>(TaskEntity.kind);
     },
@@ -125,6 +137,10 @@ export function createDemoApp(options: CreateDemoAppOptions = {}): DemoApp {
         ...existing,
         status: "done",
       });
+    },
+
+    async deleteTask(id) {
+      await engine.delete(TaskEntity.kind, id);
     },
 
     async addJournalEntry(input) {

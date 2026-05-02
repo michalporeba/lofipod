@@ -44,15 +44,19 @@ From the repository root:
 
 ```bash
 npm run demo -- task add --title "Prepare April review" --id task-1 --due 2026-04
+npm run demo -- task get task-1
 npm run demo -- task list
 npm run demo -- task done task-1
+npm run demo -- task delete task-1
 ```
 
 If you want an isolated local state directory for inspection:
 
 ```bash
 npm run demo -- task add --data-dir /tmp/lofipod-demo --title "Prepare April review" --id task-1 --due 2026-04
+npm run demo -- task get task-1 --data-dir /tmp/lofipod-demo
 npm run demo -- task list --data-dir /tmp/lofipod-demo
+npm run demo -- task delete task-1 --data-dir /tmp/lofipod-demo
 ```
 
 Useful files for the first-run path:
@@ -67,6 +71,14 @@ The local-first task flow is the intended first stop. It is the repo's
 deliberate "todo" pattern, even though the CLI command name stays `task`.
 Journal entries and Pod sync are follow-on paths once the basic local flow is
 clear.
+
+Supported local task CRUD commands:
+
+- `task add --title <title> [--due <edtf>] [--id <id>]`
+- `task get <id>`
+- `task list`
+- `task done <id>`
+- `task delete <id>`
 
 ## Sync
 
