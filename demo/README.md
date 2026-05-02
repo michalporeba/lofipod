@@ -23,7 +23,7 @@ by the demo.
 
 The demo currently uses two entity families:
 
-- tasks
+- tasks as the repo's concrete bounded todo example
 - journal entries
 
 The command-line interface is the current primary surface. The demo application
@@ -58,12 +58,15 @@ npm run demo -- task list --data-dir /tmp/lofipod-demo
 Useful files for the first-run path:
 
 - `demo/README.md`: local and sync command guide
+- `demo/entities.ts`: the minimal reusable todo/task entity definition
 - `demo/cli.ts`: command surface
 - `demo/app.ts`: demo application wiring
 - `docs/QUICKSTART.md`: minimal public API example
 
-The local-first task flow is the intended first stop. Journal entries and Pod
-sync are follow-on paths once the basic local flow is clear.
+The local-first task flow is the intended first stop. It is the repo's
+deliberate "todo" pattern, even though the CLI command name stays `task`.
+Journal entries and Pod sync are follow-on paths once the basic local flow is
+clear.
 
 ## Sync
 

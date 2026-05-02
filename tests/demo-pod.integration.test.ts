@@ -37,7 +37,7 @@ describe("demo CLI with Community Solid Server", () => {
   async function runDemo(args: string[]): Promise<string> {
     const result = await execFileAsync(
       "node",
-      ["--import", "./scripts/register-ts-node.mjs", "demo/cli.ts", ...args],
+      ["--import", "tsx", "demo/cli.ts", ...args],
       {
         cwd: process.cwd(),
       },
@@ -153,7 +153,9 @@ describe("demo CLI with Community Solid Server", () => {
     const taskBody = await taskResponse.text();
     expect(taskResponse.ok).toBe(true);
     expect(taskBody).toContain("Prepare April review");
-    expect(taskBody).toContain("2026-04");
+    expect(taskBody).toContain('"2026-04"^^<https://michalporeba.com/ns/lifegraph#edtf>');
+    expect(taskBody).not.toContain("http://purl.org/dc/terms/created");
+    expect(taskBody).not.toContain("http://purl.org/dc/terms/modified");
 
     const entryResponse = await fetch(
       new URL(`journal-entries/${entryId}.ttl`, solidOpenBaseUrl),
@@ -161,7 +163,7 @@ describe("demo CLI with Community Solid Server", () => {
     const entryBody = await entryResponse.text();
     expect(entryResponse.ok).toBe(true);
     expect(entryBody).toContain("Summary 2022");
-    expect(entryBody).toContain("2022");
+    expect(entryBody).toContain('"2022"^^<https://michalporeba.com/ns/lifegraph#edtf>');
     expect(entryBody).toContain(taskId);
   }, 30_000);
 
@@ -176,9 +178,7 @@ describe("demo CLI with Community Solid Server", () => {
         `<https://michalporeba.com/demo/id/task/${taskId}> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://michalporeba.com/ns/lifegraph#Task> .`,
         `<https://michalporeba.com/demo/id/task/${taskId}> <https://schema.org/name> "Imported task" .`,
         `<https://michalporeba.com/demo/id/task/${taskId}> <https://michalporeba.com/ns/lifegraph#status> <https://michalporeba.com/ns/lifegraph#Todo> .`,
-        `<https://michalporeba.com/demo/id/task/${taskId}> <https://michalporeba.com/ns/lifegraph#due> "2026-04" .`,
-        `<https://michalporeba.com/demo/id/task/${taskId}> <http://purl.org/dc/terms/created> "2026-03-29T09:00:00.000Z" .`,
-        `<https://michalporeba.com/demo/id/task/${taskId}> <http://purl.org/dc/terms/modified> "2026-03-29T09:00:00.000Z" .`,
+        `<https://michalporeba.com/demo/id/task/${taskId}> <https://michalporeba.com/ns/lifegraph#due> "2026-04"^^<https://michalporeba.com/ns/lifegraph#edtf> .`,
       ].join("\n"),
     );
     await putExternalResource(
@@ -187,7 +187,7 @@ describe("demo CLI with Community Solid Server", () => {
         `<https://michalporeba.com/demo/id/journal-entry/${entryId}> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://michalporeba.com/ns/lifegraph#JournalEntry> .`,
         `<https://michalporeba.com/demo/id/journal-entry/${entryId}> <https://schema.org/name> "Imported journal" .`,
         `<https://michalporeba.com/demo/id/journal-entry/${entryId}> <https://schema.org/text> "Imported body." .`,
-        `<https://michalporeba.com/demo/id/journal-entry/${entryId}> <https://michalporeba.com/ns/lifegraph#entryDate> "2022" .`,
+        `<https://michalporeba.com/demo/id/journal-entry/${entryId}> <https://michalporeba.com/ns/lifegraph#entryDate> "2022"^^<https://michalporeba.com/ns/lifegraph#edtf> .`,
         `<https://michalporeba.com/demo/id/journal-entry/${entryId}> <https://michalporeba.com/ns/lifegraph#aboutTask> <https://michalporeba.com/demo/id/task/${taskId}> .`,
         `<https://michalporeba.com/demo/id/journal-entry/${entryId}> <http://purl.org/dc/terms/created> "2026-03-29T09:05:00.000Z" .`,
         `<https://michalporeba.com/demo/id/journal-entry/${entryId}> <http://purl.org/dc/terms/modified> "2026-03-29T09:05:00.000Z" .`,

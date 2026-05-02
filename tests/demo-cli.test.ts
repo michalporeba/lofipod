@@ -168,8 +168,6 @@ describe("demo CLI", () => {
         title: "Prepare April review",
         status: "todo",
         due: "2026-04",
-        createdAt: "2026-03-29T12:00:00.000Z",
-        modifiedAt: "2026-03-29T12:00:00.000Z",
       },
     ]);
   });

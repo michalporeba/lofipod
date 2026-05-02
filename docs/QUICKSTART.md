@@ -19,7 +19,7 @@ adapters come later from `lofipod/browser` and `lofipod/node`.
 
 A tiny local task store with one entity:
 
-- `Task { id, title, done }`
+- `Task { id, title, status, due? }`
 
 ## Install
 
@@ -31,11 +31,12 @@ npm install lofipod
 
 ```ts
 import {
-  booleanValue,
   createEngine,
   createMemoryStorage,
   defineEntity,
   defineVocabulary,
+  literal,
+  objectOf,
   rdf,
   stringValue,
 } from "lofipod";
@@ -45,7 +46,11 @@ const ex = defineVocabulary({
   terms: {
     Task: "ns#Task",
     title: "ns#title",
-    done: "ns#done",
+    status: "ns#status",
+    due: "ns#due",
+    edtf: "ns#edtf",
+    Todo: "ns#Todo",
+    Done: "ns#Done",
   },
   uri({ base, entityName, id }) {
     return `${base}id/${entityName}/${id}`;
@@ -55,8 +60,34 @@ const ex = defineVocabulary({
 type Task = {
   id: string;
   title: string;
-  done: boolean;
+  status: "todo" | "done";
+  due?: string;
 };
+
+function statusToTerm(task: Task) {
+  return task.status === "done" ? ex.Done : ex.Todo;
+}
+
+function termToStatus(value: ReturnType<typeof objectOf>): Task["status"] {
+  if (!value || typeof value === "string") {
+    throw new Error("Task status must be an RDF named node.");
+  }
+
+  if (value.value === ex.Todo.value) {
+    return "todo";
+  }
+
+  if (value.value === ex.Done.value) {
+    return "done";
+  }
+
+  throw new Error(`Unsupported task status term: ${value.value}`);
+}
+
+function idFromExampleTaskUri(subject: { value: string }): string {
+  // This example's URI factory keeps the task ID in the final path segment.
+  return subject.value.split("/").at(-1) ?? "";
+}
 
 const TaskEntity = defineEntity<Task>({
   kind: "task",
@@ -76,16 +107,21 @@ const TaskEntity = defineEntity<Task>({
     return [
       [subject, rdf.type, ex.Task],
       [subject, ex.title, task.title],
-      [subject, ex.done, task.done],
+      [subject, ex.status, statusToTerm(task)],
+      ...(task.due ? [[subject, ex.due, literal(task.due, ex.edtf)]] : []),
     ];
   },
   project(graph, { uri }) {
     const subject = uri();
 
     return {
-      id: subject.value.split("/").at(-1) ?? "",
+      id: idFromExampleTaskUri(subject),
       title: stringValue(graph, subject, ex.title),
-      done: booleanValue(graph, subject, ex.done),
+      status: termToStatus(objectOf(graph, subject, ex.status)),
+      due:
+        typeof objectOf(graph, subject, ex.due) === "string"
+          ? String(objectOf(graph, subject, ex.due))
+          : undefined,
     };
   },
 });
@@ -98,7 +134,8 @@ const engine = createEngine({
 await engine.save("task", {
   id: "task-1",
   title: "Write docs",
-  done: false,
+  status: "todo",
+  due: "2026-04",
 });
 
 const task = await engine.get<Task>("task", "task-1");
@@ -106,30 +143,31 @@ const tasks = await engine.list<Task>("task");
 
 console.log(task);
 console.log(tasks);
+await engine.delete("task", "task-1");
 ```
 
 Expected result:
 
 ```ts
 task;
-// { id: "task-1", title: "Write docs", done: false }
+// { id: "task-1", title: "Write docs", status: "todo", due: "2026-04" }
 
 tasks;
-// [{ id: "task-1", title: "Write docs", done: false }]
+// [{ id: "task-1", title: "Write docs", status: "todo", due: "2026-04" }]
 ```
 
 ## What each part does
 
 - `defineVocabulary(...)` declares the RDF terms used by this app.
-- `defineEntity(...)` tells `lofipod` how a `Task` becomes RDF and back again.
+- `defineEntity(...)` tells `lofipod` how a bounded todo-style `Task` becomes RDF and back again.
 - `createEngine(...)` creates the local-first API surface.
-- `engine.save(...)`, `engine.get(...)`, and `engine.list(...)` are the normal
-  app-facing operations.
+- `engine.save(...)`, `engine.get(...)`, `engine.list(...)`, and
+  `engine.delete(...)` are the normal app-facing operations.
 
 ## What this shows
 
 - the application owns the TypeScript entity shape
-- RDF mapping is explicit, but still small
+- RDF mapping is explicit, but the example keeps it behind a small app-owned vocabulary
 - local reads and writes go through the engine API
 - `project(...)` rebuilds an object from canonical graph state
 - normal app queries stay local

@@ -42,11 +42,12 @@ browser persistence or Pod sync yet.
 
 ```ts
 import {
-  booleanValue,
   createEngine,
   createMemoryStorage,
   defineEntity,
   defineVocabulary,
+  literal,
+  objectOf,
   rdf,
   stringValue,
 } from "lofipod";
@@ -56,7 +57,11 @@ const ex = defineVocabulary({
   terms: {
     Task: "ns#Task",
     title: "ns#title",
-    done: "ns#done",
+    status: "ns#status",
+    due: "ns#due",
+    edtf: "ns#edtf",
+    Todo: "ns#Todo",
+    Done: "ns#Done",
   },
   uri({ base, entityName, id }) {
     return `${base}id/${entityName}/${id}`;
@@ -66,8 +71,34 @@ const ex = defineVocabulary({
 type Task = {
   id: string;
   title: string;
-  done: boolean;
+  status: "todo" | "done";
+  due?: string;
 };
+
+function statusToTerm(task: Task) {
+  return task.status === "done" ? ex.Done : ex.Todo;
+}
+
+function termToStatus(value: ReturnType<typeof objectOf>): Task["status"] {
+  if (!value || typeof value === "string") {
+    throw new Error("Task status must be an RDF named node.");
+  }
+
+  if (value.value === ex.Todo.value) {
+    return "todo";
+  }
+
+  if (value.value === ex.Done.value) {
+    return "done";
+  }
+
+  throw new Error(`Unsupported task status term: ${value.value}`);
+}
+
+function idFromExampleTaskUri(subject: { value: string }): string {
+  // This example's URI factory keeps the task ID in the final path segment.
+  return subject.value.split("/").at(-1) ?? "";
+}
 
 const TaskEntity = defineEntity<Task>({
   kind: "task",
@@ -87,16 +118,21 @@ const TaskEntity = defineEntity<Task>({
     return [
       [subject, rdf.type, ex.Task],
       [subject, ex.title, task.title],
-      [subject, ex.done, task.done],
+      [subject, ex.status, statusToTerm(task)],
+      ...(task.due ? [[subject, ex.due, literal(task.due, ex.edtf)]] : []),
     ];
   },
   project(graph, { uri }) {
     const subject = uri();
 
     return {
-      id: subject.value.split("/").at(-1) ?? "",
+      id: idFromExampleTaskUri(subject),
       title: stringValue(graph, subject, ex.title),
-      done: booleanValue(graph, subject, ex.done),
+      status: termToStatus(objectOf(graph, subject, ex.status)),
+      due:
+        typeof objectOf(graph, subject, ex.due) === "string"
+          ? String(objectOf(graph, subject, ex.due))
+          : undefined,
     };
   },
 });
@@ -109,7 +145,8 @@ const engine = createEngine({
 await engine.save("task", {
   id: "task-1",
   title: "Write docs",
-  done: false,
+  status: "todo",
+  due: "2026-04",
 });
 
 const task = await engine.get<Task>("task", "task-1");
@@ -120,7 +157,8 @@ await engine.delete("task", "task-1");
 What this example shows:
 
 - the application owns the `Task` type
-- the entity definition owns RDF mapping and Pod placement
+- the entity definition owns RDF mapping and Pod placement for a bounded
+  todo-style task
 - the engine owns local CRUD behaviour
 - `project(...)` rebuilds the application object from canonical graph state
 

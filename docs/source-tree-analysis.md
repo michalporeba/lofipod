@@ -31,7 +31,7 @@ lofipod/
 ├── demo/                    # CLI demo and ontology assets
 │   └── ontology/            # Demo RDF vocabulary subset
 ├── docs/                    # Product, architecture, API, planning, and generated docs
-├── scripts/                 # Test and ts-node helper scripts
+├── scripts/                 # Test helper scripts
 ├── .github/workflows/       # CI and npm publish workflows
 ├── _bmad/                   # BMAD workflow config and scripts
 ├── _bmad-output/            # Generated BMAD artifacts

@@ -2,6 +2,7 @@ import {
   defineEntity,
   defineVocabulary,
   isNamedNodeTerm,
+  literal,
   objectOf,
   rdf,
   stringValue,
@@ -25,8 +26,6 @@ export type Task = {
   title: string;
   status: "todo" | "done";
   due?: string;
-  createdAt: string;
-  modifiedAt: string;
 };
 
 export type JournalEntry = {
@@ -39,7 +38,7 @@ export type JournalEntry = {
   modifiedAt: string;
 };
 
-export const mlg = defineVocabulary({
+export const demoVocabulary = defineVocabulary({
   base: "https://michalporeba.com/",
   terms: {
     Task: "ns/lifegraph#Task",
@@ -59,28 +58,41 @@ export const mlg = defineVocabulary({
 });
 
 function statusToTerm(status: Task["status"]) {
-  return status === "done" ? mlg.Done : mlg.Todo;
+  return status === "done" ? demoVocabulary.Done : demoVocabulary.Todo;
 }
 
 function termToStatus(value: Triple[2] | undefined): Task["status"] {
-  return isNamedNodeTerm(value) && value.value === mlg.Done.value
-    ? "done"
-    : "todo";
+  if (!isNamedNodeTerm(value)) {
+    throw new Error("Task status must be an RDF named node.");
+  }
+
+  if (value.value === demoVocabulary.Todo.value) {
+    return "todo";
+  }
+
+  if (value.value === demoVocabulary.Done.value) {
+    return "done";
+  }
+
+  throw new Error(`Unsupported task status term: ${value.value}`);
 }
 
-function idFromUri(subject: { value: string }): string {
+// The demo URI layout keeps the entity ID in the final path segment.
+function idFromDemoUri(subject: { value: string }): string {
   return subject.value.split("/").at(-1) ?? "";
 }
 
+// The demo's first entity is intentionally small enough to reuse as the
+// baseline local-first todo pattern before introducing sync-specific details.
 export const TaskEntity: EntityDefinition<Task> = defineEntity<Task>({
   kind: "task",
   pod: {
     basePath: "tasks/",
   },
-  rdfType: mlg.Task,
+  rdfType: demoVocabulary.Task,
   id: (task) => task.id,
   uri: (task) =>
-    mlg.uri({
+    demoVocabulary.uri({
       entityName: "task",
       id: task.id,
     }),
@@ -88,27 +100,31 @@ export const TaskEntity: EntityDefinition<Task> = defineEntity<Task>({
     const subject = uri(task);
 
     return [
-      [subject, rdf.type, mlg.Task],
+      [subject, rdf.type, demoVocabulary.Task],
       [subject, schema.name, task.title],
-      [subject, mlg.status, statusToTerm(task.status)],
-      ...(task.due ? ([[subject, mlg.due, task.due]] satisfies Triple[]) : []),
-      [subject, dct.created, task.createdAt],
-      [subject, dct.modified, task.modifiedAt],
+      [subject, demoVocabulary.status, statusToTerm(task.status)],
+      ...(task.due
+        ? ([
+            [
+              subject,
+              demoVocabulary.due,
+              literal(task.due, demoVocabulary.edtf),
+            ],
+          ] satisfies Triple[])
+        : []),
     ];
   },
   project(graph, { uri }) {
     const subject = uri();
 
     return {
-      id: idFromUri(subject),
+      id: idFromDemoUri(subject),
       title: stringValue(graph, subject, schema.name),
-      status: termToStatus(objectOf(graph, subject, mlg.status)),
+      status: termToStatus(objectOf(graph, subject, demoVocabulary.status)),
       due:
-        typeof objectOf(graph, subject, mlg.due) === "string"
-          ? String(objectOf(graph, subject, mlg.due))
+        typeof objectOf(graph, subject, demoVocabulary.due) === "string"
+          ? String(objectOf(graph, subject, demoVocabulary.due))
           : undefined,
-      createdAt: stringValue(graph, subject, dct.created),
-      modifiedAt: stringValue(graph, subject, dct.modified),
     };
   },
 });
@@ -119,10 +135,10 @@ export const JournalEntryEntity: EntityDefinition<JournalEntry> =
     pod: {
       basePath: "journal-entries/",
     },
-    rdfType: mlg.JournalEntry,
+    rdfType: demoVocabulary.JournalEntry,
     id: (entry) => entry.id,
     uri: (entry) =>
-      mlg.uri({
+      demoVocabulary.uri({
         entityName: "journal-entry",
         id: entry.id,
       }),
@@ -130,16 +146,20 @@ export const JournalEntryEntity: EntityDefinition<JournalEntry> =
       const subject = uri(entry);
 
       return [
-        [subject, rdf.type, mlg.JournalEntry],
+        [subject, rdf.type, demoVocabulary.JournalEntry],
         [subject, schema.name, entry.title],
         [subject, schema.text, entry.text],
-        [subject, mlg.entryDate, entry.entryDate],
+        [
+          subject,
+          demoVocabulary.entryDate,
+          literal(entry.entryDate, demoVocabulary.edtf),
+        ],
         ...(entry.aboutTaskId
           ? ([
               [
                 subject,
-                mlg.aboutTask,
-                mlg.uri({
+                demoVocabulary.aboutTask,
+                demoVocabulary.uri({
                   entityName: "task",
                   id: entry.aboutTaskId,
                 }),
@@ -152,15 +172,15 @@ export const JournalEntryEntity: EntityDefinition<JournalEntry> =
     },
     project(graph, { uri }) {
       const subject = uri();
-      const aboutTask = objectOf(graph, subject, mlg.aboutTask);
+      const aboutTask = objectOf(graph, subject, demoVocabulary.aboutTask);
 
       return {
-        id: idFromUri(subject),
+        id: idFromDemoUri(subject),
         title: stringValue(graph, subject, schema.name),
         text: stringValue(graph, subject, schema.text),
-        entryDate: stringValue(graph, subject, mlg.entryDate),
+        entryDate: stringValue(graph, subject, demoVocabulary.entryDate),
         aboutTaskId: isNamedNodeTerm(aboutTask)
-          ? idFromUri(aboutTask)
+          ? idFromDemoUri(aboutTask)
           : undefined,
         createdAt: stringValue(graph, subject, dct.created),
         modifiedAt: stringValue(graph, subject, dct.modified),

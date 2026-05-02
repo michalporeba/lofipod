@@ -100,14 +100,11 @@ export function createDemoApp(options: CreateDemoAppOptions = {}): DemoApp {
     },
 
     async addTask(input) {
-      const timestamp = now();
       const task: Task = {
         id: input.id ?? createId("task"),
         title: input.title,
         status: "todo",
         due: input.due,
-        createdAt: timestamp,
-        modifiedAt: timestamp,
       };
 
       return engine.save<Task>(TaskEntity.kind, task);
@@ -127,7 +124,6 @@ export function createDemoApp(options: CreateDemoAppOptions = {}): DemoApp {
       return engine.save<Task>(TaskEntity.kind, {
         ...existing,
         status: "done",
-        modifiedAt: now(),
       });
     },
 
