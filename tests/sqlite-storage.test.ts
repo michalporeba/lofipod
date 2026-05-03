@@ -9,12 +9,14 @@ import {
   createSqliteStorage,
   defineEntity,
   defineVocabulary,
+  isNamedNodeTerm,
   literal,
   rdf,
   stringValue,
   uri,
   type Triple,
 } from "../src/node.js";
+import { TaskEntity, demoVocabulary, type Task } from "../demo/entities.js";
 import { createEventFixture } from "./support/eventFixture.js";
 
 describe("createSqliteStorage", () => {
@@ -230,5 +232,190 @@ describe("createSqliteStorage", () => {
       id: "bookmark-1",
       url: "https://literal.example/resource",
     });
+  });
+
+  it("reprojects legacy task graphs during get and persists the repair as a normal local change", async () => {
+    const filePath = await createStorageFilePath();
+    const storage = createSqliteStorage({
+      filePath,
+    });
+    const firstEngine = createEngine({
+      entities: [TaskEntity],
+      storage,
+    });
+
+    await firstEngine.save<Task>("task", {
+      id: "task-legacy-repair",
+      title: "Legacy reprojection",
+      status: "todo",
+      priority: "high",
+    });
+
+    await storage.transact((transaction) => {
+      const record = transaction.readEntity("task", "task-legacy-repair");
+
+      if (!record) {
+        throw new Error("missing task record");
+      }
+
+      transaction.writeEntity("task", "task-legacy-repair", {
+        ...record,
+        graph: record.graph.filter(
+          ([, predicate]) => predicate.value !== demoVocabulary.priority.value,
+        ),
+        projection: {
+          id: "task-legacy-repair",
+          title: "Legacy reprojection",
+          status: "todo",
+        },
+      });
+    });
+
+    const secondEngine = createEngine({
+      entities: [TaskEntity],
+      storage: createSqliteStorage({
+        filePath,
+      }),
+    });
+
+    await expect(
+      secondEngine.get<Task>("task", "task-legacy-repair"),
+    ).resolves.toEqual({
+      id: "task-legacy-repair",
+      title: "Legacy reprojection",
+      status: "todo",
+      priority: "normal",
+      due: undefined,
+    });
+
+    const repairedRecord = await storage.readEntity(
+      "task",
+      "task-legacy-repair",
+    );
+    const changes = await storage.listChanges("task", "task-legacy-repair");
+    const repairChange = changes.at(-1);
+
+    expect(
+      repairedRecord?.graph.some(
+        ([subject, predicate, object]) =>
+          subject.value ===
+            demoVocabulary.uri({
+              entityName: "task",
+              id: "task-legacy-repair",
+            }).value &&
+          predicate.value === demoVocabulary.priority.value &&
+          isNamedNodeTerm(object) &&
+          object.value === demoVocabulary.PriorityNormal.value,
+      ),
+    ).toBe(true);
+    expect(changes).toHaveLength(2);
+    expect(
+      repairChange?.assertions.some(
+        ([, predicate, object]) =>
+          predicate.value === demoVocabulary.priority.value &&
+          isNamedNodeTerm(object) &&
+          object.value === demoVocabulary.PriorityNormal.value,
+      ),
+    ).toBe(true);
+  });
+
+  it("reprojects legacy task graphs during list after restart and keeps deterministic evolved outputs", async () => {
+    const filePath = await createStorageFilePath();
+    const storage = createSqliteStorage({
+      filePath,
+    });
+    const firstEngine = createEngine({
+      entities: [TaskEntity],
+      storage,
+    });
+
+    await firstEngine.save<Task>("task", {
+      id: "task-legacy-list-a",
+      title: "Legacy list A",
+      status: "todo",
+      priority: "low",
+    });
+    await firstEngine.save<Task>("task", {
+      id: "task-legacy-list-b",
+      title: "Legacy list B",
+      status: "done",
+      priority: "high",
+    });
+
+    await storage.transact((transaction) => {
+      const first = transaction.readEntity("task", "task-legacy-list-a");
+      const second = transaction.readEntity("task", "task-legacy-list-b");
+
+      if (!first || !second) {
+        throw new Error("missing legacy task records");
+      }
+
+      transaction.writeEntity("task", "task-legacy-list-a", {
+        ...first,
+        graph: first.graph.filter(
+          ([, predicate]) => predicate.value !== demoVocabulary.priority.value,
+        ),
+        projection: {
+          id: "task-legacy-list-a",
+          title: "Legacy list A",
+          status: "todo",
+        },
+      });
+      transaction.writeEntity("task", "task-legacy-list-b", {
+        ...second,
+        graph: second.graph.filter(
+          ([, predicate]) => predicate.value !== demoVocabulary.priority.value,
+        ),
+        projection: {
+          id: "task-legacy-list-b",
+          title: "Legacy list B",
+          status: "done",
+        },
+      });
+    });
+
+    const secondEngine = createEngine({
+      entities: [TaskEntity],
+      storage: createSqliteStorage({
+        filePath,
+      }),
+    });
+
+    await expect(secondEngine.list<Task>("task")).resolves.toEqual([
+      {
+        id: "task-legacy-list-b",
+        title: "Legacy list B",
+        status: "done",
+        priority: "normal",
+        due: undefined,
+      },
+      {
+        id: "task-legacy-list-a",
+        title: "Legacy list A",
+        status: "todo",
+        priority: "normal",
+        due: undefined,
+      },
+    ]);
+
+    const changesA = await storage.listChanges("task", "task-legacy-list-a");
+    const changesB = await storage.listChanges("task", "task-legacy-list-b");
+
+    expect(changesA).toHaveLength(2);
+    expect(changesB).toHaveLength(2);
+    expect(
+      changesA
+        .at(-1)
+        ?.assertions.some(
+          ([, predicate]) => predicate.value === demoVocabulary.priority.value,
+        ),
+    ).toBe(true);
+    expect(
+      changesB
+        .at(-1)
+        ?.assertions.some(
+          ([, predicate]) => predicate.value === demoVocabulary.priority.value,
+        ),
+    ).toBe(true);
   });
 });

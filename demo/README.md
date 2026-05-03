@@ -161,6 +161,9 @@ The demo also uses this task shape to show bounded model evolution support:
 legacy local task records that predate `priority` continue to read as normal
 local-first tasks, defaulting to `priority=normal` through the entity
 projection path.
+When that evolved projection implies canonical graph repair, the repair is
+recorded as a normal local change so it follows the same sync path as ordinary
+edits.
 
 That mapping is a demo-owned app choice layered on top of the same local-first
 programming model. You can ignore the ontology files entirely until you want to
