@@ -4101,6 +4101,86 @@ describe("mocked entity sync", () => {
     );
   });
 
+  it("serializes startup sync and manual sync.now() after attach recovery is resumed", async () => {
+    const { entity } = createEventFixture();
+    const storage = createMemoryStorage();
+    const localEngine = createEngine({
+      entities: [entity],
+      storage,
+    });
+
+    await localEngine.save("event", {
+      id: "ev-startup-serialized",
+      title: "Startup pending",
+      time: {
+        year: 2024,
+      },
+    });
+
+    let activeSyncs = 0;
+    let maxConcurrentSyncs = 0;
+    let patchAttempts = 0;
+    const firstPatchStarted = createDeferred<void>();
+    const allowFirstPatchToFinish = createDeferred<void>();
+    const attachedEngine = createEngine({
+      entities: [entity],
+      storage,
+      pod,
+      sync: {
+        adapter: {
+          async applyEntityPatch() {
+            patchAttempts += 1;
+            activeSyncs += 1;
+            maxConcurrentSyncs = Math.max(maxConcurrentSyncs, activeSyncs);
+
+            if (patchAttempts === 1) {
+              firstPatchStarted.resolve();
+              await allowFirstPatchToFinish.promise;
+            }
+
+            activeSyncs -= 1;
+          },
+          async appendLogEntry() {
+            // no-op
+          },
+        },
+      },
+    });
+
+    await firstPatchStarted.promise;
+    const manualSync = attachedEngine.sync.now();
+    let manualSyncSettled = false;
+    void manualSync.finally(() => {
+      manualSyncSettled = true;
+    });
+    await new Promise((resolve) => {
+      setTimeout(resolve, 20);
+    });
+    expect(maxConcurrentSyncs).toBe(1);
+    expect(patchAttempts).toBe(1);
+    expect(manualSyncSettled).toBe(false);
+
+    allowFirstPatchToFinish.resolve();
+    await manualSync;
+    expect(manualSyncSettled).toBe(true);
+
+    await waitForExpectation(async () => {
+      await expect(attachedEngine.sync.state()).resolves.toEqual(
+        expectedSyncState({
+          status: "idle",
+          configured: true,
+          pendingChanges: 0,
+          connection: {
+            reachable: true,
+            lastSyncedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+          },
+        }),
+      );
+    });
+    expect(maxConcurrentSyncs).toBe(1);
+    expect(patchAttempts).toBe(1);
+  });
+
   it("includes embedded child-node updates in later patches", async () => {
     const { entity } = createEventFixture();
     const patches: string[] = [];

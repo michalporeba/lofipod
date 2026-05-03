@@ -193,6 +193,18 @@ export function createEngine(config: EngineConfig): Engine {
     return task;
   };
 
+  const enqueueStartupSyncCycle = (generation: number): Promise<void> => {
+    const task = queuedSync
+      .catch(() => {
+        // Continue processing startup sync after an earlier failure.
+      })
+      .then(() => runStartupSyncCycle(generation));
+
+    queuedSync = task;
+
+    return task;
+  };
+
   const runSyncNow = (suppressErrors: boolean): Promise<void> => {
     const task = enqueueSyncCycle();
 
@@ -244,7 +256,7 @@ export function createEngine(config: EngineConfig): Engine {
     pendingInitialSyncTimer = setTimeout(() => {
       pendingInitialSyncTimer = null;
       const generation = startupSyncGeneration;
-      void runStartupSyncCycle(generation);
+      void enqueueStartupSyncCycle(generation);
     }, 0);
   };
   const supersedeStartupSync = (): void => {
@@ -324,6 +336,7 @@ export function createEngine(config: EngineConfig): Engine {
 
     sync: {
       async attach(syncConfig): Promise<void> {
+        supersedeStartupSync();
         clearPendingInitialSync();
         clearPendingBackgroundSync();
         currentPodConfig = {

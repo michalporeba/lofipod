@@ -193,6 +193,12 @@ library's long-lived attached-engine model, retry happens in the background
 when connectivity returns; in this demo, later `sync` commands resume that
 work without requiring you to reconstruct local changes by hand.
 
+Supported transient-failure loop:
+
+1. keep using local `task ...` / `journal ...` commands
+2. check `sync status` (`offline` + non-zero `pending` means recovery is needed)
+3. rerun `sync ...` when Pod/network recovers until `status=idle` and `pending=0`
+
 ### Inspecting sync state
 
 `sync status` is the demo's supported inspection path for the library's public

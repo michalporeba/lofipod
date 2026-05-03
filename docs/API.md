@@ -378,6 +378,14 @@ The current `SyncState` reports aggregate engine-level status:
 - `connection.lastFailureReason`
 - `connection.notificationsActive`
 
+Expected transient-failure recovery path:
+
+- a failed cycle reports `status: "offline"` and preserves `pendingChanges`
+- when polling, attach-startup, or a later `sync.now()` succeeds, status moves
+  through normal `syncing` toward `idle` (or `pending` if work remains)
+- sync phases stay deterministic (`push -> pull -> reconcile`) and resume via
+  the same queued background mechanism rather than hidden operator repair
+
 When omitted, the current default polling interval is 30 seconds, with
 exponential backoff after consecutive sync failures.
 

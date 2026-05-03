@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-04-26T13:37:20+01:00"
-last_updated: "2026-05-03T14:27:00+01:00"
+last_updated: "2026-05-03T13:29:00+01:00"
 project: "lofipod"
 project_key: "NOKEY"
 tracking_system: "file-system"
@@ -64,7 +64,7 @@ development_status:
   3-3-detect-and-classify-unsupported-or-unsafe-remote-edits: review
   3-4-apply-documented-policy-responses-to-unsupported-remote-changes: review
   3-5-explain-what-changed-what-synced-and-what-failed: review
-  3-6-recover-cleanly-from-interrupted-or-failed-sync-work: backlog
+  3-6-recover-cleanly-from-interrupted-or-failed-sync-work: review
   epic-3-retrospective: optional
   epic-4: backlog
   4-1-evolve-the-todo-entity-model-without-breaking-local-reads: backlog
