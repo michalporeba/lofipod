@@ -1,6 +1,6 @@
 # Story 3.1: Replay Compatible Remote Changes From Another Lofipod Client
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -36,6 +36,14 @@ So that ongoing multi-device use remains consistent after initial attach.
   - [x] Run `npm run build`.
   - [x] Run `npm run test:demo`.
   - [x] Run `npm run test:pod`.
+
+### Review Findings
+
+- [x] [Review][Patch] Reconciliation determinism assertion was weakened to allow two conflicting winners [tests/public-api.test.ts:4619]
+- [x] [Review][Patch] `list(...)` assertion is coupled to `get(...)` output, reducing independent verification [tests/public-api.test.ts:4627]
+- [x] [Review][Patch] Post-attach canonical reconciliation test does not assert remote-log idempotency/non-duplication [tests/public-api.test.ts:4733]
+- [x] [Review][Patch] Story scope evidence is incomplete for AC5 because no demo/pod integration test changes appear in the reviewed diff [_bmad-output/implementation-artifacts/3-1-replay-compatible-remote-changes-from-another-lofipod-client.md:22]
+- [x] [Review][Patch] Sprint tracking change marks story 3-2 as `review` in this 3-1 review scope, indicating likely process-state drift [_bmad-output/implementation-artifacts/sprint-status.yaml:63]
 
 ## Dev Agent Record
 

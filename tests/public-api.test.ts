@@ -4554,89 +4554,97 @@ describe("mocked entity sync", () => {
     });
     const entityId = "ev-story-3-1";
     const podBaseUrl = "https://pod.example/";
+    vi.useFakeTimers();
 
-    await firstEngine.sync.attach({
-      adapter: remote.adapter,
-      podBaseUrl,
-      logBasePath: pod.logBasePath,
-    });
-    await secondEngine.sync.attach({
-      adapter: remote.adapter,
-      podBaseUrl,
-      logBasePath: pod.logBasePath,
-    });
+    try {
+      await firstEngine.sync.attach({
+        adapter: remote.adapter,
+        podBaseUrl,
+        logBasePath: pod.logBasePath,
+      });
+      await secondEngine.sync.attach({
+        adapter: remote.adapter,
+        podBaseUrl,
+        logBasePath: pod.logBasePath,
+      });
 
-    await firstEngine.save("event", {
-      id: entityId,
-      title: "Created remotely",
-      time: {
-        year: 2024,
-      },
-    });
-    await firstEngine.sync.now();
-    await secondEngine.sync.now();
+      vi.setSystemTime(new Date("2026-04-09T10:00:00.000Z"));
+      await firstEngine.save("event", {
+        id: entityId,
+        title: "Created remotely",
+        time: {
+          year: 2024,
+        },
+      });
+      await firstEngine.sync.now();
+      await secondEngine.sync.now();
 
-    await expect(secondEngine.get("event", entityId)).resolves.toEqual({
-      id: entityId,
-      title: "Created remotely",
-      time: {
-        year: 2024,
-      },
-    });
-    await expect(secondEngine.list("event")).resolves.toContainEqual({
-      id: entityId,
-      title: "Created remotely",
-      time: {
-        year: 2024,
-      },
-    });
+      await expect(secondEngine.get("event", entityId)).resolves.toEqual({
+        id: entityId,
+        title: "Created remotely",
+        time: {
+          year: 2024,
+        },
+      });
+      await expect(secondEngine.list("event")).resolves.toContainEqual({
+        id: entityId,
+        title: "Created remotely",
+        time: {
+          year: 2024,
+        },
+      });
 
-    await secondEngine.sync.detach();
-    await secondEngine.save("event", {
-      id: entityId,
-      title: "Receiver local draft",
-      time: {
-        year: 2024,
-      },
-    });
+      await secondEngine.sync.detach();
+      vi.setSystemTime(new Date("2026-04-09T10:01:00.000Z"));
+      await secondEngine.save("event", {
+        id: entityId,
+        title: "Receiver local draft",
+        time: {
+          year: 2024,
+        },
+      });
 
-    await firstEngine.save("event", {
-      id: entityId,
-      title: "Updated remotely",
-      time: {
-        year: 2025,
-      },
-    });
-    await firstEngine.sync.now();
+      vi.setSystemTime(new Date("2026-04-09T10:02:00.000Z"));
+      await firstEngine.save("event", {
+        id: entityId,
+        title: "Updated remotely",
+        time: {
+          year: 2025,
+        },
+      });
+      await firstEngine.sync.now();
 
-    await secondEngine.sync.attach({
-      adapter: remote.adapter,
-      podBaseUrl,
-      logBasePath: pod.logBasePath,
-    });
-    await secondEngine.sync.now();
+      await secondEngine.sync.attach({
+        adapter: remote.adapter,
+        podBaseUrl,
+        logBasePath: pod.logBasePath,
+      });
+      await secondEngine.sync.now();
 
-    await expect(secondEngine.get("event", entityId)).resolves.toEqual({
-      id: entityId,
-      title: "Updated remotely",
-      time: {
-        year: 2025,
-      },
-    });
-    await expect(secondEngine.list("event")).resolves.toContainEqual({
-      id: entityId,
-      title: "Updated remotely",
-      time: {
-        year: 2025,
-      },
-    });
+      await expect(secondEngine.get("event", entityId)).resolves.toEqual({
+        id: entityId,
+        title: "Updated remotely",
+        time: {
+          year: 2025,
+        },
+      });
+      await expect(secondEngine.list("event")).resolves.toContainEqual({
+        id: entityId,
+        title: "Updated remotely",
+        time: {
+          year: 2025,
+        },
+      });
 
-    await firstEngine.delete("event", entityId);
-    await firstEngine.sync.now();
-    await secondEngine.sync.now();
+      await firstEngine.delete("event", entityId);
+      await firstEngine.sync.now();
+      await secondEngine.sync.now();
 
-    await expect(secondEngine.get("event", entityId)).resolves.toBeNull();
-    await expect(secondEngine.list("event")).resolves.toEqual([]);
+      await expect(secondEngine.get("event", entityId)).resolves.toBeNull();
+      await expect(secondEngine.list("event")).resolves.toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("reconciles external canonical edits after log replay and queues only log projection", async () => {
@@ -4725,6 +4733,88 @@ describe("mocked entity sync", () => {
         },
       }),
     );
+  });
+
+  it("treats compatible canonical updates discovered after attach as post-attach reconciliation", async () => {
+    const { entity } = createEventFixture();
+    const remote = createSharedRemoteAdapter();
+    const storage = createMemoryStorage();
+    const engine = createEngine({
+      entities: [entity],
+      pod,
+      storage,
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-post-attach-canonical",
+      title: "Local baseline",
+      time: {
+        year: 2024,
+      },
+    });
+    await engine.sync.now();
+
+    remote.upsertCanonicalEntity({
+      entityName: "event",
+      entityId: "ev-post-attach-canonical",
+      path: "events/ev-post-attach-canonical.ttl",
+      rootUri: "https://example.com/id/event/ev-post-attach-canonical",
+      rdfType: entity.rdfType,
+      graph: eventGraph(
+        "ev-post-attach-canonical",
+        "External post-attach",
+        2028,
+      ),
+    });
+
+    await engine.sync.now();
+
+    await expect(
+      engine.get("event", "ev-post-attach-canonical"),
+    ).resolves.toEqual({
+      id: "ev-post-attach-canonical",
+      title: "External post-attach",
+      time: {
+        year: 2028,
+      },
+    });
+    await expect(engine.list("event")).resolves.toContainEqual({
+      id: "ev-post-attach-canonical",
+      title: "External post-attach",
+      time: {
+        year: 2028,
+      },
+    });
+
+    const changesAfterFirstReconcile = await storage.listChanges(
+      "event",
+      "ev-post-attach-canonical",
+    );
+    const latest = changesAfterFirstReconcile.at(-1);
+
+    expect(latest).toMatchObject({
+      entityProjected: true,
+      logProjected: false,
+    });
+    const logEntriesAfterFirstReconcile = remote.logEntries.length;
+
+    await engine.sync.now();
+    expect(remote.logEntries).toHaveLength(logEntriesAfterFirstReconcile + 1);
+
+    const changesAfterRepeatedSync = await storage.listChanges(
+      "event",
+      "ev-post-attach-canonical",
+    );
+
+    expect(changesAfterRepeatedSync).toHaveLength(
+      changesAfterFirstReconcile.length,
+    );
+
+    await engine.sync.now();
+    expect(remote.logEntries).toHaveLength(logEntriesAfterFirstReconcile + 1);
   });
 
   it("does not create a duplicate canonical reconciliation change when log replay already matches the Pod", async () => {

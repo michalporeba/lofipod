@@ -355,6 +355,13 @@ describe("Community Solid Server auto sync", () => {
           year: 2031,
         },
       });
+      await expect(consumer.list("event")).resolves.toContainEqual({
+        id: entityId,
+        title: "Updated on producer",
+        time: {
+          year: 2031,
+        },
+      });
     }, 15_000);
 
     await producer.delete("event", entityId);

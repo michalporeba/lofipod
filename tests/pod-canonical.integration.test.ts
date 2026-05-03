@@ -284,4 +284,57 @@ describe("Community Solid Server canonical reconciliation", () => {
       },
     });
   }, 30_000);
+
+  it("reconciles a compatible canonical update after attach and keeps local list usable", async () => {
+    const runId = createRunId();
+    const entityId = `ev-post-attach-${runId}`;
+    const { engine, pod } = createSyncedEngine();
+
+    await engine.save("event", {
+      id: entityId,
+      title: "Before external update",
+      time: {
+        year: 2026,
+      },
+    });
+    await engine.sync.now();
+
+    await deleteExternalCanonicalEvent(pod.basePath, entityId);
+    await putExternalCanonicalEvent(
+      pod.basePath,
+      entityId,
+      "After external update",
+      2029,
+    );
+    await expect(readCanonicalBody(pod.basePath, entityId)).resolves.toContain(
+      "After external update",
+    );
+
+    await engine.sync.now();
+
+    await expect(engine.get("event", entityId)).resolves.toEqual({
+      id: entityId,
+      title: "After external update",
+      time: {
+        year: 2029,
+      },
+    });
+    await expect(engine.list("event")).resolves.toContainEqual({
+      id: entityId,
+      title: "After external update",
+      time: {
+        year: 2029,
+      },
+    });
+
+    await engine.sync.now();
+    await expect(engine.sync.state()).resolves.toMatchObject({
+      status: "idle",
+      configured: true,
+      pendingChanges: 0,
+      connection: {
+        reachable: true,
+      },
+    });
+  }, 30_000);
 });
