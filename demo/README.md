@@ -151,10 +151,16 @@ The intended pattern is additive:
 The same `TaskEntity` in [entities.ts](entities.ts) owns both sides of that
 boundary:
 
-- the bounded local task shape stays `id`, `title`, `status`, and optional `due`
+- the bounded local task shape stays `id`, `title`, `status`, `priority`, and
+  optional `due`
 - the sync-scoped canonical mapping projects tasks to `tasks/<id>.ttl`
 - the canonical Turtle uses `mlg:Task`, `schema:name`, `mlg:status`, and
-  optional `mlg:due` with the `mlg:edtf` datatype
+  `mlg:priority`, plus optional `mlg:due` with the `mlg:edtf` datatype
+
+The demo also uses this task shape to show bounded model evolution support:
+legacy local task records that predate `priority` continue to read as normal
+local-first tasks, defaulting to `priority=normal` through the entity
+projection path.
 
 That mapping is a demo-owned app choice layered on top of the same local-first
 programming model. You can ignore the ontology files entirely until you want to

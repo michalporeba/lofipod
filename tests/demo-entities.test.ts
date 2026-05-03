@@ -9,6 +9,7 @@ describe("demo task entity", () => {
       id: "task-1",
       title: "Write docs",
       status: "todo" as const,
+      priority: "normal" as const,
       due: "2026-04",
     };
     const subject = demoVocabulary.uri({
@@ -35,6 +36,7 @@ describe("demo task entity", () => {
       [subject, rdf.type, demoVocabulary.Task],
       [subject, uri("https://schema.org/name"), "Write docs"],
       [subject, demoVocabulary.status, demoVocabulary.Todo],
+      [subject, demoVocabulary.priority, demoVocabulary.PriorityNormal],
       [subject, demoVocabulary.due, literal("2026-04", demoVocabulary.edtf)],
     ]);
   });
@@ -85,6 +87,7 @@ describe("demo task entity", () => {
       [
         [subject, uri("https://schema.org/name"), "Write docs"],
         [subject, demoVocabulary.status, demoVocabulary.Done],
+        [subject, demoVocabulary.priority, demoVocabulary.PriorityHigh],
         [subject, demoVocabulary.due, literal("2026-04", demoVocabulary.edtf)],
       ],
       {
@@ -101,7 +104,38 @@ describe("demo task entity", () => {
       id: "task-1",
       title: "Write docs",
       status: "done",
+      priority: "high",
       due: "2026-04",
+    });
+  });
+
+  it("defaults priority when reading legacy graphs without a priority triple", () => {
+    const subject = demoVocabulary.uri({
+      entityName: "task",
+      id: "task-legacy",
+    });
+
+    const task = TaskEntity.project(
+      [
+        [subject, uri("https://schema.org/name"), "Legacy task"],
+        [subject, demoVocabulary.status, demoVocabulary.Todo],
+      ],
+      {
+        uri() {
+          return subject;
+        },
+        child(path: string) {
+          return uri(`unused:${path}`);
+        },
+      },
+    );
+
+    expect(task).toEqual({
+      id: "task-legacy",
+      title: "Legacy task",
+      status: "todo",
+      priority: "normal",
+      due: undefined,
     });
   });
 });

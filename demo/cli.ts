@@ -157,10 +157,10 @@ export async function runCli(
   argv: string[],
   output: Output = {
     stdout(message) {
-      process.stdout.write(`${message}\n`);
+      console.log(message);
     },
     stderr(message) {
-      process.stderr.write(`${message}\n`);
+      console.error(message);
     },
   },
 ): Promise<number> {
@@ -300,7 +300,7 @@ export async function runCli(
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1]?.endsWith("demo/cli.ts")) {
   const exitCode = await runCli(process.argv.slice(2));
   process.exitCode = exitCode;
 }

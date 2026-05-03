@@ -162,6 +162,11 @@ What this example shows:
 - the engine owns local CRUD behaviour
 - `project(...)` rebuilds the application object from canonical graph state
 
+The same projection path is also the bounded model-evolution compatibility path:
+if a later supported entity revision adds a field, legacy local graph records
+can still be read deterministically (for example, via explicit projection
+defaults) without requiring developers to discard local data first.
+
 ## Adding persistence and sync
 
 The same API can use browser or Node storage, and sync can be configured when

@@ -1,12 +1,10 @@
-import { execFile } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-const execFileAsync = promisify(execFile);
+import { runCli } from "../demo/cli.js";
 
 describe("demo CLI sync inspection", () => {
   const tempDirectories: string[] = [];
@@ -26,15 +24,23 @@ describe("demo CLI sync inspection", () => {
   }
 
   async function runDemo(args: string[]): Promise<string> {
-    const result = await execFileAsync(
-      "node",
-      ["--import", "tsx", "demo/cli.ts", ...args],
-      {
-        cwd: process.cwd(),
-      },
-    );
+    const stdout: string[] = [];
+    const stderr: string[] = [];
 
-    return result.stdout.trim();
+    const exitCode = await runCli(args, {
+      stdout(message) {
+        stdout.push(message);
+      },
+      stderr(message) {
+        stderr.push(message);
+      },
+    });
+
+    if (exitCode !== 0) {
+      throw new Error(stderr.join("\n") || "demo CLI failed");
+    }
+
+    return stdout.join("\n").trim();
   }
 
   it("shows inspectable sync state without requiring Pod attachment", async () => {
@@ -78,5 +84,30 @@ describe("demo CLI sync inspection", () => {
         "lastUnsupportedReason=-",
       ].join("\n"),
     );
+  });
+
+  it("keeps task get/list outputs stable after bounded task-model evolution", async () => {
+    const dataDir = await createDataDir();
+
+    await expect(
+      runDemo([
+        "task",
+        "add",
+        "--data-dir",
+        dataDir,
+        "--id",
+        "task-compat",
+        "--title",
+        "Compatibility check",
+      ]),
+    ).resolves.toBe("created task-compat [todo] Compatibility check");
+
+    await expect(
+      runDemo(["task", "get", "task-compat", "--data-dir", dataDir]),
+    ).resolves.toBe("task-compat [todo] Compatibility check");
+
+    await expect(
+      runDemo(["task", "list", "--data-dir", dataDir]),
+    ).resolves.toBe("task-compat [todo] Compatibility check");
   });
 });

@@ -26,6 +26,7 @@ export type Task = {
   id: string;
   title: string;
   status: "todo" | "done";
+  priority: "low" | "normal" | "high";
   due?: string;
 };
 
@@ -47,11 +48,15 @@ export const demoVocabulary = defineVocabulary({
     status: "ns/lifegraph#status",
     entryDate: "ns/lifegraph#entryDate",
     due: "ns/lifegraph#due",
+    priority: "ns/lifegraph#priority",
     aboutTask: "ns/lifegraph#aboutTask",
     relatedTo: "ns/lifegraph#relatedTo",
     edtf: "ns/lifegraph#edtf",
     Todo: "ns/lifegraph#Todo",
     Done: "ns/lifegraph#Done",
+    PriorityLow: "ns/lifegraph#PriorityLow",
+    PriorityNormal: "ns/lifegraph#PriorityNormal",
+    PriorityHigh: "ns/lifegraph#PriorityHigh",
   },
   uri({ base, entityName, id }) {
     return `${base}demo/id/${entityName}/${id}`;
@@ -76,6 +81,43 @@ function termToStatus(value: Triple[2] | undefined): Task["status"] {
   }
 
   throw new Error(`Unsupported task status term: ${value.value}`);
+}
+
+function priorityToTerm(priority: Task["priority"]) {
+  if (priority === "low") {
+    return demoVocabulary.PriorityLow;
+  }
+
+  if (priority === "high") {
+    return demoVocabulary.PriorityHigh;
+  }
+
+  return demoVocabulary.PriorityNormal;
+}
+
+function termToPriority(value: Triple[2] | undefined): Task["priority"] {
+  // Backward-compatible default for legacy task graphs that predate priority.
+  if (typeof value === "undefined") {
+    return "normal";
+  }
+
+  if (!isNamedNodeTerm(value)) {
+    throw new Error("Task priority must be an RDF named node.");
+  }
+
+  if (value.value === demoVocabulary.PriorityLow.value) {
+    return "low";
+  }
+
+  if (value.value === demoVocabulary.PriorityNormal.value) {
+    return "normal";
+  }
+
+  if (value.value === demoVocabulary.PriorityHigh.value) {
+    return "high";
+  }
+
+  throw new Error(`Unsupported task priority term: ${value.value}`);
 }
 
 function optionalStringValue(value: Term | undefined): string | undefined {
@@ -123,6 +165,7 @@ export const TaskEntity: EntityDefinition<Task> = defineEntity<Task>({
       [subject, rdf.type, demoVocabulary.Task],
       [subject, schema.name, task.title],
       [subject, demoVocabulary.status, statusToTerm(task.status)],
+      [subject, demoVocabulary.priority, priorityToTerm(task.priority)],
       ...(task.due
         ? ([
             [
@@ -141,6 +184,9 @@ export const TaskEntity: EntityDefinition<Task> = defineEntity<Task>({
       id: idFromDemoUri(subject),
       title: stringValue(graph, subject, schema.name),
       status: termToStatus(objectOf(graph, subject, demoVocabulary.status)),
+      priority: termToPriority(
+        objectOf(graph, subject, demoVocabulary.priority),
+      ),
       due: optionalStringValue(objectOf(graph, subject, demoVocabulary.due)),
     };
   },

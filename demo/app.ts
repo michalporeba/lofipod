@@ -137,6 +137,7 @@ export function createDemoApp(options: CreateDemoAppOptions = {}): DemoApp {
         id: input.id ?? createId("task"),
         title: input.title,
         status: "todo",
+        priority: "normal",
         due: input.due,
       };
 
