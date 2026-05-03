@@ -234,6 +234,12 @@ lastFailureReason=-
 The local-first commands still work even when the last known remote state is
 offline.
 
+When a canonical remote edit is classified as unsupported, the bounded
+protective policy is to keep local state unchanged and skip importing that
+remote shape. If a logger is attached, this is surfaced as
+`sync:reconcile:unsupported` with
+`policy: "preserve-local-skip-unsupported-remote"` and a reason string.
+
 ### Inspecting canonical Pod output
 
 The demo's canonical Pod output is Solid-specific transport state layered on

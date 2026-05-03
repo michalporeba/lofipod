@@ -1,4 +1,5 @@
 import { diffTriples, graphsMatch } from "../graph.js";
+import { logWarn } from "../logger.js";
 import {
   publicTriplesToRdfTriples,
   rdfTriplesToPublicTriples,
@@ -16,6 +17,9 @@ import {
   createRemoteProjectionHelpers,
   createTimestamp,
 } from "./support.js";
+import { mergeSupportedGraphs } from "./supported-merge.js";
+
+const UNSUPPORTED_REMOTE_POLICY = "preserve-local-skip-unsupported-remote";
 
 export async function reconcileCanonicalResources(
   storage: EngineStorage,
@@ -59,6 +63,7 @@ export async function reconcileCanonicalResources(
       storage,
       definition,
       remote.entities,
+      config,
       await readPendingEntityIds(storage, definition.kind),
     );
   }
@@ -75,6 +80,7 @@ async function reconcileCanonicalContainer(
     rootUri: string;
     graph: Triple[];
   }[],
+  config: EngineConfig,
   pendingEntityIds: Set<string>,
 ): Promise<number> {
   const localRecords = await storage.listEntities(definition.kind);
@@ -100,6 +106,23 @@ async function reconcileCanonicalContainer(
     }
 
     if (graphsMatch(localRecord.graph, remoteEntity.graph)) {
+      continue;
+    }
+
+    const classification = mergeSupportedGraphs(
+      localRecord.graph,
+      remoteEntity.graph,
+      definition,
+    );
+
+    if (!classification.ok) {
+      logWarn(config.logger, "sync:reconcile:unsupported", {
+        entityName: definition.kind,
+        entityId: remoteEntity.entityId,
+        path: remoteEntity.path,
+        reason: classification.reason,
+        policy: UNSUPPORTED_REMOTE_POLICY,
+      });
       continue;
     }
 

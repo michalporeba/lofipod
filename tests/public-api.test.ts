@@ -4817,6 +4817,109 @@ describe("mocked entity sync", () => {
     expect(remote.logEntries).toHaveLength(logEntriesAfterFirstReconcile + 1);
   });
 
+  it("applies a deterministic policy response for unsupported post-attach canonical edits", async () => {
+    const { entity } = createEventFixture();
+    const remote = createSharedRemoteAdapter();
+    const storage = createMemoryStorage();
+    const logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    const engine = createEngine({
+      entities: [entity],
+      pod,
+      storage,
+      logger,
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+
+    await engine.save("event", {
+      id: "ev-unsupported-canonical",
+      title: "Local baseline",
+      time: {
+        year: 2024,
+      },
+    });
+    await engine.sync.now();
+    remote.upsertCanonicalEntity({
+      entityName: "event",
+      entityId: "ev-unsupported-canonical",
+      path: "events/ev-unsupported-canonical.ttl",
+      rootUri: "https://example.com/id/event/ev-unsupported-canonical",
+      rdfType: entity.rdfType,
+      graph: [
+        ...eventGraph("ev-unsupported-canonical", "Remote title", 2024),
+        [
+          uri("https://example.com/id/event/ev-unsupported-canonical"),
+          uri("https://example.com/ns#title"),
+          "Remote duplicate title",
+        ],
+      ],
+    });
+    await engine.sync.now();
+
+    remote.upsertCanonicalEntity({
+      entityName: "event",
+      entityId: "ev-unsupported-canonical",
+      path: "events/ev-unsupported-canonical.ttl",
+      rootUri: "https://example.com/id/event/ev-unsupported-canonical",
+      rdfType: entity.rdfType,
+      graph: [
+        ...eventGraph("ev-unsupported-canonical", "Remote title", 2024),
+        [
+          uri("https://example.com/id/event/ev-unsupported-canonical"),
+          uri("https://example.com/ns#title"),
+          "Remote duplicate title",
+        ],
+      ],
+    });
+
+    const logEntriesBeforeUnsupportedSync = remote.logEntries.length;
+
+    await engine.sync.now();
+
+    await expect(
+      engine.get("event", "ev-unsupported-canonical"),
+    ).resolves.toEqual({
+      id: "ev-unsupported-canonical",
+      title: "Local baseline",
+      time: {
+        year: 2024,
+      },
+    });
+    await expect(
+      storage.listChanges("event", "ev-unsupported-canonical"),
+    ).resolves.toHaveLength(1);
+    expect(remote.logEntries).toHaveLength(logEntriesBeforeUnsupportedSync);
+    expect(logger.warn).toHaveBeenCalledWith(
+      "sync:reconcile:unsupported",
+      expect.objectContaining({
+        entityName: "event",
+        entityId: "ev-unsupported-canonical",
+        policy: "preserve-local-skip-unsupported-remote",
+      }),
+    );
+
+    const unsupportedWarnings = logger.warn.mock.calls.filter(
+      (call) => call[0] === "sync:reconcile:unsupported",
+    );
+    expect(unsupportedWarnings).toHaveLength(2);
+    for (const warning of unsupportedWarnings) {
+      expect(warning[1]).toEqual(
+        expect.objectContaining({
+          entityName: "event",
+          entityId: "ev-unsupported-canonical",
+          policy: "preserve-local-skip-unsupported-remote",
+          reason: "Unsupported multi-value conflict for subject/predicate.",
+        }),
+      );
+    }
+  });
+
   it("does not create a duplicate canonical reconciliation change when log replay already matches the Pod", async () => {
     const { entity } = createEventFixture();
     const remote = createSharedRemoteAdapter();

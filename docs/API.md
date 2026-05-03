@@ -410,6 +410,10 @@ When provided, the current implementation logs:
   `sync:cycle`
 - operational events such as `sync:attached`, `sync:detached`, and
   `sync:bootstrap`
+- unsupported canonical reconciliation events as
+  `sync:reconcile:unsupported`, including bounded-policy metadata
+  (`policy: "preserve-local-skip-unsupported-remote"`) and classification
+  reason
 
 When omitted, logging adds no meaningful work beyond the normal code paths.
 
