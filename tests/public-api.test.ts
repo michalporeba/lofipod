@@ -119,6 +119,7 @@ function expectedSyncState(input: {
   configured: boolean;
   pendingChanges: number;
   connection?: Partial<Record<keyof SyncState["connection"], unknown>>;
+  reconciliation?: Partial<Record<keyof SyncState["reconciliation"], unknown>>;
 }) {
   const nullableString = {
     asymmetricMatch(value: unknown) {
@@ -140,6 +141,11 @@ function expectedSyncState(input: {
       lastFailureReason: nullableString,
       notificationsActive: expect.any(Boolean),
       ...input.connection,
+    },
+    reconciliation: {
+      lastUnsupportedPolicy: nullableString,
+      lastUnsupportedReason: nullableString,
+      ...input.reconciliation,
     },
   };
 }
@@ -4918,6 +4924,19 @@ describe("mocked entity sync", () => {
         }),
       );
     }
+
+    await expect(engine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "idle",
+        configured: true,
+        pendingChanges: 0,
+        reconciliation: {
+          lastUnsupportedPolicy: "preserve-local-skip-unsupported-remote",
+          lastUnsupportedReason:
+            "Unsupported multi-value conflict for subject/predicate.",
+        },
+      }),
+    );
   });
 
   it("does not create a duplicate canonical reconciliation change when log replay already matches the Pod", async () => {

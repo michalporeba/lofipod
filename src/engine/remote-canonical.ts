@@ -116,6 +116,11 @@ async function reconcileCanonicalContainer(
     );
 
     if (!classification.ok) {
+      await persistUnsupportedRemoteReconciliation(
+        storage,
+        UNSUPPORTED_REMOTE_POLICY,
+        classification.reason,
+      );
       logWarn(config.logger, "sync:reconcile:unsupported", {
         entityName: definition.kind,
         entityId: remoteEntity.entityId,
@@ -150,6 +155,24 @@ async function reconcileCanonicalContainer(
   }
 
   return reconciled;
+}
+
+async function persistUnsupportedRemoteReconciliation(
+  storage: EngineStorage,
+  policy: string,
+  reason: string,
+): Promise<void> {
+  await storage.transact((transaction) => {
+    const metadata = transaction.readSyncMetadata();
+
+    transaction.writeSyncMetadata({
+      ...metadata,
+      reconciliation: {
+        lastUnsupportedPolicy: policy,
+        lastUnsupportedReason: reason,
+      },
+    });
+  });
 }
 
 async function readPendingEntityIds(

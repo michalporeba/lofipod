@@ -71,12 +71,19 @@ export async function readDerivedSyncState(
     lastFailureReason: metadata.connection.lastFailureReason,
     notificationsActive: syncConfig ? runtime.notificationsActive : false,
   };
+  const reconciliation = {
+    lastUnsupportedPolicy:
+      metadata.reconciliation?.lastUnsupportedPolicy ?? null,
+    lastUnsupportedReason:
+      metadata.reconciliation?.lastUnsupportedReason ?? null,
+  };
 
   if (!syncConfig) {
     return {
       status: "unconfigured",
       configured: false,
       pendingChanges,
+      reconciliation,
       connection,
     };
   }
@@ -86,6 +93,7 @@ export async function readDerivedSyncState(
       status: "syncing",
       configured: true,
       pendingChanges,
+      reconciliation,
       connection,
     };
   }
@@ -95,6 +103,7 @@ export async function readDerivedSyncState(
       status: "offline",
       configured: true,
       pendingChanges,
+      reconciliation,
       connection,
     };
   }
@@ -103,6 +112,7 @@ export async function readDerivedSyncState(
     status: pendingChanges > 0 ? "pending" : "idle",
     configured: true,
     pendingChanges,
+    reconciliation,
     connection,
   };
 }

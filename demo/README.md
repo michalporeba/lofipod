@@ -205,6 +205,8 @@ work without requiring you to reconstruct local changes by hand.
   - `lastSyncedAt`
   - `lastFailedAt`
   - `lastFailureReason`
+  - `lastUnsupportedPolicy`
+  - `lastUnsupportedReason`
 
 Unset values are rendered as `-`. This output is intentionally a thin
 presentation of the public sync-state contract, not a demo-only diagnostics
@@ -218,6 +220,8 @@ connection reachable=false notifications=false
 lastSyncedAt=-
 lastFailedAt=-
 lastFailureReason=-
+lastUnsupportedPolicy=-
+lastUnsupportedReason=-
 ```
 
 Example after a successful sync:
@@ -228,6 +232,8 @@ connection reachable=true notifications=false
 lastSyncedAt=2026-05-02T12:00:00.000Z
 lastFailedAt=-
 lastFailureReason=-
+lastUnsupportedPolicy=-
+lastUnsupportedReason=-
 ```
 
 `reachable` is the last known sync result, not a foreground liveness probe.

@@ -163,6 +163,8 @@ describe("demo CLI with Community Solid Server", () => {
       lastSyncedAt: RegExp | "-";
       lastFailedAt: RegExp | "-";
       lastFailureReason: RegExp | string;
+      lastUnsupportedPolicy: RegExp | string;
+      lastUnsupportedReason: RegExp | string;
     },
   ): void {
     const lines = output.split("\n");
@@ -213,10 +215,36 @@ describe("demo CLI with Community Solid Server", () => {
           `^lastFailureReason=${assertions.lastFailureReason.source}$`,
         ),
       );
+    } else {
+      expect(lines[4]).toBe(
+        `lastFailureReason=${assertions.lastFailureReason}`,
+      );
+    }
+
+    if (assertions.lastUnsupportedPolicy instanceof RegExp) {
+      expect(lines[5]).toMatch(
+        new RegExp(
+          `^lastUnsupportedPolicy=${assertions.lastUnsupportedPolicy.source}$`,
+        ),
+      );
+    } else {
+      expect(lines[5]).toBe(
+        `lastUnsupportedPolicy=${assertions.lastUnsupportedPolicy}`,
+      );
+    }
+
+    if (assertions.lastUnsupportedReason instanceof RegExp) {
+      expect(lines[6]).toMatch(
+        new RegExp(
+          `^lastUnsupportedReason=${assertions.lastUnsupportedReason.source}$`,
+        ),
+      );
       return;
     }
 
-    expect(lines[4]).toBe(`lastFailureReason=${assertions.lastFailureReason}`);
+    expect(lines[6]).toBe(
+      `lastUnsupportedReason=${assertions.lastUnsupportedReason}`,
+    );
   }
 
   function expectSyncedOutput(output: string): void {
@@ -229,6 +257,8 @@ describe("demo CLI with Community Solid Server", () => {
       lastSyncedAt: /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z/,
       lastFailedAt: "-",
       lastFailureReason: "-",
+      lastUnsupportedPolicy: "-",
+      lastUnsupportedReason: "-",
     });
   }
 
@@ -283,6 +313,8 @@ describe("demo CLI with Community Solid Server", () => {
         lastSyncedAt: "-",
         lastFailedAt: "-",
         lastFailureReason: "-",
+        lastUnsupportedPolicy: "-",
+        lastUnsupportedReason: "-",
       });
       return true;
     });
@@ -308,6 +340,8 @@ describe("demo CLI with Community Solid Server", () => {
         lastSyncedAt: "-",
         lastFailedAt: "-",
         lastFailureReason: "-",
+        lastUnsupportedPolicy: "-",
+        lastUnsupportedReason: "-",
       });
       return true;
     });

@@ -370,6 +370,8 @@ The current `SyncState` reports aggregate engine-level status:
 - `status`: `"unconfigured" | "offline" | "syncing" | "idle" | "pending"`
 - `configured`
 - `pendingChanges`
+- `reconciliation.lastUnsupportedPolicy`
+- `reconciliation.lastUnsupportedReason`
 - `connection.reachable`
 - `connection.lastSyncedAt`
 - `connection.lastFailedAt`

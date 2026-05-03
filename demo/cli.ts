@@ -83,6 +83,8 @@ function formatSyncStateOutput(
     `lastSyncedAt=${formatNullableValue(state.connection.lastSyncedAt)}`,
     `lastFailedAt=${formatNullableValue(state.connection.lastFailedAt)}`,
     `lastFailureReason=${formatNullableValue(state.connection.lastFailureReason)}`,
+    `lastUnsupportedPolicy=${formatNullableValue(state.reconciliation.lastUnsupportedPolicy)}`,
+    `lastUnsupportedReason=${formatNullableValue(state.reconciliation.lastUnsupportedReason)}`,
   ].join("\n");
 }
 

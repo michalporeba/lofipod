@@ -12,6 +12,10 @@ export function createDefaultSyncMetadata(): SyncMetadata {
     observedRemoteChangeIds: [],
     persistedPodConfig: null,
     canonicalContainerVersions: {},
+    reconciliation: {
+      lastUnsupportedPolicy: null,
+      lastUnsupportedReason: null,
+    },
     connection: {
       reachable: false,
       lastSyncedAt: null,
@@ -67,6 +71,12 @@ export function cloneSyncMetadata(metadata: SyncMetadata): SyncMetadata {
       : null,
     canonicalContainerVersions: {
       ...(nextMetadata.canonicalContainerVersions ?? {}),
+    },
+    reconciliation: {
+      lastUnsupportedPolicy:
+        nextMetadata.reconciliation?.lastUnsupportedPolicy ?? null,
+      lastUnsupportedReason:
+        nextMetadata.reconciliation?.lastUnsupportedReason ?? null,
     },
     connection: {
       ...createDefaultSyncMetadata().connection,

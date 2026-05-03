@@ -49,6 +49,8 @@ describe("demo CLI sync inspection", () => {
         "lastSyncedAt=-",
         "lastFailedAt=-",
         "lastFailureReason=-",
+        "lastUnsupportedPolicy=-",
+        "lastUnsupportedReason=-",
       ].join("\n"),
     );
 
@@ -72,6 +74,8 @@ describe("demo CLI sync inspection", () => {
         "lastSyncedAt=-",
         "lastFailedAt=-",
         "lastFailureReason=-",
+        "lastUnsupportedPolicy=-",
+        "lastUnsupportedReason=-",
       ].join("\n"),
     );
   });

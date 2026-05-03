@@ -19,6 +19,10 @@ export type SyncMetadata = {
   observedRemoteChangeIds: string[];
   persistedPodConfig: PersistedPodConfig | null;
   canonicalContainerVersions: Record<string, string>;
+  reconciliation?: {
+    lastUnsupportedPolicy: string | null;
+    lastUnsupportedReason: string | null;
+  };
   connection: {
     reachable: boolean;
     lastSyncedAt: string | null;
@@ -204,6 +208,10 @@ export type SyncState = {
   status: "unconfigured" | "offline" | "syncing" | "idle" | "pending";
   configured: boolean;
   pendingChanges: number;
+  reconciliation: {
+    lastUnsupportedPolicy: string | null;
+    lastUnsupportedReason: string | null;
+  };
   connection: {
     reachable: boolean;
     lastSyncedAt: string | null;
