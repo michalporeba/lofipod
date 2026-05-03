@@ -4539,6 +4539,106 @@ describe("mocked entity sync", () => {
     ).resolves.toHaveLength(2);
   });
 
+  it("replays supported create/update/delete changes across clients and deterministically reconciles receiver local state", async () => {
+    const { entity } = createEventFixture();
+    const remote = createSharedRemoteAdapter();
+    const firstEngine = createEngine({
+      entities: [entity],
+      pod,
+      storage: createMemoryStorage(),
+    });
+    const secondEngine = createEngine({
+      entities: [entity],
+      pod,
+      storage: createMemoryStorage(),
+    });
+    const entityId = "ev-story-3-1";
+    const podBaseUrl = "https://pod.example/";
+
+    await firstEngine.sync.attach({
+      adapter: remote.adapter,
+      podBaseUrl,
+      logBasePath: pod.logBasePath,
+    });
+    await secondEngine.sync.attach({
+      adapter: remote.adapter,
+      podBaseUrl,
+      logBasePath: pod.logBasePath,
+    });
+
+    await firstEngine.save("event", {
+      id: entityId,
+      title: "Created remotely",
+      time: {
+        year: 2024,
+      },
+    });
+    await firstEngine.sync.now();
+    await secondEngine.sync.now();
+
+    await expect(secondEngine.get("event", entityId)).resolves.toEqual({
+      id: entityId,
+      title: "Created remotely",
+      time: {
+        year: 2024,
+      },
+    });
+    await expect(secondEngine.list("event")).resolves.toContainEqual({
+      id: entityId,
+      title: "Created remotely",
+      time: {
+        year: 2024,
+      },
+    });
+
+    await secondEngine.sync.detach();
+    await secondEngine.save("event", {
+      id: entityId,
+      title: "Receiver local draft",
+      time: {
+        year: 2024,
+      },
+    });
+
+    await firstEngine.save("event", {
+      id: entityId,
+      title: "Updated remotely",
+      time: {
+        year: 2025,
+      },
+    });
+    await firstEngine.sync.now();
+
+    await secondEngine.sync.attach({
+      adapter: remote.adapter,
+      podBaseUrl,
+      logBasePath: pod.logBasePath,
+    });
+    await secondEngine.sync.now();
+
+    await expect(secondEngine.get("event", entityId)).resolves.toEqual({
+      id: entityId,
+      title: "Updated remotely",
+      time: {
+        year: 2025,
+      },
+    });
+    await expect(secondEngine.list("event")).resolves.toContainEqual({
+      id: entityId,
+      title: "Updated remotely",
+      time: {
+        year: 2025,
+      },
+    });
+
+    await firstEngine.delete("event", entityId);
+    await firstEngine.sync.now();
+    await secondEngine.sync.now();
+
+    await expect(secondEngine.get("event", entityId)).resolves.toBeNull();
+    await expect(secondEngine.list("event")).resolves.toEqual([]);
+  });
+
   it("reconciles external canonical edits after log replay and queues only log projection", async () => {
     const { entity } = createEventFixture();
     const remote = createSharedRemoteAdapter();

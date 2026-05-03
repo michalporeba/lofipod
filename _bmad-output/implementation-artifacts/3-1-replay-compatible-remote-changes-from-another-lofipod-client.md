@@ -1,6 +1,6 @@
 # Story 3.1: Replay Compatible Remote Changes From Another Lofipod Client
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -20,22 +20,47 @@ So that ongoing multi-device use remains consistent after initial attach.
 
 ## Tasks / Subtasks
 
-- [ ] Prove supported replay from another client through the public API and sync engine. (AC: 1, 2, 3, 5)
-  - [ ] Extend `tests/public-api.test.ts` with a two-engine scenario that writes supported changes from one engine, replays them on another, and asserts the receiver’s `get(...)` and `list(...)` results through the local read model.
-  - [ ] Cover supported create, update, and delete replay, plus the expected deterministic outcome when the receiver already has local state for the same entity.
-  - [ ] Reuse the existing remote log replay and fork reconciliation behavior in `src/engine/remote-pull.ts` and `src/engine/remote-merge.ts`; do not introduce a second replay pipeline or a new public API.
-- [ ] Add a repo-level multi-client proof that stays inside the bounded supported model. (AC: 1, 2, 4, 5)
-  - [ ] Extend `tests/demo-pod.integration.test.ts` or `tests/pod-auto-sync.integration.test.ts` with a second client or second local demo instance over the same shared Pod dataset.
-  - [ ] Prefer assertions against visible demo behavior, sync state, and remote canonical/log content instead of internal storage details.
-  - [ ] Keep the scenario focused on compatible ongoing replay after attach, not first-attach import, bootstrap recovery, or unsupported foreign-edit handling.
-- [ ] Preserve the demo and docs boundary if the story needs clarification text. (AC: 4, 5)
-  - [ ] If the replay story is unclear from the existing demo text, add a short clarification to `demo/README.md` that distinguishes post-attach replay from bootstrap import.
-  - [ ] Keep the demo process-based and local-first; do not turn the CLI into a daemon or add a special replay command.
-- [ ] Validate with the expected repo gates after implementation. (AC: 1-5)
-  - [ ] Run `npm run verify`.
-  - [ ] Run `npm run build`.
-  - [ ] Run `npm run test:demo`.
-  - [ ] Run `npm run test:pod`.
+- [x] Prove supported replay from another client through the public API and sync engine. (AC: 1, 2, 3, 5)
+  - [x] Extend `tests/public-api.test.ts` with a two-engine scenario that writes supported changes from one engine, replays them on another, and asserts the receiver’s `get(...)` and `list(...)` results through the local read model.
+  - [x] Cover supported create, update, and delete replay, plus the expected deterministic outcome when the receiver already has local state for the same entity.
+  - [x] Reuse the existing remote log replay and fork reconciliation behavior in `src/engine/remote-pull.ts` and `src/engine/remote-merge.ts`; do not introduce a second replay pipeline or a new public API.
+- [x] Add a repo-level multi-client proof that stays inside the bounded supported model. (AC: 1, 2, 4, 5)
+  - [x] Extend `tests/demo-pod.integration.test.ts` or `tests/pod-auto-sync.integration.test.ts` with a second client or second local demo instance over the same shared Pod dataset.
+  - [x] Prefer assertions against visible demo behavior, sync state, and remote canonical/log content instead of internal storage details.
+  - [x] Keep the scenario focused on compatible ongoing replay after attach, not first-attach import, bootstrap recovery, or unsupported foreign-edit handling.
+- [x] Preserve the demo and docs boundary if the story needs clarification text. (AC: 4, 5)
+  - [x] If the replay story is unclear from the existing demo text, add a short clarification to `demo/README.md` that distinguishes post-attach replay from bootstrap import.
+  - [x] Keep the demo process-based and local-first; do not turn the CLI into a daemon or add a special replay command.
+- [x] Validate with the expected repo gates after implementation. (AC: 1-5)
+  - [x] Run `npm run verify`.
+  - [x] Run `npm run build`.
+  - [x] Run `npm run test:demo`.
+  - [x] Run `npm run test:pod`.
+
+## Dev Agent Record
+
+### Debug Log
+
+- Added a new public API regression covering two-client create/update/delete replay and deterministic reconciliation when the receiver had pre-existing local state.
+- Added a new Community Solid Server integration proving ongoing post-attach replay across two attached clients for create/update/delete.
+- Fixed one TypeScript issue in the new public API test by using an explicit `podBaseUrl` string instead of reading a missing field from the local pod fixture.
+
+### Completion Notes
+
+- Story 3.1 implementation completed through tests without changing core engine behavior.
+- Existing remote replay and reconciliation paths were reused; no second replay pipeline or public API changes were introduced.
+- All required repo gates passed: `npm run verify`, `npm run build`, `npm run test:demo`, and `npm run test:pod`.
+
+## File List
+
+- tests/public-api.test.ts
+- tests/pod-auto-sync.integration.test.ts
+- _bmad-output/implementation-artifacts/sprint-status.yaml
+- _bmad-output/implementation-artifacts/3-1-replay-compatible-remote-changes-from-another-lofipod-client.md
+
+## Change Log
+
+- 2026-05-03: Added Story 3.1 replay proofs in public API and Pod integration tests; validated full repo gates; moved story to `review`.
 
 ## Dev Notes
 
@@ -243,4 +268,3 @@ Source: `docs/TESTING.md`; `_bmad-output/project-context.md`
   - `src/engine/remote-merge.ts`
   - maybe `demo/README.md`
 - Avoid adding new public API surface unless the test evidence shows the current replay contract is insufficient.
-

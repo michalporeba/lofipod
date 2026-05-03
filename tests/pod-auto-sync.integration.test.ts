@@ -292,4 +292,76 @@ describe("Community Solid Server auto sync", () => {
       });
     }, 15_000);
   }, 30_000);
+
+  it("replays ongoing supported create/update/delete changes from another attached client", async () => {
+    const entityId = `ev-ongoing-${runId}`;
+    const basePath = `events-ongoing-${runId}/`;
+    const logBasePath = `apps/ongoing-${runId}/log/`;
+    const entity = createScopedEntity(basePath);
+    const producer = createEngine({
+      entities: [entity],
+      pod: {
+        logBasePath,
+      },
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: createPollingOnlyAdapter(),
+        pollIntervalMs: 250,
+      },
+    });
+    const consumer = createEngine({
+      entities: [entity],
+      pod: {
+        logBasePath,
+      },
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: createPollingOnlyAdapter(),
+        pollIntervalMs: 250,
+      },
+    });
+
+    await producer.save("event", {
+      id: entityId,
+      title: "Created on producer",
+      time: {
+        year: 2030,
+      },
+    });
+
+    await waitForExpectation(async () => {
+      await expect(consumer.get("event", entityId)).resolves.toEqual({
+        id: entityId,
+        title: "Created on producer",
+        time: {
+          year: 2030,
+        },
+      });
+    }, 15_000);
+
+    await producer.save("event", {
+      id: entityId,
+      title: "Updated on producer",
+      time: {
+        year: 2031,
+      },
+    });
+
+    await waitForExpectation(async () => {
+      await expect(consumer.get("event", entityId)).resolves.toEqual({
+        id: entityId,
+        title: "Updated on producer",
+        time: {
+          year: 2031,
+        },
+      });
+    }, 15_000);
+
+    await producer.delete("event", entityId);
+
+    await waitForExpectation(async () => {
+      await expect(consumer.get("event", entityId)).resolves.toBeNull();
+      await expect(consumer.list("event")).resolves.toEqual([]);
+    }, 15_000);
+  }, 40_000);
 });
