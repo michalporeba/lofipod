@@ -1,3 +1,6 @@
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+
 import { createDemoApp, type DemoApp, type DemoPodSyncOptions } from "./app.js";
 import type { JournalEntry, Task } from "./entities.js";
 
@@ -300,7 +303,10 @@ export async function runCli(
   }
 }
 
-if (process.argv[1]?.endsWith("demo/cli.ts")) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+) {
   const exitCode = await runCli(process.argv.slice(2));
   process.exitCode = exitCode;
 }

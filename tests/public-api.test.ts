@@ -20,6 +20,7 @@ import {
   type SyncMetadata,
 } from "../src/index.js";
 import { createSolidPodAdapter } from "../src/node.js";
+import { TaskEntity, demoVocabulary, type Task } from "../demo/entities.js";
 import {
   createEventFixture,
   createEventWithDetailsFixture,
@@ -4819,6 +4820,73 @@ describe("mocked entity sync", () => {
         },
       }),
     );
+  });
+
+  it("keeps evolved canonical task semantics when reconciling legacy canonical resources missing priority", async () => {
+    const remote = createSharedRemoteAdapter();
+    const storage = createMemoryStorage();
+    const engine = createEngine({
+      entities: [TaskEntity],
+      pod,
+      storage,
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+
+    await engine.save<Task>("task", {
+      id: "task-canonical-legacy-priority",
+      title: "Local priority baseline",
+      status: "todo",
+      priority: "high",
+      due: "2026-05",
+    });
+    await engine.sync.now();
+
+    const legacyGraphWithoutPriority = TaskEntity.toRdf(
+      {
+        id: "task-canonical-legacy-priority",
+        title: "Remote title update",
+        status: "done",
+        priority: "normal",
+        due: "2026-05",
+      },
+      {
+        uri(task) {
+          return demoVocabulary.uri({
+            entityName: "task",
+            id: task.id,
+          });
+        },
+        child(path: string) {
+          return uri(`unused:${path}`);
+        },
+      },
+    ).filter(
+      ([, predicate]) => predicate.value !== demoVocabulary.priority.value,
+    );
+
+    remote.upsertCanonicalEntity({
+      entityName: "task",
+      entityId: "task-canonical-legacy-priority",
+      path: "tasks/task-canonical-legacy-priority.ttl",
+      rootUri:
+        "https://michalporeba.com/demo/id/task/task-canonical-legacy-priority",
+      rdfType: TaskEntity.rdfType,
+      graph: legacyGraphWithoutPriority,
+    });
+
+    await engine.sync.now();
+
+    await expect(
+      engine.get<Task>("task", "task-canonical-legacy-priority"),
+    ).resolves.toEqual({
+      id: "task-canonical-legacy-priority",
+      title: "Remote title update",
+      status: "todo",
+      priority: "high",
+      due: "2026-05",
+    });
   });
 
   it("treats compatible canonical updates discovered after attach as post-attach reconciliation", async () => {

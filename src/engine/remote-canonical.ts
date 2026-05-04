@@ -2,6 +2,7 @@ import { diffTriples, graphsMatch } from "../graph.js";
 import { logWarn } from "../logger.js";
 import {
   publicTriplesToRdfTriples,
+  rdfTermToN3,
   rdfTriplesToPublicTriples,
 } from "../rdf.js";
 import { hasPendingSync } from "../sync.js";
@@ -32,6 +33,7 @@ export async function reconcileCanonicalResources(
 
   const metadata = await storage.readSyncMetadata();
   let entitiesReconciled = 0;
+  let unsupportedDetected = false;
 
   for (const definition of entities.values()) {
     const previousVersion =
@@ -59,13 +61,19 @@ export async function reconcileCanonicalResources(
       continue;
     }
 
-    entitiesReconciled += await reconcileCanonicalContainer(
+    const result = await reconcileCanonicalContainer(
       storage,
       definition,
       remote.entities,
       config,
       await readPendingEntityIds(storage, definition.kind),
     );
+    entitiesReconciled += result.reconciled;
+    unsupportedDetected = unsupportedDetected || result.unsupportedDetected;
+  }
+
+  if (!unsupportedDetected) {
+    await clearUnsupportedRemoteReconciliation(storage);
   }
 
   return entitiesReconciled;
@@ -82,7 +90,7 @@ async function reconcileCanonicalContainer(
   }[],
   config: EngineConfig,
   pendingEntityIds: Set<string>,
-): Promise<number> {
+): Promise<{ reconciled: number; unsupportedDetected: boolean }> {
   const localRecords = await storage.listEntities(definition.kind);
   const localById = new Map(
     localRecords.map(({ entityId, record }) => [entityId, record]),
@@ -91,6 +99,7 @@ async function reconcileCanonicalContainer(
     remoteEntities.map((entity) => [entity.entityId, entity]),
   );
   let reconciled = 0;
+  let unsupportedDetected = false;
 
   for (const remoteEntity of remoteEntities) {
     if (pendingEntityIds.has(remoteEntity.entityId)) {
@@ -116,6 +125,7 @@ async function reconcileCanonicalContainer(
     );
 
     if (!classification.ok) {
+      unsupportedDetected = true;
       await persistUnsupportedRemoteReconciliation(
         storage,
         UNSUPPORTED_REMOTE_POLICY,
@@ -131,12 +141,23 @@ async function reconcileCanonicalContainer(
       continue;
     }
 
+    const nextGraph = remoteMissingLocalSubjectPredicates(
+      localRecord.graph,
+      remoteEntity.graph,
+      definition,
+    )
+      ? classification.graph
+      : remoteEntity.graph;
+
     await reconcileExternalCanonicalUpdate(
       storage,
       definition,
       remoteEntity.entityId,
       localRecord,
-      remoteEntity,
+      {
+        ...remoteEntity,
+        graph: nextGraph,
+      },
     );
     reconciled += 1;
   }
@@ -154,7 +175,47 @@ async function reconcileCanonicalContainer(
     reconciled += 1;
   }
 
-  return reconciled;
+  return { reconciled, unsupportedDetected };
+}
+
+async function clearUnsupportedRemoteReconciliation(
+  storage: EngineStorage,
+): Promise<void> {
+  await storage.transact((transaction) => {
+    const metadata = transaction.readSyncMetadata();
+
+    transaction.writeSyncMetadata({
+      ...metadata,
+      reconciliation: {
+        lastUnsupportedPolicy: null,
+        lastUnsupportedReason: null,
+      },
+    });
+  });
+}
+
+function remoteMissingLocalSubjectPredicates(
+  localGraph: Triple[],
+  remoteGraph: Triple[],
+  definition: EntityDefinition<unknown>,
+): boolean {
+  const local = publicTriplesToRdfTriples(localGraph, {
+    rdfType: definition.rdfType,
+  });
+  const remote = publicTriplesToRdfTriples(remoteGraph, {
+    rdfType: definition.rdfType,
+  });
+  const remoteKeys = new Set(
+    remote.map(
+      ([subject, predicate]) =>
+        `${rdfTermToN3(subject)} ${rdfTermToN3(predicate)}`,
+    ),
+  );
+
+  return local.some(
+    ([subject, predicate]) =>
+      !remoteKeys.has(`${rdfTermToN3(subject)} ${rdfTermToN3(predicate)}`),
+  );
 }
 
 async function persistUnsupportedRemoteReconciliation(

@@ -22,11 +22,15 @@ staying small enough to use in the first CLI/TUI demo and test harness.
 - `mlg:status`
 - `mlg:entryDate`
 - `mlg:due`
+- `mlg:priority`
 - `mlg:aboutTask`
 - `mlg:relatedTo`
 - `mlg:edtf`
 - `mlg:Todo`
 - `mlg:Done`
+- `mlg:PriorityLow`
+- `mlg:PriorityNormal`
+- `mlg:PriorityHigh`
 
 ## Reused vocabularies
 
@@ -67,6 +71,7 @@ This keeps the ontology aligned with the intended app behaviour:
   a mlg:Task ;
   schema:name "Prepare April review" ;
   mlg:status mlg:Todo ;
+  mlg:priority mlg:PriorityNormal ;
   mlg:due "2026-04"^^mlg:edtf .
 
 <#entry-1>
@@ -80,6 +85,11 @@ This keeps the ontology aligned with the intended app behaviour:
 The task example above matches the current canonical task resource the demo
 projects to the Pod. Task resources stay intentionally shallow and do not carry
 journal-only metadata such as `dct:created` or `dct:modified`.
+
+Legacy task resources that predate `mlg:priority` are still interpreted through
+the bounded compatibility path. Reconciliation merges compatible canonical and
+local graphs, then reprojects through the same entity contract so canonical
+data remains reusable.
 
 For Story 2's sync inspection path, the important point is that this Turtle is
 the current Solid-specific canonical output of the demo's task mapping, not a

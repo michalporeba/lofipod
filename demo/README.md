@@ -280,10 +280,17 @@ The canonical task Turtle should contain:
 - RDF type `mlg:Task`
 - `schema:name` for the task title
 - `mlg:status` pointing at `mlg:Todo` or `mlg:Done`
+- `mlg:priority` pointing at `mlg:PriorityLow`, `mlg:PriorityNormal`, or `mlg:PriorityHigh`
 - optional `mlg:due` with datatype `mlg:edtf`
 
 Task resources intentionally do not include journal-only fields such as
 `dct:created` or `dct:modified`.
+
+For bounded model evolution compatibility, canonical task resources that
+predate `mlg:priority` are still interpreted through the supported path. During
+reconciliation, the engine keeps canonical task semantics reusable by merging
+compatible remote/local graphs, then projecting the merged result through the
+same task entity contract.
 
 ### Fresh-local recovery
 

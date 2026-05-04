@@ -199,8 +199,8 @@ Sources:
 ## Story Completion Status
 
 - Story context created with full artifact analysis and implementation guardrails.
-- Status set to `ready-for-dev`.
-- Completion note: Ultimate context engine analysis completed - comprehensive developer guide created.
+- Status aligned to `review`.
+- Completion note: Context and implementation records captured for review handoff.
 
 ## Dev Agent Record
 
@@ -231,7 +231,7 @@ GPT-5 Codex
 - Ran focused tests:
   - `npx vitest tests/demo-cli.test.ts`
   - `npx vitest tests/public-api.test.ts -t "deterministic policy response for unsupported post-attach canonical edits"`
-- Ran required project gates:
+- Ran required project gates in the local development session:
   - `npm run verify`
   - `npm run build`
   - `npm run test:demo`
@@ -251,7 +251,7 @@ GPT-5 Codex
 - Preserved privacy constraints by exposing only bounded policy/reason diagnostics (no credentials/tokens/private payloads).
 - Extended demo `sync status` output so operators can interpret success/failure and unsupported-policy outcomes from a repeatable, documented surface.
 - Added/updated behavior-focused tests validating diagnostics output and state explanation coverage.
-- Completed all required verification gates successfully.
+- Gate command results are not embedded in this artifact; treat this section as an execution log, not machine-verifiable proof.
 
 ### File List
 
