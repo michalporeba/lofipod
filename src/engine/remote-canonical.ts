@@ -34,6 +34,7 @@ export async function reconcileCanonicalResources(
   const metadata = await storage.readSyncMetadata();
   let entitiesReconciled = 0;
   let unsupportedDetected = false;
+  let changedContainerChecked = false;
 
   for (const definition of entities.values()) {
     const previousVersion =
@@ -61,6 +62,8 @@ export async function reconcileCanonicalResources(
       continue;
     }
 
+    changedContainerChecked = true;
+
     const result = await reconcileCanonicalContainer(
       storage,
       definition,
@@ -72,7 +75,7 @@ export async function reconcileCanonicalResources(
     unsupportedDetected = unsupportedDetected || result.unsupportedDetected;
   }
 
-  if (!unsupportedDetected) {
+  if (changedContainerChecked && !unsupportedDetected) {
     await clearUnsupportedRemoteReconciliation(storage);
   }
 

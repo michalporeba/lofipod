@@ -1,6 +1,6 @@
 # Story 3.4: Apply Documented Policy Responses to Unsupported Remote Changes
 
-Status: review
+Status: done
 
 ## Story
 
@@ -231,3 +231,9 @@ GPT-5 Codex
 ## Change Log
 
 - 2026-05-03: Implemented Story 3.4 bounded policy response for unsupported canonical remote edits, added deterministic repeated-behavior tests, and updated API/demo docs for policy visibility.
+
+### Review Findings
+
+- [x] [Review][Decision] Keep or revert broadened merge grouping semantics for non-IRI/blank-node subjects — resolved to revert to named-node-only grouping to preserve the shallow bounded model and avoid introducing anonymous-node complexity.
+- [x] [Review][Patch] Revert broadened merge grouping to named-node-only subjects [src/engine/supported-merge.ts:96]
+- [x] [Review][Patch] Preserve unsupported reconciliation metadata across no-change cycles [src/engine/remote-canonical.ts:78]

@@ -1,6 +1,6 @@
 # Story 3.5: Explain What Changed, What Synced, and What Failed
 
-Status: review
+Status: done
 
 ## Story
 
@@ -271,3 +271,9 @@ GPT-5 Codex
 ## Change Log
 
 - 2026-05-03: Implemented Story 3.5 explanation-surface improvements for sync diagnostics, including public reconciliation metadata, demo sync status output updates, and behavior-focused test/doc updates.
+
+### Review Findings
+
+- [x] [Review][Decision] Silent exclusion of non-named-node subjects in merge grouping may hide unsupported remote differences — resolved by surfacing non-`NamedNode` subjects as explicit unsupported canonical graph input.
+- [x] [Review][Patch] Unsupported reconciliation metadata can be cleared by unrelated changed containers [src/engine/remote-canonical.ts:78]
+- [x] [Review][Patch] New sync-state expectation appears inconsistent with canonical-check guard path [tests/public-api.test.ts:1810]

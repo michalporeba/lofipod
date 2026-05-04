@@ -1804,6 +1804,23 @@ describe("sync state", () => {
         },
       }),
     );
+
+    await engine.sync.now();
+
+    await expect(engine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "idle",
+        configured: true,
+        pendingChanges: 0,
+        connection: {
+          reachable: true,
+          lastSyncedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+          lastFailedAt: null,
+          lastFailureReason: null,
+          notificationsActive: false,
+        },
+      }),
+    );
   });
 
   it("becomes idle after pending changes are projected to canonical entity files", async () => {

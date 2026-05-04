@@ -1,4 +1,5 @@
 import {
+  isNamedNodeTerm,
   publicTriplesToRdfTriples,
   rdfTermToN3,
   rdfTripleKey,
@@ -18,6 +19,14 @@ export function mergeSupportedGraphs(
   const remote = publicTriplesToRdfTriples(remoteGraph, {
     rdfType: definition.rdfType,
   });
+
+  if (!allSubjectsAreNamedNodes(local) || !allSubjectsAreNamedNodes(remote)) {
+    return {
+      ok: false,
+      reason: "Unsupported non-IRI subject in canonical graph.",
+    };
+  }
+
   const localByKey = groupBySubjectPredicate(local);
   const remoteByKey = groupBySubjectPredicate(remote);
   const merged = new Map<string, RdfTriple>();
@@ -93,6 +102,10 @@ function groupBySubjectPredicate(graph: RdfTriple[]): Map<string, RdfTriple[]> {
   const grouped = new Map<string, RdfTriple[]>();
 
   for (const triple of graph) {
+    if (!isNamedNodeTerm(triple[0])) {
+      continue;
+    }
+
     const key = `${rdfTermToN3(triple[0])} ${rdfTermToN3(triple[1])}`;
     const existing = grouped.get(key);
 
@@ -104,4 +117,8 @@ function groupBySubjectPredicate(graph: RdfTriple[]): Map<string, RdfTriple[]> {
   }
 
   return grouped;
+}
+
+function allSubjectsAreNamedNodes(graph: RdfTriple[]): boolean {
+  return graph.every((triple) => isNamedNodeTerm(triple[0]));
 }

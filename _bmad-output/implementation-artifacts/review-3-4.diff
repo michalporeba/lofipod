@@ -1,0 +1,933 @@
+commit 12e7e0b27160130cfb72cc26b9152e11818da0d5
+Author: Michał Poręba <michalporeba@gmail.com>
+Date:   Sun May 3 12:20:25 2026 +0100
+
+    unsafe remote edits
+
+diff --git a/_bmad-output/implementation-artifacts/3-3-detect-and-classify-unsupported-or-unsafe-remote-edits.md b/_bmad-output/implementation-artifacts/3-3-detect-and-classify-unsupported-or-unsafe-remote-edits.md
+new file mode 100644
+index 0000000..3f8a0c2
+--- /dev/null
++++ b/_bmad-output/implementation-artifacts/3-3-detect-and-classify-unsupported-or-unsafe-remote-edits.md
+@@ -0,0 +1,194 @@
++# Story 3.3: Detect and Classify Unsupported or Unsafe Remote Edits
++
++Status: review
++
++## Story
++
++As a developer who depends on trustworthy sync behavior,
++I want `lofipod` to detect and classify unsupported or unsafe remote edits,
++so that the system does not silently merge data outside the bounded model.
++
++## Acceptance Criteria
++
++1. Given sync is attached and canonical or replayed remote data includes edits outside the supported bounded model, when those edits are evaluated, then the system classifies them as unsupported or unsafe for automatic reconciliation, and does not silently treat them as supported merges.
++2. Given a developer or user manually edits canonical Pod data outside documented `lofipod` conventions, when the client later processes those changes, then it can distinguish this from normal compatible replay, and produce an inspectable classification result.
++3. Given the repository is demonstrating CRDT-light trust boundaries, when this story is complete, then developers can see a concrete repeatable example of supported-vs-unsupported classification behavior that is explicit and understandable.
++
++## Tasks / Subtasks
++
++- [x] Preserve and extend unsupported/unsafe classification as a first-class sync concern. (AC: 1, 2)
++- [x] Reuse existing bounded-merge classification logic from bootstrap paths where possible; do not duplicate conflict classifiers. (AC: 1)
++- [x] Ensure classification is explicit and inspectable through existing public surfaces used in tests (bootstrap result and/or sync-observable state/log metadata used by current public tests). (AC: 2, 3)
++- [x] Add or update behavior-first tests for unsupported/unsafe remote edits in canonical and/or replay flows. (AC: 1, 2, 3)
++- [x] Keep story scope to detection/classification only; do not implement policy response actions from Story 3.4 in this story. (AC: 1, 3)
++
++## Dev Notes
++
++### Epic Context
++
++- Epic 3 focuses on trust, recovery, and explainability under failure.
++- Story 3.1 established compatible remote replay.
++- Story 3.2 established post-attach compatible canonical reconciliation.
++- Story 3.3 now defines the unsupported/unsafe boundary classification.
++- Story 3.4 will apply policy responses and must stay separate.
++
++[Source: `_bmad-output/planning-artifacts/epics.md` (Epic 3, Stories 3.1-3.4)]
++
++### Current State: Relevant Files to Read Before Changes
++
++- `src/engine/remote-canonical.ts`
++  - Current behavior: imports compatible external canonical creates/updates/deletes, skips pending-local entities, appends local inspectable change records with `entityProjected: true`, `logProjected: false`.
++  - Preserve: existing supported reconciliation behavior and pending-local protection.
++  - Change target: add/route unsupported or unsafe classification for post-attach remote edits without changing successful supported paths.
++
++- `src/engine/remote.ts`
++  - Current behavior: sync cycle order is `push -> pull -> reconcile`.
++  - Preserve: serialized cycle order and background semantics.
++  - Change target: avoid adding parallel or alternate sync pipelines.
++
++- `src/engine/remote-bootstrap.ts`
++  - Current behavior: has bounded merge classifier and returns `unsupported` and `collisions` when mixed-state differences exceed supported model.
++  - Preserve: reason semantics and deterministic behavior.
++  - Change target: reuse existing classification style and reasoning rather than inventing a second incompatible classifier.
++
++- `src/types.ts`
++  - Current behavior: exposes `BootstrapUnsupported`, `BootstrapCollision`, and `BootstrapResult`.
++  - Change target: if new public classification shape is required, keep it minimal, explicit, and aligned with existing API style.
++
++- `tests/public-api.test.ts`
++  - Current behavior: already covers unsupported mixed-state differences during bootstrap and compatible canonical reconciliation cases.
++  - Change target: add post-attach and/or replay-path unsupported classification proofs where missing.
++
++- `tests/pod-canonical.integration.test.ts`
++  - Current behavior: real Pod coverage for external canonical create/update reconciliation.
++  - Change target: add at most one focused unsupported external canonical scenario if feasible without overloading integration runtime.
++
++### Implementation Guardrails
++
++- Keep root package framework-agnostic; no React assumptions in core.
++- Keep root entrypoint environment-neutral; no browser/node leakage across public boundaries.
++- Do not weaken strict TypeScript typing (`any`, suppressions, broad casts).
++- Keep classification deterministic and inspectable; never silently coerce unsupported edits into supported merges.
++- Preserve existing supported-path behavior and tests while adding unsupported-path coverage.
++- Keep change scope narrow to detection/classification; defer policy action mechanics to Story 3.4.
++
++[Source: `AGENTS.md`, `docs/ADR.md`, `docs/API.md`, `_bmad-output/project-context.md`, `docs/architecture.md`]
++
++### Testing Requirements
++
++Required checks before marking implementation complete:
++
++- `npm run verify`
++- `npm run build`
++- `npm run test:demo`
++- `npm run test:pod`
++
++Suggested focused checks during development:
++
++- `npx vitest tests/public-api.test.ts -t "unsupported|unsafe|canonical"`
++- `npx vitest tests/pod-canonical.integration.test.ts`
++
++### Previous Story Intelligence (3.2)
++
++- Recent pattern is behavior-first and test-first for sync trust claims.
++- 3.2 kept orchestration stable and expanded tests rather than rewriting architecture.
++- For 3.3, follow the same pattern: prove unsupported/unsafe detection with tight tests, then minimally extend engine behavior.
++
++[Source: `_bmad-output/implementation-artifacts/3-2-reconcile-supported-canonical-remote-changes-after-attach.md`]
++
++### Git Intelligence Summary
++
++Recent commits:
++
++- `6c5ec98` reconcile supported canonical changes
++- `6cf45e2` replay compatible remote changes
++- `bd534a6` demonstrate multi-device setup
++- `01bc19f` inspectable sync state
++- `fe8eb3c` improving tests
++
++Actionable takeaway: continue incremental trust-boundary delivery with narrow engine deltas and strong behavior-focused tests.
++
++### Latest Tech Information (May 3, 2026)
++
++- Node.js official releases guidance continues to require production workloads to target Active or Maintenance LTS lines.
++- Vitest 4 migration guidance requires Node.js `>=20` and Vite `>=6`; project baseline Node `>=24` remains compatible.
++- Inrupt Node authentication docs continue to use `@inrupt/solid-client-authn-node` Session-based flows, supporting current adapter-boundary architecture.
++
++Sources:
++- https://nodejs.org/en/about/previous-releases
++- https://main.vitest.dev/guide/migration
++- https://docs.inrupt.com/developer-tools/javascript/client-libraries/tutorial/authenticate-shared/
++- https://docs.inrupt.com/guides/authentication-in-solid/authentication-server-side
++
++## References
++
++- `_bmad-output/planning-artifacts/epics.md`
++- `_bmad-output/planning-artifacts/prd.md`
++- `docs/architecture.md`
++- `docs/ADR.md`
++- `docs/API.md`
++- `_bmad-output/project-context.md`
++- `src/engine/remote.ts`
++- `src/engine/remote-canonical.ts`
++- `src/engine/remote-bootstrap.ts`
++- `src/types.ts`
++- `tests/public-api.test.ts`
++- `tests/pod-canonical.integration.test.ts`
++
++## Story Completion Status
++
++- Story context created with full artifact analysis and implementation guardrails.
++- Status set to `ready-for-dev`.
++- Completion note: Ultimate context engine analysis completed - comprehensive developer guide created.
++
++## Dev Agent Record
++
++### Agent Model Used
++
++GPT-5 Codex
++
++### Debug Log References
++
++- Resolved customization workflow for `bmad-create-story`.
++- Loaded project context plus required core docs (`README.md`, `docs/ADR.md`, `docs/API.md`, `docs/PLANS.md`, `docs/WIP.md`).
++- Parsed full `_bmad-output/implementation-artifacts/sprint-status.yaml` and selected first backlog story `3-3-detect-and-classify-unsupported-or-unsafe-remote-edits`.
++- Loaded planning artifacts (`epics.md`, `prd.md`) and architecture fallback (`docs/architecture.md`).
++- Loaded previous story (`3-2-*`) and recent git history for implementation patterns.
++- Performed targeted web verification for Node/Vitest/Inrupt current guidance.
++- Executed `bmad-dev-story` workflow: moved story status in sprint tracking to `in-progress` before implementation.
++- Added failing test first: `npx vitest tests/public-api.test.ts -t "classifies unsupported post-attach canonical edits"`.
++- Implemented shared classifier reuse in `src/engine/supported-merge.ts` and wired it into both bootstrap and post-attach canonical reconciliation.
++- Re-ran targeted tests and regression slices:
++  - `npx vitest tests/public-api.test.ts -t "classifies unsupported post-attach canonical edits"`
++  - `npx vitest tests/public-api.test.ts -t "unsupported|canonical|bootstrap"`
++- Ran required project gates:
++  - `npm run verify`
++  - `npm run build`
++  - `npm run test:demo`
++  - `npm run test:pod`
++- Observed one transient `tests/demo-cli.test.ts` failure during a verify run; reproduced the test in isolation, then reran verify successfully.
++
++### Completion Notes List
++
++- Created Story 3.3 implementation guide with AC mapping, code guardrails, and explicit scope boundaries.
++- Captured existing classification mechanisms and reuse expectations to prevent duplicate logic.
++- Added concrete test targets and workflow gate expectations.
++- Kept 3.3 scope restricted to detection/classification and deferred policy handling to 3.4.
++- Implemented unsupported/unsafe post-attach canonical classification that skips unsafe merges and preserves local state.
++- Reused bounded merge logic across bootstrap and canonical reconciliation via a shared engine utility to avoid duplicate conflict classifiers.
++- Added explicit inspectable classification signal through structured warn logging (`sync:reconcile:unsupported`) with entity/path/reason metadata.
++- Added behavior-first test coverage proving unsupported canonical edits are classified, not merged, and do not append extra local/remote changes.
++- Completed all required verification gates with green results (`verify`, `build`, `test:demo`, `test:pod`).
++
++### File List
++
++- _bmad-output/implementation-artifacts/3-3-detect-and-classify-unsupported-or-unsafe-remote-edits.md
++- _bmad-output/implementation-artifacts/sprint-status.yaml
++- src/engine/supported-merge.ts
++- src/engine/remote-bootstrap.ts
++- src/engine/remote-canonical.ts
++- tests/public-api.test.ts
++
++## Change Log
++
++- 2026-05-03: Implemented Story 3.3 unsupported/unsafe remote edit classification for post-attach canonical reconciliation; reused bounded merge classifier; added focused public API coverage; completed verify/build/demo/pod gates.
+diff --git a/_bmad-output/implementation-artifacts/3-4-apply-documented-policy-responses-to-unsupported-remote-changes.md b/_bmad-output/implementation-artifacts/3-4-apply-documented-policy-responses-to-unsupported-remote-changes.md
+new file mode 100644
+index 0000000..b1edaff
+--- /dev/null
++++ b/_bmad-output/implementation-artifacts/3-4-apply-documented-policy-responses-to-unsupported-remote-changes.md
+@@ -0,0 +1,233 @@
++# Story 3.4: Apply Documented Policy Responses to Unsupported Remote Changes
++
++Status: review
++
++## Story
++
++As a developer troubleshooting unexpected remote edits,
++I want `lofipod` to respond to unsupported cases in a predictable documented way,
++so that failure behavior is trustworthy even when the system cannot automatically reconcile safely.
++
++## Acceptance Criteria
++
++1. Given a remote change has already been classified as unsupported or unsafe for automatic reconciliation, when the client applies the documented policy response, then it follows a consistent bounded behavior rather than leaving the outcome undefined, and the policy is understandable enough that a developer can predict what the system will do next.
++2. Given the unsupported remote change cannot be safely merged into local state, when policy handling occurs, then the system preserves trust by avoiding silent corruption or destructive overwrite of local data, and the existing supported local state remains usable through the normal local-first surface unless the documented policy explicitly says otherwise.
++3. Given the system encounters an unsupported remote condition more than once, when the same class of condition is re-evaluated, then the documented policy response remains consistent across occurrences, and the behavior does not depend on hidden operator intervention or ad hoc decisions.
++4. Given a developer is reviewing how `lofipod` behaves outside its supported automatic boundaries, when they inspect the demo scenario and documentation for this story, then they can understand the difference between supported reconciliation, unsupported classification, and policy response, and the repository shows that unsupported cases are handled explicitly rather than silently ignored.
++5. Given the project aims for a CRDT-light trust model rather than arbitrary merge behavior, when this story is complete, then developers can see that unsupported remote edits trigger a defined protective response, and that response creates a stable basis for diagnostics and later recovery workflows.
++
++## Tasks / Subtasks
++
++- [x] Define and implement a single bounded policy response for unsupported canonical reconciliation results (AC: 1, 2, 3)
++- [x] Reuse existing unsupported classification from Story 3.3 and avoid creating a second classifier path (AC: 1, 3)
++- [x] Persist policy-response signal in an inspectable surface (sync state and/or explicit warning metadata) without exposing secrets (AC: 1, 4)
++- [x] Keep local supported state usable and unchanged for unsupported remote edits; do not auto-overwrite local entities (AC: 2)
++- [x] Add behavior-first tests for repeated unsupported detections proving deterministic response across multiple sync cycles (AC: 3)
++- [x] Update demo/docs touchpoints so supported reconciliation vs unsupported classification vs policy response are visible and understandable (AC: 4, 5)
++- [x] Keep policy handling isolated from broader migration/recovery work planned for Stories 3.5 and 3.6 (AC: 5)
++
++## Dev Notes
++
++### Epic Context
++
++- Epic 3 focuses on trust, recovery, and explainability under failure.
++- Story 3.1 implemented compatible remote replay.
++- Story 3.2 implemented supported canonical reconciliation after attach.
++- Story 3.3 implemented unsupported/unsafe classification for remote edits.
++- Story 3.4 now adds the documented policy response for those unsupported cases; Story 3.5 will focus on broader diagnostics UX and Story 3.6 on recovery execution.
++
++[Source: `_bmad-output/planning-artifacts/epics.md` (Epic 3, Stories 3.1-3.6)]
++
++### Current State: Relevant Files to Read Before Changes
++
++- `src/engine/remote-canonical.ts`
++  - Current state: calls `mergeSupportedGraphs(...)`; logs `sync:reconcile:unsupported` when unsupported and skips mutation.
++  - Story 3.4 change: apply a documented policy response when unsupported classification occurs (for example: explicit policy event/state + deterministic skip behavior), without changing supported merge flow.
++  - Must preserve: pending-local guard, deterministic reconcile ordering, supported merge import path.
++
++- `src/engine/supported-merge.ts`
++  - Current state: centralized bounded-merge classifier and merge utility.
++  - Story 3.4 change: no new classifier. Reuse returned `reason` for policy handling and observability.
++  - Must preserve: deterministic merge/conflict semantics used by bootstrap and reconcile flows.
++
++- `src/engine/remote.ts`
++  - Current state: serialized cycle `push -> pull -> reconcile` with timing logs.
++  - Story 3.4 change: keep cycle order and non-blocking behavior; policy response should fit existing reconcile stage.
++  - Must preserve: no parallel sync path, no sync lifecycle contract change.
++
++- `src/types.ts` (and any public sync types/export files)
++  - Current state: public types include bootstrap unsupported/collision results and sync state.
++  - Story 3.4 change: if adding policy response visibility, keep additions minimal and stable at public boundary.
++  - Must preserve: API clarity and environment-neutral core surface.
++
++- `tests/public-api.test.ts`
++  - Current state: has coverage for unsupported bootstrap/reconcile classification.
++  - Story 3.4 change: add policy-response behavior checks and repeated-occurrence determinism checks.
++  - Must preserve: behavior-first assertions through public API.
++
++- `tests/pod-canonical.integration.test.ts` and/or `tests/pod-auto-sync.integration.test.ts`
++  - Current state: focused Pod integration around canonical reconciliation and auto-sync behavior.
++  - Story 3.4 change: add at most one focused integration assertion for inspectable policy response if runtime cost stays bounded.
++  - Must preserve: efficient CI runtime and deterministic assertions.
++
++### Policy Response Guardrails
++
++- Use one explicit, documented protective behavior for unsupported remote canonical edits in this phase.
++- Avoid silent fallback behavior; unsupported condition must remain inspectable.
++- Do not delete or overwrite healthy local state due to unsupported remote edits.
++- Keep behavior deterministic across repeated sync cycles for same unsupported condition.
++- Keep secrets out of logs/diagnostics (no token/credential leakage).
++- Do not implement full recovery orchestration here; defer workflow-level recovery to Story 3.6.
++
++### Architecture & API Compliance
++
++- Keep root package framework-agnostic and environment-neutral.
++- Do not introduce React or browser/Node runtime assumptions into core sync modules.
++- Keep strict TypeScript discipline; avoid `any`, broad casts, and suppression comments.
++- Keep public API changes minimal and documented if any externally-visible type/behavior changes.
++- If architecture intent changes materially, update `docs/ADR.md`; if public API changes, update `docs/API.md`.
++
++[Source: `README.md`, `docs/ADR.md`, `docs/API.md`, `docs/PLANS.md`, `docs/WIP.md`, `docs/architecture.md`, `_bmad-output/project-context.md`]
++
++### Technical Requirements
++
++- Preserve local-first behavior: local CRUD remains available and non-blocking while unsupported remote edits are handled.
++- Preserve sync serialization and idempotency in repeated `sync.now()` calls.
++- Keep unsupported handling consistent between canonical polling cycles and repeated occurrences.
++- Ensure policy response output is stable enough for Story 3.5 diagnostics expansion.
++
++### Testing Requirements
++
++Required pre-handoff checks:
++
++- `npm run verify`
++- `npm run build`
++- `npm run test:demo`
++- `npm run test:pod`
++
++Suggested focused checks during development:
++
++- `npx vitest tests/public-api.test.ts -t "unsupported|policy|reconcile"`
++- `npx vitest tests/pod-canonical.integration.test.ts`
++- `npx vitest tests/pod-auto-sync.integration.test.ts`
++
++### Previous Story Intelligence (3.3)
++
++- 3.3 intentionally stopped at detection/classification and left policy actions for 3.4.
++- Shared classifier reuse (`src/engine/supported-merge.ts`) was established to prevent duplicate logic.
++- Canonical reconcile currently warns and skips unsupported cases; 3.4 should layer explicit policy response semantics on top of that existing safe default.
++- Recent delivery pattern is incremental, behavior-first, and test-gated; keep changes narrow and verifiable.
++
++[Source: `_bmad-output/implementation-artifacts/3-3-detect-and-classify-unsupported-or-unsafe-remote-edits.md`]
++
++### Git Intelligence Summary
++
++Recent commit titles and scope:
++
++- `13ab4ac` unsafe remote edits (`remote-canonical`, `remote-bootstrap`, `supported-merge`, public API tests)
++- `6c5ec98` reconcile supported canonical changes (public + integration sync tests)
++- `6cf45e2` replay compatible remote changes (public + integration sync tests)
++- `bd534a6` demonstrate multi-device setup
++- `01bc19f` inspectable sync state
++
++Actionable takeaway: continue the established pattern of small sync-core deltas with strong public behavior tests and minimal integration additions.
++
++### Latest Tech Information (May 3, 2026)
++
++- Node.js release policy still recommends production workloads on Active or Maintenance LTS lines; current project baseline (`>=24`) remains aligned.
++- Vitest 4 migration guidance requires Node.js `>=20` and Vite `>=6`; current stack is compatible.
++- Inrupt auth docs continue to center `@inrupt/solid-client-authn-node` Session-based server-side flows, consistent with adapter-boundary architecture.
++
++Sources:
++- https://nodejs.org/en/about/releases/
++- https://main.vitest.dev/guide/migration
++- https://docs.inrupt.com/developer-tools/javascript/client-libraries/tutorial/authenticate-shared/
++- https://docs.inrupt.com/guides/authentication-in-solid/authentication-server-side
++
++### Project Structure Notes
++
++- Keep policy behavior implementation in existing sync engine modules (`src/engine/*`) rather than creating new top-level subsystems.
++- Keep tests in existing public/integration suites, aligned with current conventions.
++- Prefer extending existing logger/sync-state mechanisms over introducing parallel diagnostics channels.
++
++## References
++
++- `_bmad-output/planning-artifacts/epics.md`
++- `_bmad-output/planning-artifacts/prd.md`
++- `docs/architecture.md`
++- `docs/ADR.md`
++- `docs/API.md`
++- `docs/PLANS.md`
++- `docs/WIP.md`
++- `_bmad-output/project-context.md`
++- `src/engine/remote.ts`
++- `src/engine/remote-canonical.ts`
++- `src/engine/supported-merge.ts`
++- `src/types.ts`
++- `tests/public-api.test.ts`
++- `tests/pod-canonical.integration.test.ts`
++- `tests/pod-auto-sync.integration.test.ts`
++
++## Story Completion Status
++
++- Story context created with comprehensive artifact analysis and implementation guardrails.
++- Status set to `ready-for-dev`.
++- Completion note: Ultimate context engine analysis completed - comprehensive developer guide created.
++
++## Dev Agent Record
++
++### Agent Model Used
++
++GPT-5 Codex
++
++### Debug Log References
++
++- Resolved `bmad-create-story` workflow customization and loaded persistent context.
++- Loaded required project docs and artifact sources.
++- Parsed full sprint status and selected first backlog story `3-4-apply-documented-policy-responses-to-unsupported-remote-changes`.
++- Analyzed Epic 3 story context, previous story (3.3), relevant sync engine files, and recent git history.
++- Performed targeted latest-tech verification (Node/Vitest/Inrupt) against primary docs.
++- Executed `bmad-dev-story` workflow activation and loaded full sprint/story context for Story 3.4.
++- Updated sprint tracking to `in-progress` before implementation.
++- Added failing public API test first for deterministic unsupported policy behavior:
++  - `npx vitest tests/public-api.test.ts -t "deterministic policy response for unsupported post-attach canonical edits"` (failed as expected).
++- Implemented explicit bounded policy metadata in unsupported reconcile warnings in `src/engine/remote-canonical.ts`.
++- Extended public API behavior test to verify repeated unsupported detections produce consistent policy metadata and no local-state mutation.
++- Updated docs touchpoints for policy visibility:
++  - `docs/API.md` logging section
++  - `demo/README.md` sync inspection guidance
++- Ran focused validation:
++  - `npx vitest tests/public-api.test.ts -t "unsupported|policy|reconcile"`
++- Ran required project gates:
++  - `npm run verify`
++  - `npm run build`
++  - `npm run test:demo`
++  - `npm run test:pod`
++
++### Completion Notes List
++
++- Created Story 3.4 implementation guide with acceptance criteria mapping and bounded policy-response scope.
++- Captured exact code areas, preservation constraints, and anti-regression guardrails.
++- Added deterministic policy behavior requirements for repeated unsupported conditions.
++- Documented required and focused test commands aligned with project CI expectations.
++- Preserved separation of concerns with later diagnostics/recovery stories (3.5, 3.6).
++- Added explicit bounded policy marker on unsupported canonical reconcile events:
++  - `policy: "preserve-local-skip-unsupported-remote"`.
++- Preserved Story 3.3 classifier reuse (`mergeSupportedGraphs`) without introducing a second classifier path.
++- Verified unsupported remote canonical edits do not overwrite local supported state and do not append additional local changes.
++- Added behavior-first regression proving deterministic repeated policy response across sync cycles.
++- Documented the policy response in API and demo docs to make supported-vs-unsupported handling inspectable and predictable.
++- Completed required verification and integration gates with passing results.
++
++### File List
++
++- _bmad-output/implementation-artifacts/3-4-apply-documented-policy-responses-to-unsupported-remote-changes.md
++- _bmad-output/implementation-artifacts/sprint-status.yaml
++- src/engine/remote-canonical.ts
++- tests/public-api.test.ts
++- docs/API.md
++- demo/README.md
++
++## Change Log
++
++- 2026-05-03: Implemented Story 3.4 bounded policy response for unsupported canonical remote edits, added deterministic repeated-behavior tests, and updated API/demo docs for policy visibility.
+diff --git a/_bmad-output/implementation-artifacts/sprint-status.yaml b/_bmad-output/implementation-artifacts/sprint-status.yaml
+index 1da0b49..d8bdcec 100644
+--- a/_bmad-output/implementation-artifacts/sprint-status.yaml
++++ b/_bmad-output/implementation-artifacts/sprint-status.yaml
+@@ -35,7 +35,7 @@
+ # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+ 
+ generated: "2026-04-26T13:37:20+01:00"
+-last_updated: "2026-05-03T11:24:49+01:00"
++last_updated: "2026-05-03T13:32:00+01:00"
+ project: "lofipod"
+ project_key: "NOKEY"
+ tracking_system: "file-system"
+@@ -61,8 +61,8 @@ development_status:
+   epic-3: in-progress
+   3-1-replay-compatible-remote-changes-from-another-lofipod-client: done
+   3-2-reconcile-supported-canonical-remote-changes-after-attach: done
+-  3-3-detect-and-classify-unsupported-or-unsafe-remote-edits: backlog
+-  3-4-apply-documented-policy-responses-to-unsupported-remote-changes: backlog
++  3-3-detect-and-classify-unsupported-or-unsafe-remote-edits: review
++  3-4-apply-documented-policy-responses-to-unsupported-remote-changes: review
+   3-5-explain-what-changed-what-synced-and-what-failed: backlog
+   3-6-recover-cleanly-from-interrupted-or-failed-sync-work: backlog
+   epic-3-retrospective: optional
+diff --git a/demo/README.md b/demo/README.md
+index 44cfe60..cefdd66 100644
+--- a/demo/README.md
++++ b/demo/README.md
+@@ -234,6 +234,12 @@ lastFailureReason=-
+ The local-first commands still work even when the last known remote state is
+ offline.
+ 
++When a canonical remote edit is classified as unsupported, the bounded
++protective policy is to keep local state unchanged and skip importing that
++remote shape. If a logger is attached, this is surfaced as
++`sync:reconcile:unsupported` with
++`policy: "preserve-local-skip-unsupported-remote"` and a reason string.
++
+ ### Inspecting canonical Pod output
+ 
+ The demo's canonical Pod output is Solid-specific transport state layered on
+diff --git a/docs/API.md b/docs/API.md
+index dd612fb..82955c1 100644
+--- a/docs/API.md
++++ b/docs/API.md
+@@ -410,6 +410,10 @@ When provided, the current implementation logs:
+   `sync:cycle`
+ - operational events such as `sync:attached`, `sync:detached`, and
+   `sync:bootstrap`
++- unsupported canonical reconciliation events as
++  `sync:reconcile:unsupported`, including bounded-policy metadata
++  (`policy: "preserve-local-skip-unsupported-remote"`) and classification
++  reason
+ 
+ When omitted, logging adds no meaningful work beyond the normal code paths.
+ 
+diff --git a/src/engine/remote-bootstrap.ts b/src/engine/remote-bootstrap.ts
+index 04cbd00..9c1a719 100644
+--- a/src/engine/remote-bootstrap.ts
++++ b/src/engine/remote-bootstrap.ts
+@@ -1,17 +1,12 @@
+ import { createProjectionHelpers, diffTriples, graphsMatch } from "../graph.js";
+ import {
+-  isNamedNodeTerm,
+   publicTriplesToRdfTriples,
+-  rdfTermToN3,
+-  rdfTripleKey,
+   rdfTriplesToPublicTriples,
+-  type RdfTriple,
+ } from "../rdf.js";
+ import type {
+   BootstrapResult,
+   EngineConfig,
+   EntityDefinition,
+-  Triple,
+ } from "../types.js";
+ import type { EngineStorage } from "./support.js";
+ import {
+@@ -22,6 +17,7 @@ import {
+   rememberObservedRemoteChangeIds,
+   requireLogBasePath,
+ } from "./support.js";
++import { mergeSupportedGraphs } from "./supported-merge.js";
+ 
+ export async function bootstrapFromCanonicalResources(
+   storage: EngineStorage,
+@@ -63,7 +59,7 @@ export async function bootstrapFromCanonicalResources(
+           continue;
+         }
+ 
+-        const merge = mergeSupportedBootstrapGraphs(
++        const merge = mergeSupportedGraphs(
+           existingRecord.graph,
+           remoteEntity.graph,
+           definition,
+@@ -185,105 +181,3 @@ export async function bootstrapFromCanonicalResources(
+     collisions,
+   };
+ }
+-
+-function mergeSupportedBootstrapGraphs(
+-  localGraph: Triple[],
+-  remoteGraph: Triple[],
+-  definition: EntityDefinition<unknown>,
+-): { ok: true; graph: Triple[] } | { ok: false; reason: string } {
+-  const local = publicTriplesToRdfTriples(localGraph, {
+-    rdfType: definition.rdfType,
+-  });
+-  const remote = publicTriplesToRdfTriples(remoteGraph, {
+-    rdfType: definition.rdfType,
+-  });
+-  const localByKey = groupBySubjectPredicate(local);
+-  const remoteByKey = groupBySubjectPredicate(remote);
+-  const merged = new Map<string, RdfTriple>();
+-  const keys = new Set([...localByKey.keys(), ...remoteByKey.keys()]);
+-
+-  for (const key of keys) {
+-    const localTriples = localByKey.get(key) ?? [];
+-    const remoteTriples = remoteByKey.get(key) ?? [];
+-
+-    if (localTriples.length === 0) {
+-      for (const triple of remoteTriples) {
+-        merged.set(rdfTripleKey(triple), triple);
+-      }
+-      continue;
+-    }
+-
+-    if (remoteTriples.length === 0) {
+-      for (const triple of localTriples) {
+-        merged.set(rdfTripleKey(triple), triple);
+-      }
+-      continue;
+-    }
+-
+-    const all = [...localTriples, ...remoteTriples];
+-    const unique = new Map(all.map((triple) => [rdfTripleKey(triple), triple]));
+-
+-    if (
+-      unique.size === 1 &&
+-      localTriples.length === 1 &&
+-      remoteTriples.length === 1
+-    ) {
+-      merged.set(rdfTripleKey(localTriples[0]!), localTriples[0]!);
+-      continue;
+-    }
+-
+-    if (localTriples.length !== 1 || remoteTriples.length !== 1) {
+-      return {
+-        ok: false,
+-        reason: "Unsupported multi-value conflict for subject/predicate.",
+-      };
+-    }
+-
+-    const localObject = localTriples[0]![2];
+-    const remoteObject = remoteTriples[0]![2];
+-
+-    if (
+-      localObject.termType === "BlankNode" ||
+-      remoteObject.termType === "BlankNode"
+-    ) {
+-      return {
+-        ok: false,
+-        reason: "Unsupported blank-node object conflict.",
+-      };
+-    }
+-
+-    const localKey = rdfTermToN3(localObject);
+-    const remoteKey = rdfTermToN3(remoteObject);
+-    const winner =
+-      remoteKey.localeCompare(localKey) >= 0
+-        ? remoteTriples[0]!
+-        : localTriples[0]!;
+-    merged.set(rdfTripleKey(winner), winner);
+-  }
+-
+-  return {
+-    ok: true,
+-    graph: rdfTriplesToPublicTriples(Array.from(merged.values())),
+-  };
+-}
+-
+-function groupBySubjectPredicate(
+-  triples: RdfTriple[],
+-): Map<string, RdfTriple[]> {
+-  const grouped = new Map<string, RdfTriple[]>();
+-
+-  for (const triple of triples) {
+-    if (!isNamedNodeTerm(triple[0])) {
+-      continue;
+-    }
+-    const key = `${triple[0].value} ${triple[1].value}`;
+-    const existing = grouped.get(key);
+-    if (existing) {
+-      existing.push(triple);
+-    } else {
+-      grouped.set(key, [triple]);
+-    }
+-  }
+-
+-  return grouped;
+-}
+diff --git a/src/engine/remote-canonical.ts b/src/engine/remote-canonical.ts
+index 63b8b86..4ee0c72 100644
+--- a/src/engine/remote-canonical.ts
++++ b/src/engine/remote-canonical.ts
+@@ -1,4 +1,5 @@
+ import { diffTriples, graphsMatch } from "../graph.js";
++import { logWarn } from "../logger.js";
+ import {
+   publicTriplesToRdfTriples,
+   rdfTriplesToPublicTriples,
+@@ -16,6 +17,9 @@ import {
+   createRemoteProjectionHelpers,
+   createTimestamp,
+ } from "./support.js";
++import { mergeSupportedGraphs } from "./supported-merge.js";
++
++const UNSUPPORTED_REMOTE_POLICY = "preserve-local-skip-unsupported-remote";
+ 
+ export async function reconcileCanonicalResources(
+   storage: EngineStorage,
+@@ -59,6 +63,7 @@ export async function reconcileCanonicalResources(
+       storage,
+       definition,
+       remote.entities,
++      config,
+       await readPendingEntityIds(storage, definition.kind),
+     );
+   }
+@@ -75,6 +80,7 @@ async function reconcileCanonicalContainer(
+     rootUri: string;
+     graph: Triple[];
+   }[],
++  config: EngineConfig,
+   pendingEntityIds: Set<string>,
+ ): Promise<number> {
+   const localRecords = await storage.listEntities(definition.kind);
+@@ -103,6 +109,23 @@ async function reconcileCanonicalContainer(
+       continue;
+     }
+ 
++    const classification = mergeSupportedGraphs(
++      localRecord.graph,
++      remoteEntity.graph,
++      definition,
++    );
++
++    if (!classification.ok) {
++      logWarn(config.logger, "sync:reconcile:unsupported", {
++        entityName: definition.kind,
++        entityId: remoteEntity.entityId,
++        path: remoteEntity.path,
++        reason: classification.reason,
++        policy: UNSUPPORTED_REMOTE_POLICY,
++      });
++      continue;
++    }
++
+     await reconcileExternalCanonicalUpdate(
+       storage,
+       definition,
+diff --git a/src/engine/supported-merge.ts b/src/engine/supported-merge.ts
+new file mode 100644
+index 0000000..ed0c9b6
+--- /dev/null
++++ b/src/engine/supported-merge.ts
+@@ -0,0 +1,107 @@
++import {
++  publicTriplesToRdfTriples,
++  rdfTermToN3,
++  rdfTripleKey,
++  rdfTriplesToPublicTriples,
++  type RdfTriple,
++} from "../rdf.js";
++import type { EntityDefinition, Triple } from "../types.js";
++
++export function mergeSupportedGraphs(
++  localGraph: Triple[],
++  remoteGraph: Triple[],
++  definition: EntityDefinition<unknown>,
++): { ok: true; graph: Triple[] } | { ok: false; reason: string } {
++  const local = publicTriplesToRdfTriples(localGraph, {
++    rdfType: definition.rdfType,
++  });
++  const remote = publicTriplesToRdfTriples(remoteGraph, {
++    rdfType: definition.rdfType,
++  });
++  const localByKey = groupBySubjectPredicate(local);
++  const remoteByKey = groupBySubjectPredicate(remote);
++  const merged = new Map<string, RdfTriple>();
++  const keys = new Set([...localByKey.keys(), ...remoteByKey.keys()]);
++
++  for (const key of keys) {
++    const localTriples = localByKey.get(key) ?? [];
++    const remoteTriples = remoteByKey.get(key) ?? [];
++
++    if (localTriples.length === 0) {
++      for (const triple of remoteTriples) {
++        merged.set(rdfTripleKey(triple), triple);
++      }
++      continue;
++    }
++
++    if (remoteTriples.length === 0) {
++      for (const triple of localTriples) {
++        merged.set(rdfTripleKey(triple), triple);
++      }
++      continue;
++    }
++
++    const all = [...localTriples, ...remoteTriples];
++    const unique = new Map(all.map((triple) => [rdfTripleKey(triple), triple]));
++
++    if (
++      unique.size === 1 &&
++      localTriples.length === 1 &&
++      remoteTriples.length === 1
++    ) {
++      merged.set(rdfTripleKey(localTriples[0]!), localTriples[0]!);
++      continue;
++    }
++
++    if (localTriples.length !== 1 || remoteTriples.length !== 1) {
++      return {
++        ok: false,
++        reason: "Unsupported multi-value conflict for subject/predicate.",
++      };
++    }
++
++    const localObject = localTriples[0]![2];
++    const remoteObject = remoteTriples[0]![2];
++
++    if (
++      localObject.termType === "BlankNode" ||
++      remoteObject.termType === "BlankNode"
++    ) {
++      return {
++        ok: false,
++        reason: "Unsupported blank-node object conflict.",
++      };
++    }
++
++    const localKey = rdfTermToN3(localObject);
++    const remoteKey = rdfTermToN3(remoteObject);
++    const winner =
++      remoteKey.localeCompare(localKey) >= 0
++        ? remoteTriples[0]!
++        : localTriples[0]!;
++
++    merged.set(rdfTripleKey(winner), winner);
++  }
++
++  return {
++    ok: true,
++    graph: rdfTriplesToPublicTriples(Array.from(merged.values())),
++  };
++}
++
++function groupBySubjectPredicate(graph: RdfTriple[]): Map<string, RdfTriple[]> {
++  const grouped = new Map<string, RdfTriple[]>();
++
++  for (const triple of graph) {
++    const key = `${rdfTermToN3(triple[0])} ${rdfTermToN3(triple[1])}`;
++    const existing = grouped.get(key);
++
++    if (existing) {
++      existing.push(triple);
++    } else {
++      grouped.set(key, [triple]);
++    }
++  }
++
++  return grouped;
++}
+diff --git a/tests/public-api.test.ts b/tests/public-api.test.ts
+index c519068..133d8ba 100644
+--- a/tests/public-api.test.ts
++++ b/tests/public-api.test.ts
+@@ -4817,6 +4817,109 @@ describe("mocked entity sync", () => {
+     expect(remote.logEntries).toHaveLength(logEntriesAfterFirstReconcile + 1);
+   });
+ 
++  it("applies a deterministic policy response for unsupported post-attach canonical edits", async () => {
++    const { entity } = createEventFixture();
++    const remote = createSharedRemoteAdapter();
++    const storage = createMemoryStorage();
++    const logger = {
++      debug: vi.fn(),
++      info: vi.fn(),
++      warn: vi.fn(),
++      error: vi.fn(),
++    };
++    const engine = createEngine({
++      entities: [entity],
++      pod,
++      storage,
++      logger,
++      sync: {
++        adapter: remote.adapter,
++      },
++    });
++
++    await engine.save("event", {
++      id: "ev-unsupported-canonical",
++      title: "Local baseline",
++      time: {
++        year: 2024,
++      },
++    });
++    await engine.sync.now();
++    remote.upsertCanonicalEntity({
++      entityName: "event",
++      entityId: "ev-unsupported-canonical",
++      path: "events/ev-unsupported-canonical.ttl",
++      rootUri: "https://example.com/id/event/ev-unsupported-canonical",
++      rdfType: entity.rdfType,
++      graph: [
++        ...eventGraph("ev-unsupported-canonical", "Remote title", 2024),
++        [
++          uri("https://example.com/id/event/ev-unsupported-canonical"),
++          uri("https://example.com/ns#title"),
++          "Remote duplicate title",
++        ],
++      ],
++    });
++    await engine.sync.now();
++
++    remote.upsertCanonicalEntity({
++      entityName: "event",
++      entityId: "ev-unsupported-canonical",
++      path: "events/ev-unsupported-canonical.ttl",
++      rootUri: "https://example.com/id/event/ev-unsupported-canonical",
++      rdfType: entity.rdfType,
++      graph: [
++        ...eventGraph("ev-unsupported-canonical", "Remote title", 2024),
++        [
++          uri("https://example.com/id/event/ev-unsupported-canonical"),
++          uri("https://example.com/ns#title"),
++          "Remote duplicate title",
++        ],
++      ],
++    });
++
++    const logEntriesBeforeUnsupportedSync = remote.logEntries.length;
++
++    await engine.sync.now();
++
++    await expect(
++      engine.get("event", "ev-unsupported-canonical"),
++    ).resolves.toEqual({
++      id: "ev-unsupported-canonical",
++      title: "Local baseline",
++      time: {
++        year: 2024,
++      },
++    });
++    await expect(
++      storage.listChanges("event", "ev-unsupported-canonical"),
++    ).resolves.toHaveLength(1);
++    expect(remote.logEntries).toHaveLength(logEntriesBeforeUnsupportedSync);
++    expect(logger.warn).toHaveBeenCalledWith(
++      "sync:reconcile:unsupported",
++      expect.objectContaining({
++        entityName: "event",
++        entityId: "ev-unsupported-canonical",
++        policy: "preserve-local-skip-unsupported-remote",
++      }),
++    );
++
++    const unsupportedWarnings = logger.warn.mock.calls.filter(
++      (call) => call[0] === "sync:reconcile:unsupported",
++    );
++    expect(unsupportedWarnings).toHaveLength(2);
++    for (const warning of unsupportedWarnings) {
++      expect(warning[1]).toEqual(
++        expect.objectContaining({
++          entityName: "event",
++          entityId: "ev-unsupported-canonical",
++          policy: "preserve-local-skip-unsupported-remote",
++          reason: "Unsupported multi-value conflict for subject/predicate.",
++        }),
++      );
++    }
++  });
++
+   it("does not create a duplicate canonical reconciliation change when log replay already matches the Pod", async () => {
+     const { entity } = createEventFixture();
+     const remote = createSharedRemoteAdapter();

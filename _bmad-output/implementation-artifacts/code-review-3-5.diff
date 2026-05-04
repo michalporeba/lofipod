@@ -1,0 +1,121 @@
+diff --git a/_bmad-output/implementation-artifacts/3-4-apply-documented-policy-responses-to-unsupported-remote-changes.md b/_bmad-output/implementation-artifacts/3-4-apply-documented-policy-responses-to-unsupported-remote-changes.md
+index b1edaff..2616a68 100644
+--- a/_bmad-output/implementation-artifacts/3-4-apply-documented-policy-responses-to-unsupported-remote-changes.md
++++ b/_bmad-output/implementation-artifacts/3-4-apply-documented-policy-responses-to-unsupported-remote-changes.md
+@@ -1,6 +1,6 @@
+ # Story 3.4: Apply Documented Policy Responses to Unsupported Remote Changes
+ 
+-Status: review
++Status: done
+ 
+ ## Story
+ 
+@@ -231,3 +231,9 @@ GPT-5 Codex
+ ## Change Log
+ 
+ - 2026-05-03: Implemented Story 3.4 bounded policy response for unsupported canonical remote edits, added deterministic repeated-behavior tests, and updated API/demo docs for policy visibility.
++
++### Review Findings
++
++- [x] [Review][Decision] Keep or revert broadened merge grouping semantics for non-IRI/blank-node subjects — resolved to revert to named-node-only grouping to preserve the shallow bounded model and avoid introducing anonymous-node complexity.
++- [x] [Review][Patch] Revert broadened merge grouping to named-node-only subjects [src/engine/supported-merge.ts:96]
++- [x] [Review][Patch] Preserve unsupported reconciliation metadata across no-change cycles [src/engine/remote-canonical.ts:78]
+diff --git a/_bmad-output/implementation-artifacts/sprint-status.yaml b/_bmad-output/implementation-artifacts/sprint-status.yaml
+index 0f94354..a784c68 100644
+--- a/_bmad-output/implementation-artifacts/sprint-status.yaml
++++ b/_bmad-output/implementation-artifacts/sprint-status.yaml
+@@ -35,7 +35,7 @@
+ # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+ 
+ generated: "2026-04-26T13:37:20+01:00"
+-last_updated: "2026-05-03T17:10:00+01:00"
++last_updated: "2026-05-04T11:23:11+01:00"
+ project: "lofipod"
+ project_key: "NOKEY"
+ tracking_system: "file-system"
+@@ -62,7 +62,7 @@ development_status:
+   3-1-replay-compatible-remote-changes-from-another-lofipod-client: done
+   3-2-reconcile-supported-canonical-remote-changes-after-attach: done
+   3-3-detect-and-classify-unsupported-or-unsafe-remote-edits: done
+-  3-4-apply-documented-policy-responses-to-unsupported-remote-changes: review
++  3-4-apply-documented-policy-responses-to-unsupported-remote-changes: done
+   3-5-explain-what-changed-what-synced-and-what-failed: review
+   3-6-recover-cleanly-from-interrupted-or-failed-sync-work: review
+   epic-3-retrospective: optional
+diff --git a/src/engine/remote-canonical.ts b/src/engine/remote-canonical.ts
+index 722b580..34785b7 100644
+--- a/src/engine/remote-canonical.ts
++++ b/src/engine/remote-canonical.ts
+@@ -34,6 +34,7 @@ export async function reconcileCanonicalResources(
+   const metadata = await storage.readSyncMetadata();
+   let entitiesReconciled = 0;
+   let unsupportedDetected = false;
++  let changedContainerChecked = false;
+ 
+   for (const definition of entities.values()) {
+     const previousVersion =
+@@ -57,6 +58,8 @@ export async function reconcileCanonicalResources(
+       continue;
+     }
+ 
++    changedContainerChecked = true;
++
+     if (previousVersion === null && hasLocalEntities) {
+       continue;
+     }
+@@ -72,7 +75,7 @@ export async function reconcileCanonicalResources(
+     unsupportedDetected = unsupportedDetected || result.unsupportedDetected;
+   }
+ 
+-  if (!unsupportedDetected) {
++  if (changedContainerChecked && !unsupportedDetected) {
+     await clearUnsupportedRemoteReconciliation(storage);
+   }
+ 
+diff --git a/src/engine/supported-merge.ts b/src/engine/supported-merge.ts
+index ed0c9b6..532e25b 100644
+--- a/src/engine/supported-merge.ts
++++ b/src/engine/supported-merge.ts
+@@ -1,4 +1,5 @@
+ import {
++  isNamedNodeTerm,
+   publicTriplesToRdfTriples,
+   rdfTermToN3,
+   rdfTripleKey,
+@@ -93,6 +94,10 @@ function groupBySubjectPredicate(graph: RdfTriple[]): Map<string, RdfTriple[]> {
+   const grouped = new Map<string, RdfTriple[]>();
+ 
+   for (const triple of graph) {
++    if (!isNamedNodeTerm(triple[0])) {
++      continue;
++    }
++
+     const key = `${rdfTermToN3(triple[0])} ${rdfTermToN3(triple[1])}`;
+     const existing = grouped.get(key);
+ 
+diff --git a/tests/public-api.test.ts b/tests/public-api.test.ts
+index 35bc4ea..d766f57 100644
+--- a/tests/public-api.test.ts
++++ b/tests/public-api.test.ts
+@@ -1804,6 +1804,21 @@ describe("sync state", () => {
+         },
+       }),
+     );
++
++    await engine.sync.now();
++
++    await expect(engine.sync.state()).resolves.toEqual(
++      expectedSyncState({
++        status: "idle",
++        configured: true,
++        pendingChanges: 0,
++        reconciliation: {
++          lastUnsupportedPolicy: "preserve-local-skip-unsupported-remote",
++          lastUnsupportedReason:
++            "Unsupported multi-value conflict for subject/predicate.",
++        },
++      }),
++    );
+   });
+ 
+   it("becomes idle after pending changes are projected to canonical entity files", async () => {
