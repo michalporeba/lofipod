@@ -1,0 +1,434 @@
+diff --git a/_bmad-output/implementation-artifacts/sprint-status.yaml b/_bmad-output/implementation-artifacts/sprint-status.yaml
+index 3cf2505..6e61c68 100644
+--- a/_bmad-output/implementation-artifacts/sprint-status.yaml
++++ b/_bmad-output/implementation-artifacts/sprint-status.yaml
+@@ -35,7 +35,7 @@
+ # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+ 
+ generated: "2026-04-26T13:37:20+01:00"
+-last_updated: "2026-05-05T10:10:00+01:00"
++last_updated: "2026-05-05T21:31:44+01:00"
+ project: "lofipod"
+ project_key: "NOKEY"
+ tracking_system: "file-system"
+@@ -70,7 +70,7 @@ development_status:
+   4-1-evolve-the-todo-entity-model-without-breaking-local-reads: done
+   4-2-reproject-existing-local-data-into-the-updated-model: done
+   4-3-preserve-canonical-pod-compatibility-during-model-evolution: done
+-  4-4-migrate-supported-existing-data-without-data-loss: backlog
++  4-4-migrate-supported-existing-data-without-data-loss: review
+   4-5-inspect-and-explain-migration-outcomes: backlog
+   4-6-keep-the-evolution-path-bounded-and-future-reuse-friendly: backlog
+   epic-4-retrospective: optional
+diff --git a/docs/API.md b/docs/API.md
+index b38225f..3798ea3 100644
+--- a/docs/API.md
++++ b/docs/API.md
+@@ -390,6 +390,10 @@ Expected transient-failure recovery path:
+   through normal `syncing` toward `idle` (or `pending` if work remains)
+ - sync phases stay deterministic (`push -> pull -> reconcile`) and resume via
+   the same queued background mechanism rather than hidden operator repair
++- when a stored or remote entity graph cannot be migrated within the supported
++  bounded model, sync and reprojection fail explicitly with an
++  `Unsupported or incomplete migration for <entity>/<id>...` error so
++  operators can inspect and act instead of silently accepting partial data
+ 
+ When omitted, the current default polling interval is 30 seconds, with
+ exponential backoff after consecutive sync failures.
+diff --git a/src/engine/remote-canonical.ts b/src/engine/remote-canonical.ts
+index 7861352..3c4547a 100644
+--- a/src/engine/remote-canonical.ts
++++ b/src/engine/remote-canonical.ts
+@@ -15,6 +15,7 @@ import type {
+ import type { EngineStorage } from "./support.js";
+ import {
+   createChangeId,
++  createMigrationFailureError,
+   createRemoteProjectionHelpers,
+   createTimestamp,
+ } from "./support.js";
+@@ -264,10 +265,20 @@ async function importExternalCanonicalEntity(
+   },
+ ): Promise<void> {
+   const changeId = createChangeId();
+-  const projection = definition.project(
+-    remoteEntity.graph,
+-    createRemoteProjectionHelpers(remoteEntity.rootUri),
+-  );
++  let projection: unknown;
++  try {
++    projection = definition.project(
++      remoteEntity.graph,
++      createRemoteProjectionHelpers(remoteEntity.rootUri),
++    );
++  } catch (error) {
++    throw createMigrationFailureError({
++      entityName: definition.kind,
++      entityId: remoteEntity.entityId,
++      phase: "canonical-reconciliation",
++      cause: error,
++    });
++  }
+ 
+   await storage.transact((transaction) => {
+     const latest = transaction.readEntity(
+@@ -322,10 +333,20 @@ async function reconcileExternalCanonicalUpdate(
+   );
+   const assertions = rdfTriplesToPublicTriples(diff.assertions);
+   const retractions = rdfTriplesToPublicTriples(diff.retractions);
+-  const projection = definition.project(
+-    remoteEntity.graph,
+-    createRemoteProjectionHelpers(remoteEntity.rootUri),
+-  );
++  let projection: unknown;
++  try {
++    projection = definition.project(
++      remoteEntity.graph,
++      createRemoteProjectionHelpers(remoteEntity.rootUri),
++    );
++  } catch (error) {
++    throw createMigrationFailureError({
++      entityName: definition.kind,
++      entityId,
++      phase: "canonical-reconciliation",
++      cause: error,
++    });
++  }
+   const changeId = createChangeId();
+ 
+   await storage.transact((transaction) => {
+diff --git a/src/engine/remote-pull.ts b/src/engine/remote-pull.ts
+index f665da6..8bd6899 100644
+--- a/src/engine/remote-pull.ts
++++ b/src/engine/remote-pull.ts
+@@ -7,6 +7,7 @@ import type { EngineConfig, EntityDefinition } from "../types.js";
+ import { reconcileForksAfterPull } from "./remote-merge.js";
+ import type { EngineStorage } from "./support.js";
+ import {
++  createMigrationFailureError,
+   createRemoteProjectionHelpers,
+   readObservedRemoteChangeIds,
+   requireLogBasePath,
+@@ -76,12 +77,22 @@ export async function replayRemoteLogEntries(
+         transaction.removeEntity(entry.entityName, entry.entityId);
+       } else {
+         const updatedOrder = transaction.nextUpdatedOrder();
+-        const nextProjection = definition.project(
+-          nextPublicGraph,
+-          createRemoteProjectionHelpers(
+-            existingRecord?.rootUri ?? entry.rootUri,
+-          ),
+-        );
++        let nextProjection: unknown;
++        try {
++          nextProjection = definition.project(
++            nextPublicGraph,
++            createRemoteProjectionHelpers(
++              existingRecord?.rootUri ?? entry.rootUri,
++            ),
++          );
++        } catch (error) {
++          throw createMigrationFailureError({
++            entityName: entry.entityName,
++            entityId: entry.entityId,
++            phase: "remote-log-replay",
++            cause: error,
++          });
++        }
+ 
+         transaction.writeEntity(entry.entityName, entry.entityId, {
+           rootUri: existingRecord?.rootUri ?? entry.rootUri,
+diff --git a/src/engine/support.ts b/src/engine/support.ts
+index fd747c5..cd798c4 100644
+--- a/src/engine/support.ts
++++ b/src/engine/support.ts
+@@ -123,7 +123,17 @@ export async function repairStoredProjection<T>(
+   entityId: string,
+   record: StoredEntityRecord<unknown>,
+ ): Promise<T> {
+-  const repair = createStoredEntityRepair(definition, record);
++  let repair: ReturnType<typeof createStoredEntityRepair<T>>;
++  try {
++    repair = createStoredEntityRepair(definition, record);
++  } catch (error) {
++    throw createMigrationFailureError({
++      entityName: definition.kind,
++      entityId,
++      phase: "local-reprojection",
++      cause: error,
++    });
++  }
+ 
+   if (repair.assertions.length > 0 || repair.retractions.length > 0) {
+     await storage.transact((transaction) => {
+@@ -133,7 +143,17 @@ export async function repairStoredProjection<T>(
+         return;
+       }
+ 
+-      const latestRepair = createStoredEntityRepair(definition, latest);
++      let latestRepair: ReturnType<typeof createStoredEntityRepair<T>>;
++      try {
++        latestRepair = createStoredEntityRepair(definition, latest);
++      } catch (error) {
++        throw createMigrationFailureError({
++          entityName: definition.kind,
++          entityId,
++          phase: "local-reprojection",
++          cause: error,
++        });
++      }
+ 
+       if (
+         latestRepair.assertions.length === 0 &&
+@@ -182,7 +202,17 @@ export async function repairStoredProjection<T>(
+         return;
+       }
+ 
+-      const latestRepair = createStoredEntityRepair(definition, latest);
++      let latestRepair: ReturnType<typeof createStoredEntityRepair<T>>;
++      try {
++        latestRepair = createStoredEntityRepair(definition, latest);
++      } catch (error) {
++        throw createMigrationFailureError({
++          entityName: definition.kind,
++          entityId,
++          phase: "local-reprojection",
++          cause: error,
++        });
++      }
+ 
+       if (
+         latestRepair.assertions.length > 0 ||
+@@ -237,6 +267,27 @@ export function rootUriTerm(value: string) {
+   return uri(value);
+ }
+ 
++export function createMigrationFailureError(input: {
++  entityName: string;
++  entityId: string;
++  phase:
++    | "local-reprojection"
++    | "remote-log-replay"
++    | "canonical-reconciliation";
++  cause: unknown;
++}): Error {
++  const reason =
++    input.cause instanceof Error ? input.cause.message : String(input.cause);
++  const message = `Unsupported or incomplete migration for ${input.entityName}/${input.entityId}: ${reason} (phase=${input.phase})`;
++  const error = new Error(message);
++
++  if (input.cause instanceof Error && input.cause.stack) {
++    error.stack = `${error.name}: ${message}\nCaused by: ${input.cause.stack}`;
++  }
++
++  return error;
++}
++
+ function createStoredEntityRepair<T>(
+   definition: EntityDefinition<T>,
+   record: StoredEntityRecord<unknown>,
+@@ -247,8 +298,28 @@ function createStoredEntityRepair<T>(
+   assertions: Triple[];
+   retractions: Triple[];
+ } {
+-  const projected = projectStoredRecord(definition, record);
+-  const entityId = definition.id(projected);
++  let projected: T;
++  try {
++    projected = projectStoredRecord(definition, record);
++  } catch (error) {
++    throw createMigrationFailureError({
++      entityName: definition.kind,
++      entityId: "unknown",
++      phase: "local-reprojection",
++      cause: error,
++    });
++  }
++  let entityId: string;
++  try {
++    entityId = definition.id(projected);
++  } catch (error) {
++    throw createMigrationFailureError({
++      entityName: definition.kind,
++      entityId: "unknown",
++      phase: "local-reprojection",
++      cause: error,
++    });
++  }
+   const rootUri =
+     definition.uri?.(projected)?.value ??
+     fallbackEntityRootUri(definition, entityId);
+@@ -264,10 +335,17 @@ function createStoredEntityRepair<T>(
+     nextInternalGraph,
+   );
+   const graph = rdfTriplesToPublicTriples(nextInternalGraph);
+-  const projection = definition.project(
+-    graph,
+-    createProjectionHelpers(rootUri),
+-  );
++  let projection: T;
++  try {
++    projection = definition.project(graph, createProjectionHelpers(rootUri));
++  } catch (error) {
++    throw createMigrationFailureError({
++      entityName: definition.kind,
++      entityId,
++      phase: "local-reprojection",
++      cause: error,
++    });
++  }
+ 
+   return {
+     rootUri,
+diff --git a/tests/public-api.test.ts b/tests/public-api.test.ts
+index bf98912..f0feaac 100644
+--- a/tests/public-api.test.ts
++++ b/tests/public-api.test.ts
+@@ -1019,6 +1019,57 @@ describe("local persistence", () => {
+     expect(afterSecondGet).toHaveLength(2);
+   });
+ 
++  it("surfaces unsupported or incomplete local migration states explicitly during reprojection", async () => {
++    const storage = createMemoryStorage();
++    const engine = createEngine({
++      entities: [TaskEntity],
++      storage,
++    });
++
++    await engine.save<Task>("task", {
++      id: "task-migration-local-unsupported",
++      title: "Needs migration",
++      status: "todo",
++      priority: "normal",
++    });
++
++    await storage.transact((transaction) => {
++      const record = transaction.readEntity(
++        "task",
++        "task-migration-local-unsupported",
++      );
++
++      if (!record) {
++        throw new Error("missing task record");
++      }
++
++      const nextGraph = record.graph.map((triple) => {
++        const [tripleSubject, predicate] = triple;
++
++        if (predicate.value !== demoVocabulary.priority.value) {
++          return triple;
++        }
++
++        return [
++          tripleSubject,
++          predicate,
++          uri("https://example.com/ns#PriorityLegacy"),
++        ] as Triple;
++      });
++
++      transaction.writeEntity("task", "task-migration-local-unsupported", {
++        ...record,
++        graph: nextGraph,
++      });
++    });
++
++    await expect(
++      engine.get<Task>("task", "task-migration-local-unsupported"),
++    ).rejects.toThrow(
++      "Unsupported or incomplete migration for task/task-migration-local-unsupported:",
++    );
++  });
++
+   it("rolls back local writes when a storage transaction fails", async () => {
+     const { entity } = createEventFixture();
+ 
+@@ -4906,6 +4957,89 @@ describe("mocked entity sync", () => {
+     });
+   });
+ 
++  it("surfaces unsupported or incomplete canonical migration states explicitly during sync", async () => {
++    const remote = createSharedRemoteAdapter();
++    const storage = createMemoryStorage();
++    const engine = createEngine({
++      entities: [TaskEntity],
++      pod,
++      storage,
++      sync: {
++        adapter: remote.adapter,
++      },
++    });
++
++    await engine.save<Task>("task", {
++      id: "task-migration-remote-unsupported",
++      title: "Local baseline",
++      status: "todo",
++      priority: "high",
++      due: "2026-05",
++    });
++    await engine.sync.now();
++
++    const unsupportedCanonicalGraph = TaskEntity.toRdf(
++      {
++        id: "task-migration-remote-unsupported",
++        title: "Remote unsupported migration",
++        status: "done",
++        priority: "normal",
++        due: "2026-05",
++      },
++      {
++        uri(task) {
++          return demoVocabulary.uri({
++            entityName: "task",
++            id: task.id,
++          });
++        },
++        child(path: string) {
++          return uri(`unused:${path}`);
++        },
++      },
++    ).map((triple) => {
++      const [subject, predicate] = triple;
++
++      if (predicate.value !== demoVocabulary.priority.value) {
++        return triple;
++      }
++
++      return [
++        subject,
++        predicate,
++        uri("https://example.com/ns#PriorityLegacy"),
++      ] as Triple;
++    });
++
++    remote.upsertCanonicalEntity({
++      entityName: "task",
++      entityId: "task-migration-remote-unsupported",
++      path: "tasks/task-migration-remote-unsupported.ttl",
++      rootUri:
++        "https://michalporeba.com/demo/id/task/task-migration-remote-unsupported",
++      rdfType: TaskEntity.rdfType,
++      graph: unsupportedCanonicalGraph,
++    });
++
++    await expect(engine.sync.now()).rejects.toThrow(
++      "Unsupported or incomplete migration for task/task-migration-remote-unsupported:",
++    );
++    await expect(engine.sync.state()).resolves.toEqual(
++      expectedSyncState({
++        status: "offline",
++        configured: true,
++        pendingChanges: 0,
++        connection: {
++          reachable: false,
++          lastFailedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
++          lastFailureReason: expect.stringContaining(
++            "Unsupported or incomplete migration for task/task-migration-remote-unsupported:",
++          ),
++        },
++      }),
++    );
++  });
++
+   it("treats compatible canonical updates discovered after attach as post-attach reconciliation", async () => {
+     const { entity } = createEventFixture();
+     const remote = createSharedRemoteAdapter();

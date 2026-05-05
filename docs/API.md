@@ -377,11 +377,24 @@ The current `SyncState` reports aggregate engine-level status:
 - `pendingChanges`
 - `reconciliation.lastUnsupportedPolicy`
 - `reconciliation.lastUnsupportedReason`
+- `migration.lastLocalOutcome`
+- `migration.lastCanonicalRemoteOutcome`
 - `connection.reachable`
 - `connection.lastSyncedAt`
 - `connection.lastFailedAt`
 - `connection.lastFailureReason`
 - `connection.notificationsActive`
+
+`migration.lastLocalOutcome` and `migration.lastCanonicalRemoteOutcome`
+capture the latest inspectable migration/reprojection outcome for local and
+canonical-remote paths. Each outcome includes:
+
+- `scope`: `"local"` or `"canonical-remote"`
+- `entityName` and `entityId`
+- `phase`: `"local-reprojection" | "remote-log-replay" | "canonical-reconciliation"`
+- `action`: `"repaired" | "migrated" | "unchanged" | "failed"`
+- `reason`: nullable diagnostic detail
+- `at`: ISO timestamp
 
 Expected transient-failure recovery path:
 
@@ -390,6 +403,10 @@ Expected transient-failure recovery path:
   through normal `syncing` toward `idle` (or `pending` if work remains)
 - sync phases stay deterministic (`push -> pull -> reconcile`) and resume via
   the same queued background mechanism rather than hidden operator repair
+- when a stored or remote entity graph cannot be migrated within the supported
+  bounded model, sync and reprojection fail explicitly with an
+  `Unsupported or incomplete migration for <entity>/<id>...` error so
+  operators can inspect and act instead of silently accepting partial data
 
 When omitted, the current default polling interval is 30 seconds, with
 exponential backoff after consecutive sync failures.

@@ -77,6 +77,11 @@ export async function readDerivedSyncState(
     lastUnsupportedReason:
       metadata.reconciliation?.lastUnsupportedReason ?? null,
   };
+  const migration = {
+    lastLocalOutcome: metadata.migration?.lastLocalOutcome ?? null,
+    lastCanonicalRemoteOutcome:
+      metadata.migration?.lastCanonicalRemoteOutcome ?? null,
+  };
 
   if (!syncConfig) {
     return {
@@ -84,6 +89,7 @@ export async function readDerivedSyncState(
       configured: false,
       pendingChanges,
       reconciliation,
+      migration,
       connection,
     };
   }
@@ -94,6 +100,7 @@ export async function readDerivedSyncState(
       configured: true,
       pendingChanges,
       reconciliation,
+      migration,
       connection,
     };
   }
@@ -104,6 +111,7 @@ export async function readDerivedSyncState(
       configured: true,
       pendingChanges,
       reconciliation,
+      migration,
       connection,
     };
   }
@@ -113,6 +121,7 @@ export async function readDerivedSyncState(
     configured: true,
     pendingChanges,
     reconciliation,
+    migration,
     connection,
   };
 }

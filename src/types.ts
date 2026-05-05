@@ -23,12 +23,29 @@ export type SyncMetadata = {
     lastUnsupportedPolicy: string | null;
     lastUnsupportedReason: string | null;
   };
+  migration?: {
+    lastLocalOutcome: MigrationOutcome | null;
+    lastCanonicalRemoteOutcome: MigrationOutcome | null;
+  };
   connection: {
     reachable: boolean;
     lastSyncedAt: string | null;
     lastFailedAt: string | null;
     lastFailureReason: string | null;
   };
+};
+
+export type MigrationOutcome = {
+  scope: "local" | "canonical-remote";
+  entityName: string;
+  entityId: string;
+  phase:
+    | "local-reprojection"
+    | "remote-log-replay"
+    | "canonical-reconciliation";
+  action: "repaired" | "migrated" | "unchanged" | "failed";
+  reason: string | null;
+  at: string;
 };
 
 export type ToRdfHelpers<T> = {
@@ -211,6 +228,10 @@ export type SyncState = {
   reconciliation: {
     lastUnsupportedPolicy: string | null;
     lastUnsupportedReason: string | null;
+  };
+  migration: {
+    lastLocalOutcome: MigrationOutcome | null;
+    lastCanonicalRemoteOutcome: MigrationOutcome | null;
   };
   connection: {
     reachable: boolean;

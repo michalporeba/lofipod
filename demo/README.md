@@ -222,6 +222,8 @@ Supported transient-failure loop:
   - `lastFailureReason`
   - `lastUnsupportedPolicy`
   - `lastUnsupportedReason`
+  - `lastLocalMigrationOutcome`
+  - `lastCanonicalMigrationOutcome`
 
 Unset values are rendered as `-`. This output is intentionally a thin
 presentation of the public sync-state contract, not a demo-only diagnostics
@@ -237,6 +239,8 @@ lastFailedAt=-
 lastFailureReason=-
 lastUnsupportedPolicy=-
 lastUnsupportedReason=-
+lastLocalMigrationOutcome=-
+lastCanonicalMigrationOutcome=-
 ```
 
 Example after a successful sync:
@@ -249,6 +253,8 @@ lastFailedAt=-
 lastFailureReason=-
 lastUnsupportedPolicy=-
 lastUnsupportedReason=-
+lastLocalMigrationOutcome=unchanged scope=local entity=task/task-sync-inspect phase=local-reprojection at=2026-05-02T12:00:00.000Z
+lastCanonicalMigrationOutcome=-
 ```
 
 `reachable` is the last known sync result, not a foreground liveness probe.

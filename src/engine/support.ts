@@ -18,11 +18,25 @@ import { rdf } from "../vocabulary.js";
 import type {
   EngineConfig,
   EntityDefinition,
+  MigrationOutcome,
   StoredEntityRecord,
   Triple,
 } from "../types.js";
 
 export type EngineStorage = NonNullable<EngineConfig["storage"]>;
+const MIGRATION_FAILURE_BRAND = "lofipod.migrationFailure";
+type MigrationFailurePhase =
+  | "local-reprojection"
+  | "remote-log-replay"
+  | "canonical-reconciliation";
+type MigrationFailureError = Error & {
+  [MIGRATION_FAILURE_BRAND]: true;
+  migration: {
+    entityName: string;
+    entityId: string;
+    phase: MigrationFailurePhase;
+  };
+};
 
 export function createChangeId(): string {
   return globalThis.crypto.randomUUID();
@@ -123,7 +137,26 @@ export async function repairStoredProjection<T>(
   entityId: string,
   record: StoredEntityRecord<unknown>,
 ): Promise<T> {
-  const repair = createStoredEntityRepair(definition, record);
+  let repair: ReturnType<typeof createStoredEntityRepair<T>>;
+  try {
+    repair = createStoredEntityRepair(definition, record, entityId);
+  } catch (error) {
+    await rememberMigrationOutcome(storage, {
+      scope: "local",
+      entityName: definition.kind,
+      entityId,
+      phase: "local-reprojection",
+      action: "failed",
+      reason: describeMigrationFailureCause(error),
+      at: createTimestamp(),
+    });
+    throw createMigrationFailureError({
+      entityName: definition.kind,
+      entityId,
+      phase: "local-reprojection",
+      cause: error,
+    });
+  }
 
   if (repair.assertions.length > 0 || repair.retractions.length > 0) {
     await storage.transact((transaction) => {
@@ -133,7 +166,17 @@ export async function repairStoredProjection<T>(
         return;
       }
 
-      const latestRepair = createStoredEntityRepair(definition, latest);
+      let latestRepair: ReturnType<typeof createStoredEntityRepair<T>>;
+      try {
+        latestRepair = createStoredEntityRepair(definition, latest, entityId);
+      } catch (error) {
+        throw createMigrationFailureError({
+          entityName: definition.kind,
+          entityId,
+          phase: "local-reprojection",
+          cause: error,
+        });
+      }
 
       if (
         latestRepair.assertions.length === 0 &&
@@ -171,6 +214,15 @@ export async function repairStoredProjection<T>(
       });
     });
 
+    await rememberMigrationOutcome(storage, {
+      scope: "local",
+      entityName: definition.kind,
+      entityId,
+      phase: "local-reprojection",
+      action: "repaired",
+      reason: null,
+      at: createTimestamp(),
+    });
     return repair.projection;
   }
 
@@ -182,7 +234,17 @@ export async function repairStoredProjection<T>(
         return;
       }
 
-      const latestRepair = createStoredEntityRepair(definition, latest);
+      let latestRepair: ReturnType<typeof createStoredEntityRepair<T>>;
+      try {
+        latestRepair = createStoredEntityRepair(definition, latest, entityId);
+      } catch (error) {
+        throw createMigrationFailureError({
+          entityName: definition.kind,
+          entityId,
+          phase: "local-reprojection",
+          cause: error,
+        });
+      }
 
       if (
         latestRepair.assertions.length > 0 ||
@@ -219,6 +281,16 @@ export async function repairStoredProjection<T>(
     });
   }
 
+  await rememberMigrationOutcome(storage, {
+    scope: "local",
+    entityName: definition.kind,
+    entityId,
+    phase: "local-reprojection",
+    action: "unchanged",
+    reason: null,
+    at: createTimestamp(),
+  });
+
   return repair.projection;
 }
 
@@ -237,9 +309,66 @@ export function rootUriTerm(value: string) {
   return uri(value);
 }
 
+export function createMigrationFailureError(input: {
+  entityName: string;
+  entityId: string;
+  phase: MigrationFailurePhase;
+  cause: unknown;
+}): Error {
+  if (isMigrationFailureError(input.cause)) {
+    return input.cause;
+  }
+
+  const reason = describeMigrationFailureCause(input.cause);
+  const message = `Unsupported or incomplete migration for ${input.entityName}/${input.entityId}: ${reason} (phase=${input.phase})`;
+  const error = new Error(message) as MigrationFailureError;
+  error[MIGRATION_FAILURE_BRAND] = true;
+  error.migration = {
+    entityName: input.entityName,
+    entityId: input.entityId,
+    phase: input.phase,
+  };
+  Object.defineProperty(error, "cause", {
+    value: input.cause,
+    enumerable: false,
+    configurable: true,
+    writable: true,
+  });
+
+  if (input.cause instanceof Error && input.cause.stack) {
+    error.stack = `${error.name}: ${message}\nCaused by: ${input.cause.stack}`;
+  }
+
+  return error;
+}
+
+export async function rememberMigrationOutcome(
+  storage: EngineStorage,
+  outcome: MigrationOutcome,
+): Promise<void> {
+  await storage.transact((transaction) => {
+    const metadata = transaction.readSyncMetadata();
+    const previous = metadata.migration ?? {
+      lastLocalOutcome: null,
+      lastCanonicalRemoteOutcome: null,
+    };
+
+    transaction.writeSyncMetadata({
+      ...metadata,
+      migration: {
+        ...previous,
+        ...(outcome.scope === "local"
+          ? { lastLocalOutcome: outcome }
+          : { lastCanonicalRemoteOutcome: outcome }),
+      },
+    });
+  });
+}
+
 function createStoredEntityRepair<T>(
   definition: EntityDefinition<T>,
   record: StoredEntityRecord<unknown>,
+  expectedEntityId: string,
 ): {
   rootUri: string;
   projection: T;
@@ -249,6 +378,13 @@ function createStoredEntityRepair<T>(
 } {
   const projected = projectStoredRecord(definition, record);
   const entityId = definition.id(projected);
+
+  if (entityId !== expectedEntityId) {
+    throw new Error(
+      `Stored projection entity ID mismatch: expected ${expectedEntityId}, got ${entityId}.`,
+    );
+  }
+
   const rootUri =
     definition.uri?.(projected)?.value ??
     fallbackEntityRootUri(definition, entityId);
@@ -276,4 +412,29 @@ function createStoredEntityRepair<T>(
     assertions: rdfTriplesToPublicTriples(assertions),
     retractions: rdfTriplesToPublicTriples(retractions),
   };
+}
+
+function isMigrationFailureError(
+  value: unknown,
+): value is MigrationFailureError {
+  return (
+    value instanceof Error &&
+    (value as Partial<MigrationFailureError>)[MIGRATION_FAILURE_BRAND] === true
+  );
+}
+
+function describeMigrationFailureCause(cause: unknown): string {
+  if (cause instanceof Error) {
+    return cause.message;
+  }
+
+  if (typeof cause === "string") {
+    return cause;
+  }
+
+  try {
+    return JSON.stringify(cause);
+  } catch {
+    return String(cause);
+  }
 }

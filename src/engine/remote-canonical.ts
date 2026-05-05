@@ -15,8 +15,10 @@ import type {
 import type { EngineStorage } from "./support.js";
 import {
   createChangeId,
+  createMigrationFailureError,
   createRemoteProjectionHelpers,
   createTimestamp,
+  rememberMigrationOutcome,
 } from "./support.js";
 import { mergeSupportedGraphs } from "./supported-merge.js";
 
@@ -94,6 +96,21 @@ async function reconcileCanonicalContainer(
   config: EngineConfig,
   pendingEntityIds: Set<string>,
 ): Promise<{ reconciled: number; unsupportedDetected: boolean }> {
+  const rememberOutcomeBestEffort = async (
+    outcome: Parameters<typeof rememberMigrationOutcome>[1],
+  ): Promise<void> => {
+    try {
+      await rememberMigrationOutcome(storage, outcome);
+    } catch (error) {
+      logWarn(config.logger, "sync:migration-outcome-persist-failure", {
+        entityName: outcome.entityName,
+        entityId: outcome.entityId,
+        phase: outcome.phase,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
   const localRecords = await storage.listEntities(definition.kind);
   const localById = new Map(
     localRecords.map(({ entityId, record }) => [entityId, record]),
@@ -113,6 +130,15 @@ async function reconcileCanonicalContainer(
 
     if (!localRecord) {
       await importExternalCanonicalEntity(storage, definition, remoteEntity);
+      await rememberOutcomeBestEffort({
+        scope: "canonical-remote",
+        entityName: definition.kind,
+        entityId: remoteEntity.entityId,
+        phase: "canonical-reconciliation",
+        action: "migrated",
+        reason: null,
+        at: createTimestamp(),
+      });
       reconciled += 1;
       continue;
     }
@@ -162,6 +188,15 @@ async function reconcileCanonicalContainer(
         graph: nextGraph,
       },
     );
+    await rememberOutcomeBestEffort({
+      scope: "canonical-remote",
+      entityName: definition.kind,
+      entityId: remoteEntity.entityId,
+      phase: "canonical-reconciliation",
+      action: "migrated",
+      reason: null,
+      at: createTimestamp(),
+    });
     reconciled += 1;
   }
 
@@ -175,6 +210,15 @@ async function reconcileCanonicalContainer(
     }
 
     await reconcileExternalCanonicalDeletion(storage, definition, entityId);
+    await rememberOutcomeBestEffort({
+      scope: "canonical-remote",
+      entityName: definition.kind,
+      entityId,
+      phase: "canonical-reconciliation",
+      action: "migrated",
+      reason: null,
+      at: createTimestamp(),
+    });
     reconciled += 1;
   }
 
@@ -264,10 +308,20 @@ async function importExternalCanonicalEntity(
   },
 ): Promise<void> {
   const changeId = createChangeId();
-  const projection = definition.project(
-    remoteEntity.graph,
-    createRemoteProjectionHelpers(remoteEntity.rootUri),
-  );
+  let projection: unknown;
+  try {
+    projection = definition.project(
+      remoteEntity.graph,
+      createRemoteProjectionHelpers(remoteEntity.rootUri),
+    );
+  } catch (error) {
+    throw createMigrationFailureError({
+      entityName: definition.kind,
+      entityId: remoteEntity.entityId,
+      phase: "canonical-reconciliation",
+      cause: error,
+    });
+  }
 
   await storage.transact((transaction) => {
     const latest = transaction.readEntity(
@@ -322,10 +376,20 @@ async function reconcileExternalCanonicalUpdate(
   );
   const assertions = rdfTriplesToPublicTriples(diff.assertions);
   const retractions = rdfTriplesToPublicTriples(diff.retractions);
-  const projection = definition.project(
-    remoteEntity.graph,
-    createRemoteProjectionHelpers(remoteEntity.rootUri),
-  );
+  let projection: unknown;
+  try {
+    projection = definition.project(
+      remoteEntity.graph,
+      createRemoteProjectionHelpers(remoteEntity.rootUri),
+    );
+  } catch (error) {
+    throw createMigrationFailureError({
+      entityName: definition.kind,
+      entityId,
+      phase: "canonical-reconciliation",
+      cause: error,
+    });
+  }
   const changeId = createChangeId();
 
   await storage.transact((transaction) => {

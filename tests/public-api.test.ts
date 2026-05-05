@@ -121,6 +121,7 @@ function expectedSyncState(input: {
   pendingChanges: number;
   connection?: Partial<Record<keyof SyncState["connection"], unknown>>;
   reconciliation?: Partial<Record<keyof SyncState["reconciliation"], unknown>>;
+  migration?: Partial<Record<keyof SyncState["migration"], unknown>>;
 }) {
   const nullableString = {
     asymmetricMatch(value: unknown) {
@@ -128,6 +129,14 @@ function expectedSyncState(input: {
     },
     toString() {
       return "NullableString";
+    },
+  };
+  const nullableObject = {
+    asymmetricMatch(value: unknown) {
+      return value === null || typeof value === "object";
+    },
+    toString() {
+      return "NullableObject";
     },
   };
 
@@ -147,6 +156,11 @@ function expectedSyncState(input: {
       lastUnsupportedPolicy: nullableString,
       lastUnsupportedReason: nullableString,
       ...input.reconciliation,
+    },
+    migration: {
+      lastLocalOutcome: nullableObject,
+      lastCanonicalRemoteOutcome: nullableObject,
+      ...input.migration,
     },
   };
 }
@@ -1017,6 +1031,75 @@ describe("local persistence", () => {
 
     expect(afterFirstGet).toHaveLength(2);
     expect(afterSecondGet).toHaveLength(2);
+  });
+
+  it("surfaces unsupported or incomplete local migration states explicitly during reprojection", async () => {
+    const storage = createMemoryStorage();
+    const engine = createEngine({
+      entities: [TaskEntity],
+      storage,
+    });
+
+    await engine.save<Task>("task", {
+      id: "task-migration-local-unsupported",
+      title: "Needs migration",
+      status: "todo",
+      priority: "normal",
+    });
+
+    await storage.transact((transaction) => {
+      const record = transaction.readEntity(
+        "task",
+        "task-migration-local-unsupported",
+      );
+
+      if (!record) {
+        throw new Error("missing task record");
+      }
+
+      const nextGraph = record.graph.map((triple) => {
+        const [tripleSubject, predicate] = triple;
+
+        if (predicate.value !== demoVocabulary.priority.value) {
+          return triple;
+        }
+
+        return [
+          tripleSubject,
+          predicate,
+          uri("https://example.com/ns#PriorityLegacy"),
+        ] as Triple;
+      });
+
+      transaction.writeEntity("task", "task-migration-local-unsupported", {
+        ...record,
+        graph: nextGraph,
+      });
+    });
+
+    await expect(
+      engine.get<Task>("task", "task-migration-local-unsupported"),
+    ).rejects.toThrow(
+      "Unsupported or incomplete migration for task/task-migration-local-unsupported:",
+    );
+    await expect(engine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "unconfigured",
+        configured: false,
+        pendingChanges: 1,
+        migration: {
+          lastLocalOutcome: {
+            scope: "local",
+            entityName: "task",
+            entityId: "task-migration-local-unsupported",
+            phase: "local-reprojection",
+            action: "failed",
+            reason: expect.stringContaining("Unsupported task priority term:"),
+            at: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+          },
+        },
+      }),
+    );
   });
 
   it("rolls back local writes when a storage transaction fails", async () => {
@@ -4904,6 +4987,189 @@ describe("mocked entity sync", () => {
       priority: "high",
       due: "2026-05",
     });
+  });
+
+  it("surfaces unsupported or incomplete canonical migration states explicitly during sync", async () => {
+    const remote = createSharedRemoteAdapter();
+    const storage = createMemoryStorage();
+    const engine = createEngine({
+      entities: [TaskEntity],
+      pod,
+      storage,
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+
+    await engine.save<Task>("task", {
+      id: "task-migration-remote-unsupported",
+      title: "Local baseline",
+      status: "todo",
+      priority: "high",
+      due: "2026-05",
+    });
+    await engine.sync.now();
+
+    const unsupportedCanonicalGraph = TaskEntity.toRdf(
+      {
+        id: "task-migration-remote-unsupported",
+        title: "Remote unsupported migration",
+        status: "done",
+        priority: "normal",
+        due: "2026-05",
+      },
+      {
+        uri(task) {
+          return demoVocabulary.uri({
+            entityName: "task",
+            id: task.id,
+          });
+        },
+        child(path: string) {
+          return uri(`unused:${path}`);
+        },
+      },
+    ).map((triple) => {
+      const [subject, predicate] = triple;
+
+      if (predicate.value !== demoVocabulary.priority.value) {
+        return triple;
+      }
+
+      return [
+        subject,
+        predicate,
+        uri("https://example.com/ns#PriorityLegacy"),
+      ] as Triple;
+    });
+
+    remote.upsertCanonicalEntity({
+      entityName: "task",
+      entityId: "task-migration-remote-unsupported",
+      path: "tasks/task-migration-remote-unsupported.ttl",
+      rootUri:
+        "https://michalporeba.com/demo/id/task/task-migration-remote-unsupported",
+      rdfType: TaskEntity.rdfType,
+      graph: unsupportedCanonicalGraph,
+    });
+
+    await expect(engine.sync.now()).rejects.toThrow(
+      "Unsupported or incomplete migration for task/task-migration-remote-unsupported:",
+    );
+    await expect(engine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "offline",
+        configured: true,
+        pendingChanges: 0,
+        migration: {
+          lastCanonicalRemoteOutcome: {
+            scope: "canonical-remote",
+            entityName: "task",
+            entityId: "task-migration-remote-unsupported",
+            phase: "canonical-reconciliation",
+            action: "failed",
+            reason: expect.stringContaining(
+              "Unsupported or incomplete migration for task/task-migration-remote-unsupported:",
+            ),
+            at: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+          },
+        },
+        connection: {
+          reachable: false,
+          lastFailedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+          lastFailureReason: expect.stringContaining(
+            "Unsupported or incomplete migration for task/task-migration-remote-unsupported:",
+          ),
+        },
+      }),
+    );
+  });
+
+  it("surfaces unsupported or incomplete remote-log-replay migration states explicitly during sync", async () => {
+    const remote = createSharedRemoteAdapter();
+    const firstEngine = createEngine({
+      entities: [TaskEntity],
+      pod,
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+    const secondEngine = createEngine({
+      entities: [TaskEntity],
+      pod,
+      storage: createMemoryStorage(),
+      sync: {
+        adapter: remote.adapter,
+      },
+    });
+
+    await firstEngine.save<Task>("task", {
+      id: "task-remote-log-replay-unsupported",
+      title: "Local baseline",
+      status: "todo",
+      priority: "normal",
+    });
+    await firstEngine.sync.now();
+    await secondEngine.sync.now();
+
+    const baseChangeId = [...remote.logEntries]
+      .reverse()
+      .find(
+        (entry) => entry.entityId === "task-remote-log-replay-unsupported",
+      )?.changeId;
+
+    if (!baseChangeId) {
+      throw new Error("missing base remote log change");
+    }
+
+    remote.logEntries.push({
+      entityName: "task",
+      entityId: "task-remote-log-replay-unsupported",
+      changeId: globalThis.crypto.randomUUID(),
+      parentChangeId: baseChangeId,
+      timestamp: "2026-01-01T00:00:00.000Z",
+      path: "apps/test/log/task/replay-unsupported.nt",
+      rootUri:
+        "https://michalporeba.com/demo/id/task/task-remote-log-replay-unsupported",
+      assertions: [],
+      retractions: [
+        [
+          uri(
+            "https://michalporeba.com/demo/id/task/task-remote-log-replay-unsupported",
+          ),
+          demoVocabulary.status,
+          demoVocabulary.Todo,
+        ],
+      ],
+    });
+
+    await expect(secondEngine.sync.now()).rejects.toThrow(
+      "Unsupported or incomplete migration for task/task-remote-log-replay-unsupported:",
+    );
+    await expect(secondEngine.sync.state()).resolves.toEqual(
+      expectedSyncState({
+        status: "offline",
+        configured: true,
+        pendingChanges: 0,
+        migration: {
+          lastCanonicalRemoteOutcome: {
+            scope: "canonical-remote",
+            entityName: "task",
+            entityId: "task-remote-log-replay-unsupported",
+            phase: "remote-log-replay",
+            action: "failed",
+            reason: expect.stringContaining("phase=remote-log-replay"),
+            at: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+          },
+        },
+        connection: {
+          reachable: false,
+          lastFailedAt: expect.stringMatching(ISO_TIMESTAMP_PATTERN),
+          lastFailureReason: expect.stringContaining("phase=remote-log-replay"),
+        },
+      }),
+    );
   });
 
   it("treats compatible canonical updates discovered after attach as post-attach reconciliation", async () => {

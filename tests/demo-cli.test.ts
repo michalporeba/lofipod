@@ -57,6 +57,8 @@ describe("demo CLI sync inspection", () => {
         "lastFailureReason=-",
         "lastUnsupportedPolicy=-",
         "lastUnsupportedReason=-",
+        "lastLocalMigrationOutcome=-",
+        "lastCanonicalMigrationOutcome=-",
       ].join("\n"),
     );
 
@@ -82,6 +84,8 @@ describe("demo CLI sync inspection", () => {
         "lastFailureReason=-",
         "lastUnsupportedPolicy=-",
         "lastUnsupportedReason=-",
+        "lastLocalMigrationOutcome=-",
+        "lastCanonicalMigrationOutcome=-",
       ].join("\n"),
     );
   });
@@ -109,5 +113,27 @@ describe("demo CLI sync inspection", () => {
     await expect(
       runDemo(["task", "list", "--data-dir", dataDir]),
     ).resolves.toBe("task-compat [todo] Compatibility check");
+  });
+
+  it("shows a successful local migration outcome after reprojection reads", async () => {
+    const dataDir = await createDataDir();
+
+    await runDemo([
+      "task",
+      "add",
+      "--data-dir",
+      dataDir,
+      "--id",
+      "task-migration-outcome",
+      "--title",
+      "Migration outcome inspect",
+    ]);
+    await runDemo(["task", "get", "task-migration-outcome", "--data-dir", dataDir]);
+
+    const output = await runDemo(["sync", "status", "--data-dir", dataDir]);
+    expect(output).toContain("lastCanonicalMigrationOutcome=-");
+    expect(output).toMatch(
+      /lastLocalMigrationOutcome=(repaired|unchanged) scope=local entity=task\/task-migration-outcome phase=local-reprojection at=/,
+    );
   });
 });

@@ -77,6 +77,18 @@ function formatNullableValue(value: string | null): string {
   return value ?? "-";
 }
 
+function formatMigrationOutcome(
+  outcome: Awaited<
+    ReturnType<DemoApp["syncState"]>
+  >["migration"]["lastLocalOutcome"],
+): string {
+  if (!outcome) {
+    return "-";
+  }
+
+  return `${outcome.action} scope=${outcome.scope} entity=${outcome.entityName}/${outcome.entityId} phase=${outcome.phase} at=${outcome.at}${outcome.reason ? ` reason=${outcome.reason}` : ""}`;
+}
+
 function formatSyncStateOutput(
   state: Awaited<ReturnType<DemoApp["syncState"]>>,
 ): string {
@@ -88,6 +100,8 @@ function formatSyncStateOutput(
     `lastFailureReason=${formatNullableValue(state.connection.lastFailureReason)}`,
     `lastUnsupportedPolicy=${formatNullableValue(state.reconciliation.lastUnsupportedPolicy)}`,
     `lastUnsupportedReason=${formatNullableValue(state.reconciliation.lastUnsupportedReason)}`,
+    `lastLocalMigrationOutcome=${formatMigrationOutcome(state.migration.lastLocalOutcome)}`,
+    `lastCanonicalMigrationOutcome=${formatMigrationOutcome(state.migration.lastCanonicalRemoteOutcome)}`,
   ].join("\n");
 }
 

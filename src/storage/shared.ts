@@ -16,6 +16,10 @@ export function createDefaultSyncMetadata(): SyncMetadata {
       lastUnsupportedPolicy: null,
       lastUnsupportedReason: null,
     },
+    migration: {
+      lastLocalOutcome: null,
+      lastCanonicalRemoteOutcome: null,
+    },
     connection: {
       reachable: false,
       lastSyncedAt: null,
@@ -77,6 +81,15 @@ export function cloneSyncMetadata(metadata: SyncMetadata): SyncMetadata {
         nextMetadata.reconciliation?.lastUnsupportedPolicy ?? null,
       lastUnsupportedReason:
         nextMetadata.reconciliation?.lastUnsupportedReason ?? null,
+    },
+    migration: {
+      lastLocalOutcome: nextMetadata.migration?.lastLocalOutcome
+        ? cloneValue(nextMetadata.migration.lastLocalOutcome)
+        : null,
+      lastCanonicalRemoteOutcome: nextMetadata.migration
+        ?.lastCanonicalRemoteOutcome
+        ? cloneValue(nextMetadata.migration.lastCanonicalRemoteOutcome)
+        : null,
     },
     connection: {
       ...createDefaultSyncMetadata().connection,

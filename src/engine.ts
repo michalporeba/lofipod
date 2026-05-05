@@ -31,6 +31,7 @@ import {
 } from "./engine/sync-state.js";
 import {
   createTimestamp,
+  rememberMigrationOutcome,
   requireEntityDefinition,
   type EngineStorage,
 } from "./engine/support.js";
@@ -112,6 +113,56 @@ export function createEngine(config: EngineConfig): Engine {
     emitSyncStateChange();
   };
 
+  const persistMigrationFailureOutcomeBestEffort = async (
+    error: unknown,
+  ): Promise<void> => {
+    if (
+      !(
+        error instanceof Error &&
+        "migration" in error &&
+        typeof (error as { migration?: unknown }).migration === "object" &&
+        (error as { migration: { phase?: string } }).migration?.phase
+      )
+    ) {
+      return;
+    }
+
+    const migration = error as {
+      migration: {
+        entityName: string;
+        entityId: string;
+        phase:
+          | "local-reprojection"
+          | "remote-log-replay"
+          | "canonical-reconciliation";
+      };
+    };
+
+    try {
+      await rememberMigrationOutcome(storage, {
+        scope:
+          migration.migration.phase === "local-reprojection"
+            ? "local"
+            : "canonical-remote",
+        entityName: migration.migration.entityName,
+        entityId: migration.migration.entityId,
+        phase: migration.migration.phase,
+        action: "failed",
+        reason: error.message,
+        at: createTimestamp(),
+      });
+    } catch (outcomeError) {
+      if (logger) {
+        logWarn(logger, "sync:migration-outcome-persist-failure", {
+          reason:
+            outcomeError instanceof Error
+              ? outcomeError.message
+              : String(outcomeError),
+        });
+      }
+    }
+  };
+
   const runSyncCycle = async (): Promise<void> => {
     if (!currentSyncConfig) {
       return;
@@ -124,6 +175,7 @@ export function createEngine(config: EngineConfig): Engine {
       await persistSyncSuccess(storage, createTimestamp());
       emitSyncStateChange();
     } catch (error) {
+      await persistMigrationFailureOutcomeBestEffort(error);
       await persistSyncFailure(
         storage,
         createTimestamp(),
@@ -165,6 +217,7 @@ export function createEngine(config: EngineConfig): Engine {
       await persistSyncSuccess(storage, createTimestamp());
       emitSyncStateChange();
     } catch (error) {
+      await persistMigrationFailureOutcomeBestEffort(error);
       await persistSyncFailure(
         storage,
         createTimestamp(),

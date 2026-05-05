@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-04-26T13:37:20+01:00"
-last_updated: "2026-05-05T10:10:00+01:00"
+last_updated: "2026-05-05T22:46:00+01:00"
 project: "lofipod"
 project_key: "NOKEY"
 tracking_system: "file-system"
@@ -70,7 +70,7 @@ development_status:
   4-1-evolve-the-todo-entity-model-without-breaking-local-reads: done
   4-2-reproject-existing-local-data-into-the-updated-model: done
   4-3-preserve-canonical-pod-compatibility-during-model-evolution: done
-  4-4-migrate-supported-existing-data-without-data-loss: backlog
-  4-5-inspect-and-explain-migration-outcomes: backlog
+  4-4-migrate-supported-existing-data-without-data-loss: done
+  4-5-inspect-and-explain-migration-outcomes: done
   4-6-keep-the-evolution-path-bounded-and-future-reuse-friendly: backlog
   epic-4-retrospective: optional
