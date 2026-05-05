@@ -1,6 +1,6 @@
 # Story 4.1: Evolve the Todo Entity Model Without Breaking Local Reads
 
-Status: review
+Status: done
 
 ## Story
 

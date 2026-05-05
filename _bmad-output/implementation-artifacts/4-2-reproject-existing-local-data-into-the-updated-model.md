@@ -1,6 +1,6 @@
 # Story 4.2: Reproject Existing Local Data Into the Updated Model
 
-Status: review
+Status: done
 
 ## Story
 

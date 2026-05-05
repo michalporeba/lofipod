@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-04-26T13:37:20+01:00"
-last_updated: "2026-05-04T12:19:30+01:00"
+last_updated: "2026-05-05T10:10:00+01:00"
 project: "lofipod"
 project_key: "NOKEY"
 tracking_system: "file-system"
@@ -64,12 +64,12 @@ development_status:
   3-3-detect-and-classify-unsupported-or-unsafe-remote-edits: done
   3-4-apply-documented-policy-responses-to-unsupported-remote-changes: done
   3-5-explain-what-changed-what-synced-and-what-failed: done
-  3-6-recover-cleanly-from-interrupted-or-failed-sync-work: review
+  3-6-recover-cleanly-from-interrupted-or-failed-sync-work: done
   epic-3-retrospective: optional
   epic-4: in-progress
-  4-1-evolve-the-todo-entity-model-without-breaking-local-reads: review
-  4-2-reproject-existing-local-data-into-the-updated-model: review
-  4-3-preserve-canonical-pod-compatibility-during-model-evolution: review
+  4-1-evolve-the-todo-entity-model-without-breaking-local-reads: done
+  4-2-reproject-existing-local-data-into-the-updated-model: done
+  4-3-preserve-canonical-pod-compatibility-during-model-evolution: done
   4-4-migrate-supported-existing-data-without-data-loss: backlog
   4-5-inspect-and-explain-migration-outcomes: backlog
   4-6-keep-the-evolution-path-bounded-and-future-reuse-friendly: backlog

@@ -1,6 +1,6 @@
 # Story 3.6: Recover Cleanly From Interrupted or Failed Sync Work
 
-Status: review
+Status: done
 
 ## Story
 
