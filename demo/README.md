@@ -165,6 +165,9 @@ When that evolved projection implies canonical graph repair, the repair is
 recorded as a normal local change so it follows the same sync path as ordinary
 edits.
 
+This is a bounded compatibility path for the demo task model; see the
+[bounded evolution contract](../docs/API.md#bounded-evolution-contract).
+
 That mapping is a demo-owned app choice layered on top of the same local-first
 programming model. You can ignore the ontology files entirely until you want to
 inspect or reuse the Pod-side RDF.

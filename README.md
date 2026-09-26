@@ -69,6 +69,7 @@ It is most useful when you want:
 - not a realtime collaborative editor
 - not a general-purpose RDF database
 - not a general sync engine for arbitrary graphs
+- not a general-purpose schema evolution system
 - not a UI framework
 - not a system that expects Pod-side querying for normal application reads
 

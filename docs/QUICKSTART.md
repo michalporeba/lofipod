@@ -189,5 +189,6 @@ tasks;
   persistence
 - attach a Solid Pod adapter when you want remote durability and background
   sync
-- see [API.md](API.md) for the broader public API direction
+- see [API.md](API.md) for the broader public API direction, including the
+  [bounded evolution contract](API.md#bounded-evolution-contract)
 - see [ADR.md](ADR.md) for accepted architectural decisions

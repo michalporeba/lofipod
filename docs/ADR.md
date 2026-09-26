@@ -35,6 +35,9 @@ and known boundaries for the project.
 
 - The supported model is intentionally narrow.
 - Entities are shallow objects.
+- Supported evolution is intentionally bounded. Phase 1 supports explicit,
+  documented projection/reprojection and migration paths for this shallow
+  entity model, not arbitrary schema evolution across unconstrained shapes.
 - The public RDF-facing API should use typed RDF terms rather than plain
   strings for vocabulary values and helper-generated URIs, while still allowing
   convenient scalar literal values in triple objects.
@@ -44,6 +47,7 @@ and known boundaries for the project.
   - optional unordered primitive-value sets
 - Ordered replicated collections are out of scope for the core model.
 - Deep graph merge semantics are out of scope.
+- Arbitrary RDF mutation compatibility is out of scope.
 
 ### Local-first storage
 
@@ -88,6 +92,9 @@ and known boundaries for the project.
   canonical entity resources even if there is no compatible app-private log.
 - Any shared `apps/lofipod/` interoperability area is optional future
   infrastructure, not a correctness dependency.
+- The core semantic contract (entity identity, canonical graph meaning, and
+  bounded migration behavior) should remain portable even if additional
+  user-controlled remote backends are added later.
 
 ### Synchronisation
 

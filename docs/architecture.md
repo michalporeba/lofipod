@@ -13,6 +13,17 @@ isolated behind browser and Node entrypoints. Internally, the architecture is
 split into four primary layers: definition/RDF helpers, local engine and
 storage, remote sync orchestration, and Solid Pod transport/serialization.
 
+The architecture separates:
+
+- core semantic guarantees (entity identity, canonical graph semantics, bounded
+  migration and reconciliation behavior)
+- backend-specific transport details (currently Solid HTTP, Turtle resources,
+  and N-Triples replication logs)
+
+This separation keeps the Phase 1 model bounded while preserving a path to
+additional user-controlled remote backends without redefining the core
+contract.
+
 ## Technology Stack
 
 | Area              | Technologies                                                  |

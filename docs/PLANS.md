@@ -163,6 +163,9 @@ The codebase now also includes:
 - an explicit testing guide and coverage thresholds for the source tree
 - internal refactors that keep the public engine and Pod entrypoints thin and
   easier to read
+- an explicit bounded evolution contract for shallow entities, with inspectable
+  migration outcomes and explicit unsupported/incomplete migration failure
+  surfacing
 
 ## Next roadmap
 

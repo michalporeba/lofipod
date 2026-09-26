@@ -21,6 +21,21 @@ The public API is designed around a simple idea:
 
 This means the API should stay small, explicit, and framework-agnostic.
 
+## Bounded evolution contract
+
+`lofipod` supports a bounded evolution path for shallow entities. The supported
+path is explicit and inspectable:
+
+- deterministic reprojection/repair through `project(...)` and canonical graph checks
+- explicit migration outcomes through `engine.sync.state().migration`
+- explicit failure surfacing when migration is unsupported or incomplete
+
+Out of scope for this API contract:
+
+- arbitrary schema evolution across unconstrained entity shapes
+- arbitrary RDF mutation compatibility from unknown writers
+- general-purpose migration tooling beyond the documented bounded model
+
 ## API in one minute
 
 Most applications use `lofipod` like this:
@@ -468,6 +483,8 @@ Current limits:
 - no general entity observation API yet
 - listing is intentionally narrow
 - conflict and branch state are not yet fully surfaced as a public API
+- evolution support is bounded; see
+  [Bounded evolution contract](#bounded-evolution-contract)
 
 ## Open points
 

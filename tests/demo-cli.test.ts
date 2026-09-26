@@ -128,12 +128,63 @@ describe("demo CLI sync inspection", () => {
       "--title",
       "Migration outcome inspect",
     ]);
-    await runDemo(["task", "get", "task-migration-outcome", "--data-dir", dataDir]);
+    await runDemo([
+      "task",
+      "get",
+      "task-migration-outcome",
+      "--data-dir",
+      dataDir,
+    ]);
 
     const output = await runDemo(["sync", "status", "--data-dir", dataDir]);
     expect(output).toContain("lastCanonicalMigrationOutcome=-");
     expect(output).toMatch(
       /lastLocalMigrationOutcome=(repaired|unchanged) scope=local entity=task\/task-migration-outcome phase=local-reprojection at=/,
     );
+  });
+
+  it("reports the latest local migration outcome entry in sync status", async () => {
+    const dataDir = await createDataDir();
+
+    await runDemo([
+      "task",
+      "add",
+      "--data-dir",
+      dataDir,
+      "--id",
+      "task-migration-latest-a",
+      "--title",
+      "Latest migration A",
+    ]);
+    await runDemo([
+      "task",
+      "add",
+      "--data-dir",
+      dataDir,
+      "--id",
+      "task-migration-latest-b",
+      "--title",
+      "Latest migration B",
+    ]);
+
+    await runDemo([
+      "task",
+      "get",
+      "task-migration-latest-a",
+      "--data-dir",
+      dataDir,
+    ]);
+    await runDemo([
+      "task",
+      "get",
+      "task-migration-latest-b",
+      "--data-dir",
+      dataDir,
+    ]);
+
+    const output = await runDemo(["sync", "status", "--data-dir", dataDir]);
+    expect(output).toContain("lastCanonicalMigrationOutcome=-");
+    expect(output).toContain("entity=task/task-migration-latest-b");
+    expect(output).not.toContain("entity=task/task-migration-latest-a");
   });
 });
