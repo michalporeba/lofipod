@@ -9,3 +9,15 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "weekly"
+    groups:
+      # vitest and its @vitest/* packages pin each other as exact peers, so
+      # they must always move together or `npm ci` fails with ERESOLVE.
+      vitest:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+      vitest-security:
+        applies-to: security-updates
+        patterns:
+          - "vitest"
+          - "@vitest/*"
