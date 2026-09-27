@@ -68,7 +68,7 @@
     "@inrupt/solid-client-authn-node": "^4.0.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/n3": "^1.26.1",
-    "@types/node": "^25.6.0",
+    "@types/node": "^26.6.2",
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^4.1.4",
     "better-sqlite3": "^12.9.0",
