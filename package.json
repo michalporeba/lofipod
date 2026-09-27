@@ -71,7 +71,7 @@
     "@types/node": "^26.6.2",
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^4.1.4",
-    "better-sqlite3": "^12.9.0",
+    "better-sqlite3": "^13.0.3",
     "eslint": "^10.3.0",
     "eslint-config-prettier": "^10.1.8",
     "fake-indexeddb": "^6.2.5",
@@ -88,7 +88,7 @@
   "dependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/n3": "^1.26.1",
-    "better-sqlite3": "^12.8.0",
+    "better-sqlite3": "^13.0.3",
     "n3": "^2.0.3",
     "ws": "^8.20.0"
   }
