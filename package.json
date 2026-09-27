@@ -65,7 +65,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@inrupt/solid-client-authn-node": "^4.0.0",
+    "@inrupt/solid-client-authn-node": "^5.0.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/n3": "^1.26.1",
     "@types/node": "^26.6.2",
