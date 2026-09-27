@@ -24,7 +24,7 @@ _This file contains critical rules and patterns that AI agents must follow when 
 
 ## Technology Stack & Versions
 
-- Package: `lofipod@0.2.1`
+- Package: `lofipod@0.3.0`
 - Language: TypeScript `^6.0.3`
 - Runtime target for development and CI: Node.js `>=24`
 - Package model: ESM package with dual ESM/CJS published outputs via the export map
