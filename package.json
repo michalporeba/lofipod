@@ -70,7 +70,7 @@
     "@types/n3": "^1.26.1",
     "@types/node": "^26.6.2",
     "@types/ws": "^8.18.1",
-    "@vitest/coverage-v8": "^4.1.4",
+    "@vitest/coverage-v8": "^5.0.2",
     "better-sqlite3": "^13.0.3",
     "eslint": "^10.3.0",
     "eslint-config-prettier": "^10.1.8",
@@ -82,7 +82,7 @@
     "tsx": "^4.21.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.1",
-    "vitest": "^4.1.4",
+    "vitest": "^5.0.2",
     "ws": "^8.20.0"
   },
   "dependencies": {
